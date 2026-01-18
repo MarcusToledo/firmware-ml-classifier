@@ -71,8 +71,10 @@ below is for agentic coding assistants working here.
   - Keep functions focused and under ~60 lines when possible.
   - Use consistent blank lines between logical blocks.
   - Avoid trailing whitespace; keep a newline at EOF.
+  - Prefer early returns to reduce nesting.
 - Types:
   - Add type hints to all public functions and class methods.
+  - Use `Path` for filesystem paths in public APIs.
   - Type dataset I/O clearly (paths, arrays, DataFrames).
   - Use `Optional` only when `None` is expected and handled.
 - Naming:
