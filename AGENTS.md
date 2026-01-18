@@ -126,6 +126,11 @@ below is for agentic coding assistants working here.
 - `models/` for trained model artifacts.
 - `reports/` for metrics and figures.
 
+## TODO Tracking
+- Keep a `TODO.md` checklist updated for each request.
+- List completed points and pending points in every update.
+- Use short, actionable checklist items.
+
 ## Cursor/Copilot Rules
 - No Cursor rules detected (`.cursor/rules/`, `.cursorrules`).
 - No Copilot rules detected (`.github/copilot-instructions.md`).
