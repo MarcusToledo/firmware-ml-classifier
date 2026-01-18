@@ -86,9 +86,11 @@ below is for agentic coding assistants working here.
   - Validate inputs early; raise informative exceptions.
   - Fail fast on corrupt binaries or invalid labels.
   - Avoid silent fallbacks that hide data quality issues.
+  - Include context in exceptions (file, vendor, stage).
 - Logging:
   - Use the `logging` module for pipeline steps.
   - Include dataset size, feature counts, and model parameters.
+  - Log deterministic seeds and dataset splits.
 - File I/O:
   - Treat firmware binaries as untrusted input.
   - Use safe, defensive reads and size checks.
@@ -101,6 +103,7 @@ below is for agentic coding assistants working here.
 - Data boundaries:
   - No data leakage between train/validation/test splits.
   - Document sampling procedures in scripts.
+  - Keep label maps stable across runs.
 
 ## Doc2Vec Requirements
 - Each firmware is a single document.
