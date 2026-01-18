@@ -1,0 +1,38 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*.pyd
+
+# Test/coverage caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+.tox/
+
+# System files
+.DS_Store
+
+# Project data and artifacts
+dataset/raw/
+dataset/interim/
+dataset/processed/
+models/
+
+# Reports (version only published outputs)
+reports/**
+!reports/published/
+!reports/published/**
+
+# Firmware binaries
+*.bin
+*.img
+*.elf
