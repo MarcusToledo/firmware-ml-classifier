@@ -35,20 +35,22 @@ below is for agentic coding assistants working here.
 - reproducibility-agent
   - Enforce fixed seeds, deterministic pipelines, and artifact tracking.
 
-## Build, Lint, Test (Placeholders)
+## Build, Lint, Test
 - Install dependencies:
   - `python -m pip install -r requirements.txt`
 - Run all tests:
   - `python -m pytest`
 - Run a single test:
   - `python -m pytest tests/path::test_name`
-- Tests must be implemented with pytest (mandatory).
+- Run tests with verbose output:
+  - `python -m pytest -vv`
 - Lint (if adopted):
   - `python -m ruff check .`
 - Format (if adopted):
   - `python -m black .`
 - Type check (if adopted):
   - `python -m mypy src`
+- Keep pytest as the mandatory test runner.
 
 ## Pipeline Commands (Placeholders)
 - Build dataset:
