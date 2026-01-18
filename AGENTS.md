@@ -148,3 +148,4 @@ below is for agentic coding assistants working here.
 - Never generate or claim empirical results without execution.
 - Keep the repository organized and auditable.
 - Avoid adding hidden automation or non-deterministic steps.
+- Respond in pt-br only; allow English only for technical terms.
