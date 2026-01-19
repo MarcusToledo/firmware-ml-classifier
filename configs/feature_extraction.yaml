@@ -1,0 +1,17 @@
+max_bytes: null
+feature:
+  min_string_len: 4
+  max_single_string_len: 1024
+  max_strings: 2000
+  max_doc_chars: 200000
+doc2vec:
+  model_path: null
+  vector_size: 100
+  window: 5
+  epochs: 20
+  min_count: 2
+  seed: 42
+  workers: 1
+  dm: 1
+  alpha: 0.025
+  min_alpha: 0.0001
