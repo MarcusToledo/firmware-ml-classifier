@@ -5,3 +5,4 @@ gensim
 tqdm
 matplotlib
 pytest
+pyyaml
