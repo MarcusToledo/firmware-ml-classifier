@@ -29,8 +29,10 @@
 - [x] Mark truncation when string or document limits apply.
 - [x] Seed Doc2Vec inference for deterministic embeddings.
 - [x] Reuse strings_to_document in feature extraction.
+- [x] Add YAML-based pipeline config with overrides.
+- [x] Add CLI entry for batch feature extraction.
+- [x] Add pipeline tests for config, extraction, and CLI.
+- [x] Add Doc2Vec unit tests with realistic tokens and determinism checks.
 
 ### Pending
-- [ ] Add unit tests with pytest for Doc2Vec helpers (once gensim test scaffolding is defined).
-- [ ] Wire `read_binary` and `max_bytes` handling into the extraction pipeline.
 - [ ] Adjust default limits (`max_strings`, `max_doc_chars`) after dataset profiling.
