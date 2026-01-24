@@ -16,14 +16,25 @@ from src.io_utils import normalize_binary, read_binary
 LOGGER = logging.getLogger(__name__)
 
 
-def infer_vendor_from_path(path: Path) -> Optional[str]:
-    """Infer vendor label from parent directory name."""
-    if path.parent == path:
-        return None
-    vendor = path.parent.name.strip()
-    if vendor.lower() == "dataset":
-        return None
-    return vendor or None
+def infer_brand_model_label_from_path(
+    path: Path,
+) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    """Infer brand/model/label from a dataset/raw/<brand>/<model> path."""
+    raw_index = None
+    for idx, part in enumerate(path.parts):
+        if part.lower() == "raw":
+            raw_index = idx
+            break
+    if raw_index is None:
+        return None, None, None
+    if len(path.parts) <= raw_index + 2:
+        return None, None, None
+    brand = path.parts[raw_index + 1].strip()
+    model = path.parts[raw_index + 2].strip()
+    if not brand or not model:
+        return None, None, None
+    label = f"{brand}_{model}"
+    return brand, model, label
 
 
 @dataclass(frozen=True)
