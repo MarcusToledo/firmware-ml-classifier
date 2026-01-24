@@ -22,8 +22,9 @@
 
 ### Completed
 - [x] Adicionar exportacao das features com metadados (parquet/csv) no CLI.
-- [x] Incluir opcao para inferir vendor via path e nao usar no processo de extracao.
-- [x] Cobrir exportacao e metadados com testes.
+- [x] Renomear metadados de label para brand/model/label e ajustar inferencia.
+- [x] Incluir meta_bytes_used e meta_max_bytes para rastrear limites aplicados.
+- [x] Atualizar testes com novos metadados e flag label-from-path.
 
 ### Pending
 - [ ] None.
