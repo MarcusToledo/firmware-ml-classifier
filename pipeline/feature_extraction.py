@@ -118,7 +118,9 @@ def extract_features_from_path(
     path: Path,
     config: PipelineConfig,
     model: Optional[Doc2Vec],
-    vendor: Optional[str] = None,
+    brand: Optional[str] = None,
+    model_name: Optional[str] = None,
+    label: Optional[str] = None,
 ) -> PipelineResult:
     """Extract features for a single firmware path."""
     error: Optional[str] = None
@@ -146,12 +148,16 @@ def extract_features_from_path(
     metadata = {
         "read_ok": read_ok,
         "byte_len": len(data),
+        "bytes_used": len(data),
+        "max_bytes": config.max_bytes,
         "truncated": feature_vector.truncated,
         "max_bytes_applied": config.max_bytes is not None,
         "doc2vec_used": model is not None and read_ok,
         "error": error,
         "path": str(path),
-        "vendor": vendor,
+        "brand": brand,
+        "model": model_name,
+        "label": label,
     }
 
     return PipelineResult(
@@ -169,9 +175,16 @@ def extract_features_batch(
     results: List[PipelineResult] = []
     model = load_doc2vec_model(config.doc2vec_model_path)
     for path in paths:
+        brand, model_name, label = infer_brand_model_label_from_path(path)
         try:
-            vendor = infer_vendor_from_path(path)
-            result = extract_features_from_path(path, config, model, vendor=vendor)
+            result = extract_features_from_path(
+                path,
+                config,
+                model,
+                brand=brand,
+                model_name=model_name,
+                label=label,
+            )
             results.append(result)
         except Exception as exc:  # pragma: no cover - defensive for batch safety
             LOGGER.warning("Failed to extract features for %s: %s", path, exc)
@@ -182,12 +195,16 @@ def extract_features_batch(
                     metadata={
                         "read_ok": False,
                         "byte_len": 0,
+                        "bytes_used": 0,
+                        "max_bytes": config.max_bytes,
                         "truncated": False,
                         "max_bytes_applied": config.max_bytes is not None,
                         "doc2vec_used": False,
                         "error": str(exc),
                         "path": str(path),
-                        "vendor": infer_vendor_from_path(path),
+                        "brand": brand,
+                        "model": model_name,
+                        "label": label,
                     },
                 )
             )
