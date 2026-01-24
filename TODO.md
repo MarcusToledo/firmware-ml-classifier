@@ -33,6 +33,7 @@
 - [x] Add CLI entry for batch feature extraction.
 - [x] Add pipeline tests for config, extraction, and CLI.
 - [x] Add Doc2Vec unit tests with realistic tokens and determinism checks.
+- [x] Add Doc2Vec training CLI script.
 
 ### Pending
 - [ ] Adjust default limits (`max_strings`, `max_doc_chars`) after dataset profiling.
