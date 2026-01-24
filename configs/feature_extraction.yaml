@@ -1,11 +1,11 @@
-max_bytes: null
+max_bytes: 5242880
 feature:
   min_string_len: 4
   max_single_string_len: 1024
   max_strings: 2000
   max_doc_chars: 200000
 doc2vec:
-  model_path: null
+  model_path: "models/doc2vec.model"
   vector_size: 100
   window: 5
   epochs: 20
