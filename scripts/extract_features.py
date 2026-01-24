@@ -12,6 +12,8 @@ if str(ROOT) not in sys.path:
 
 from pipeline.feature_extraction import extract_features_batch, load_pipeline_config
 
+ALLOWED_EXTENSIONS = {".bin", ".img", ".trx", ".chk", ".fw", ".rom"}
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -26,10 +28,26 @@ def parse_overrides(values: List[str]) -> Dict[str, Any]:
 
 
 def gather_paths(input_path: Path) -> List[Path]:
+    def is_allowed(path: Path) -> bool:
+        return path.suffix.lower() in ALLOWED_EXTENSIONS and not path.name.startswith(".")
+
     if input_path.is_dir():
-        return [path for path in input_path.rglob("*") if path.is_file()]
+        paths = [path for path in input_path.rglob("*") if path.is_file()]
+        allowed = [path for path in paths if is_allowed(path)]
+        LOGGER.info("Filtered %s files to %s firmware candidates", len(paths), len(allowed))
+        return allowed
     if input_path.is_file() and input_path.suffix == ".txt":
-        return [Path(line.strip()) for line in input_path.read_text().splitlines() if line.strip()]
+        entries = [
+            Path(line.strip())
+            for line in input_path.read_text().splitlines()
+            if line.strip()
+        ]
+        allowed = [path for path in entries if is_allowed(path)]
+        LOGGER.info("Filtered %s files to %s firmware candidates", len(entries), len(allowed))
+        return allowed
+    if input_path.is_file() and not is_allowed(input_path):
+        LOGGER.warning("Skipping non-firmware file: %s", input_path)
+        return []
     return [input_path]
 
 
