@@ -18,6 +18,16 @@
 ### Pending
 - [ ] None.
 
+## Request: Persistir features extraidas
+
+### Completed
+- [x] Adicionar exportacao das features com metadados (parquet/csv) no CLI.
+- [x] Incluir opcao para inferir vendor via path e nao usar no processo de extracao.
+- [x] Cobrir exportacao e metadados com testes.
+
+### Pending
+- [ ] None.
+
 ## Request: Feature extraction skeleton
 
 ### Completed
