@@ -17,14 +17,17 @@ def test_extract_features_from_path_valid_file(tmp_path: Path) -> None:
         firmware_path,
         config,
         model=None,
-        vendor=firmware_path.parent.name,
     )
 
     assert result.metadata["read_ok"] is True
     assert result.metadata["byte_len"] == len(b"firmware-data")
+    assert result.metadata["bytes_used"] == len(b"firmware-data")
+    assert result.metadata["max_bytes"] is None
     assert result.firmware_id is not None
     assert result.metadata["doc2vec_used"] is False
-    assert result.metadata["vendor"] == firmware_path.parent.name
+    assert result.metadata["brand"] is None
+    assert result.metadata["model"] is None
+    assert result.metadata["label"] is None
 
 
 def test_extract_features_from_path_empty_file(tmp_path: Path) -> None:
@@ -37,13 +40,14 @@ def test_extract_features_from_path_empty_file(tmp_path: Path) -> None:
         firmware_path,
         config,
         model=None,
-        vendor=firmware_path.parent.name,
     )
 
     assert result.metadata["read_ok"] is False
     assert result.firmware_id is None
     assert result.metadata["error"] is not None
-    assert result.metadata["vendor"] == firmware_path.parent.name
+    assert result.metadata["brand"] is None
+    assert result.metadata["model"] is None
+    assert result.metadata["label"] is None
 
 
 def test_extract_features_from_path_max_bytes_zero(tmp_path: Path) -> None:
@@ -59,12 +63,15 @@ def test_extract_features_from_path_max_bytes_zero(tmp_path: Path) -> None:
         firmware_path,
         config,
         model=None,
-        vendor=firmware_path.parent.name,
     )
 
     assert result.metadata["read_ok"] is False
     assert result.metadata["byte_len"] == 0
-    assert result.metadata["vendor"] == firmware_path.parent.name
+    assert result.metadata["bytes_used"] == 0
+    assert result.metadata["max_bytes"] == 0
+    assert result.metadata["brand"] is None
+    assert result.metadata["model"] is None
+    assert result.metadata["label"] is None
 
 
 def test_extract_features_batch_continues_on_error(tmp_path: Path) -> None:
@@ -78,7 +85,11 @@ def test_extract_features_batch_continues_on_error(tmp_path: Path) -> None:
 
     assert len(results) == 2
     assert results[0].metadata["read_ok"] is True
-    assert results[0].metadata["vendor"] == tmp_path.name
+    assert results[0].metadata["brand"] is None
+    assert results[0].metadata["model"] is None
+    assert results[0].metadata["label"] is None
     assert results[1].metadata["read_ok"] is False
-    assert results[1].metadata["vendor"] == tmp_path.name
+    assert results[1].metadata["brand"] is None
+    assert results[1].metadata["model"] is None
+    assert results[1].metadata["label"] is None
     assert results[1].firmware_id is None
