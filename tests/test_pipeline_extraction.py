@@ -1,7 +1,6 @@
 from pathlib import Path
 
 from pipeline.feature_extraction import (
-    PipelineConfig,
     extract_features_batch,
     extract_features_from_path,
     load_pipeline_config,
@@ -14,12 +13,18 @@ def test_extract_features_from_path_valid_file(tmp_path: Path) -> None:
 
     config = load_pipeline_config(tmp_path / "missing.yaml", overrides={})
 
-    result = extract_features_from_path(firmware_path, config, model=None)
+    result = extract_features_from_path(
+        firmware_path,
+        config,
+        model=None,
+        vendor=firmware_path.parent.name,
+    )
 
     assert result.metadata["read_ok"] is True
     assert result.metadata["byte_len"] == len(b"firmware-data")
     assert result.firmware_id is not None
     assert result.metadata["doc2vec_used"] is False
+    assert result.metadata["vendor"] == firmware_path.parent.name
 
 
 def test_extract_features_from_path_empty_file(tmp_path: Path) -> None:
@@ -28,11 +33,17 @@ def test_extract_features_from_path_empty_file(tmp_path: Path) -> None:
 
     config = load_pipeline_config(tmp_path / "missing.yaml", overrides={})
 
-    result = extract_features_from_path(firmware_path, config, model=None)
+    result = extract_features_from_path(
+        firmware_path,
+        config,
+        model=None,
+        vendor=firmware_path.parent.name,
+    )
 
     assert result.metadata["read_ok"] is False
     assert result.firmware_id is None
     assert result.metadata["error"] is not None
+    assert result.metadata["vendor"] == firmware_path.parent.name
 
 
 def test_extract_features_from_path_max_bytes_zero(tmp_path: Path) -> None:
@@ -44,10 +55,16 @@ def test_extract_features_from_path_max_bytes_zero(tmp_path: Path) -> None:
 
     config = load_pipeline_config(config_path, overrides={})
 
-    result = extract_features_from_path(firmware_path, config, model=None)
+    result = extract_features_from_path(
+        firmware_path,
+        config,
+        model=None,
+        vendor=firmware_path.parent.name,
+    )
 
     assert result.metadata["read_ok"] is False
     assert result.metadata["byte_len"] == 0
+    assert result.metadata["vendor"] == firmware_path.parent.name
 
 
 def test_extract_features_batch_continues_on_error(tmp_path: Path) -> None:
@@ -61,5 +78,7 @@ def test_extract_features_batch_continues_on_error(tmp_path: Path) -> None:
 
     assert len(results) == 2
     assert results[0].metadata["read_ok"] is True
+    assert results[0].metadata["vendor"] == tmp_path.name
     assert results[1].metadata["read_ok"] is False
+    assert results[1].metadata["vendor"] == tmp_path.name
     assert results[1].firmware_id is None

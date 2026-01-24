@@ -16,6 +16,16 @@ from src.io_utils import normalize_binary, read_binary
 LOGGER = logging.getLogger(__name__)
 
 
+def infer_vendor_from_path(path: Path) -> Optional[str]:
+    """Infer vendor label from parent directory name."""
+    if path.parent == path:
+        return None
+    vendor = path.parent.name.strip()
+    if vendor.lower() == "dataset":
+        return None
+    return vendor or None
+
+
 @dataclass(frozen=True)
 class PipelineConfig:
     max_bytes: Optional[int]
@@ -97,6 +107,7 @@ def extract_features_from_path(
     path: Path,
     config: PipelineConfig,
     model: Optional[Doc2Vec],
+    vendor: Optional[str] = None,
 ) -> PipelineResult:
     """Extract features for a single firmware path."""
     error: Optional[str] = None
@@ -129,6 +140,7 @@ def extract_features_from_path(
         "doc2vec_used": model is not None and read_ok,
         "error": error,
         "path": str(path),
+        "vendor": vendor,
     }
 
     return PipelineResult(
@@ -147,7 +159,8 @@ def extract_features_batch(
     model = load_doc2vec_model(config.doc2vec_model_path)
     for path in paths:
         try:
-            result = extract_features_from_path(path, config, model)
+            vendor = infer_vendor_from_path(path)
+            result = extract_features_from_path(path, config, model, vendor=vendor)
             results.append(result)
         except Exception as exc:  # pragma: no cover - defensive for batch safety
             LOGGER.warning("Failed to extract features for %s: %s", path, exc)
@@ -163,6 +176,7 @@ def extract_features_batch(
                         "doc2vec_used": False,
                         "error": str(exc),
                         "path": str(path),
+                        "vendor": infer_vendor_from_path(path),
                     },
                 )
             )
