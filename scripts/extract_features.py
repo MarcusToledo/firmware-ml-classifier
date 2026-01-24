@@ -6,6 +6,8 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List
 
+import pandas as pd
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))
@@ -13,6 +15,7 @@ if str(ROOT) not in sys.path:
 from pipeline.feature_extraction import extract_features_batch, load_pipeline_config
 
 ALLOWED_EXTENSIONS = {".bin", ".img", ".trx", ".chk", ".fw", ".rom"}
+OUTPUT_FORMATS = {"parquet", "csv"}
 
 LOGGER = logging.getLogger(__name__)
 
@@ -65,6 +68,22 @@ def main() -> None:
         default=[],
         help="Override config values (key=value)",
     )
+    parser.add_argument(
+        "--output",
+        required=True,
+        help="Output path for extracted features",
+    )
+    parser.add_argument(
+        "--format",
+        default="parquet",
+        choices=sorted(OUTPUT_FORMATS),
+        help="Output format (parquet or csv)",
+    )
+    parser.add_argument(
+        "--vendor-from-path",
+        action="store_true",
+        help="Inferir vendor a partir do diretorio pai do arquivo",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
@@ -73,6 +92,10 @@ def main() -> None:
     paths = gather_paths(Path(args.input))
 
     results = extract_features_batch(paths, config)
+    records: List[Dict[str, Any]] = []
+    if not args.vendor_from_path:
+        for result in results:
+            result.metadata["vendor"] = None
     for result in results:
         metadata = result.metadata
         LOGGER.info(
@@ -83,6 +106,21 @@ def main() -> None:
             metadata.get("doc2vec_used"),
             metadata.get("error"),
         )
+        record: Dict[str, Any] = {
+            "firmware_id": result.firmware_id,
+            **result.features,
+        }
+        for key, value in metadata.items():
+            record[f"meta_{key}"] = value
+        records.append(record)
+
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    df = pd.DataFrame.from_records(records)
+    if args.format == "parquet":
+        df.to_parquet(output_path, index=False)
+    else:
+        df.to_csv(output_path, index=False)
 
 
 if __name__ == "__main__":
