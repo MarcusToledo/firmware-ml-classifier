@@ -80,9 +80,9 @@ def main() -> None:
         help="Output format (parquet or csv)",
     )
     parser.add_argument(
-        "--vendor-from-path",
+        "--label-from-path",
         action="store_true",
-        help="Inferir vendor a partir do diretorio pai do arquivo",
+        help="Inferir brand/model/label a partir do path",
     )
     args = parser.parse_args()
 
@@ -93,9 +93,11 @@ def main() -> None:
 
     results = extract_features_batch(paths, config)
     records: List[Dict[str, Any]] = []
-    if not args.vendor_from_path:
+    if not args.label_from_path:
         for result in results:
-            result.metadata["vendor"] = None
+            result.metadata["brand"] = None
+            result.metadata["model"] = None
+            result.metadata["label"] = None
     for result in results:
         metadata = result.metadata
         LOGGER.info(
