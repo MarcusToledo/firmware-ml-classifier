@@ -13,6 +13,8 @@ if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))
 
 from pipeline.feature_extraction import extract_features_batch, load_pipeline_config
+from src.cli_utils import gather_paths as gather_cli_paths
+from src.cli_utils import parse_overrides
 
 ALLOWED_EXTENSIONS = {".bin", ".img", ".trx", ".chk", ".fw", ".rom"}
 OUTPUT_FORMATS = {"parquet", "csv"}
@@ -20,41 +22,17 @@ OUTPUT_FORMATS = {"parquet", "csv"}
 LOGGER = logging.getLogger(__name__)
 
 
-def parse_overrides(values: List[str]) -> Dict[str, Any]:
-    overrides: Dict[str, Any] = {}
-    for entry in values:
-        if "=" not in entry:
-            raise ValueError(f"Invalid override: {entry}")
-        key, value = entry.split("=", 1)
-        overrides[key] = value
-    return overrides
-
-
 def gather_paths(input_path: Path) -> List[Path]:
-    def is_allowed(path: Path) -> bool:
-        return path.suffix.lower() in ALLOWED_EXTENSIONS and not path.name.startswith(".")
-
-    if input_path.is_dir():
-        paths = [path for path in input_path.rglob("*") if path.is_file()]
-        allowed = [path for path in paths if is_allowed(path)]
-        LOGGER.info("Filtered %s files to %s firmware candidates", len(paths), len(allowed))
-        return allowed
-    if input_path.is_file() and input_path.suffix == ".txt":
-        entries = [
-            Path(line.strip())
-            for line in input_path.read_text().splitlines()
-            if line.strip()
-        ]
-        allowed = [path for path in entries if is_allowed(path)]
-        LOGGER.info("Filtered %s files to %s firmware candidates", len(entries), len(allowed))
-        return allowed
-    if input_path.is_file() and not is_allowed(input_path):
-        LOGGER.warning("Skipping non-firmware file: %s", input_path)
-        return []
-    return [input_path]
+    """Wrapper que filtra paths com extensoes permitidas."""
+    return gather_cli_paths(input_path, ALLOWED_EXTENSIONS)
 
 
 def main() -> None:
+    """CLI para extracao batch de features.
+
+    Suporta config, input, output, format (parquet/csv), overrides e
+    label-from-path.
+    """
     parser = argparse.ArgumentParser(description="Extract firmware features")
     parser.add_argument(
         "--config",
