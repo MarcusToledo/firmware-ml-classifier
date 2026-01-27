@@ -106,3 +106,14 @@
 - [ ] Implementar script de avaliacao com metricas e confusion matrix.
 - [ ] Implementar split train/val/test com seeds fixos.
 - [ ] Implementar geracao de relatorios em reports/.
+
+## Request: Qualidade e ferramentas
+
+### Completed
+- [x] Adicionar ruff, black, mypy e pre-commit em pyproject.toml.
+- [x] Criar .pre-commit-config.yaml com hooks.
+- [x] Criar src/py.typed para PEP 561.
+- [x] Atualizar README com secao de qualidade.
+
+### Pending
+- [ ] None.

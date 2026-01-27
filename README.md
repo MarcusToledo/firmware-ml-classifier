@@ -50,6 +50,19 @@ Testes:
 - `python3 -m pytest`
 - `python3 -m pytest tests/path::test_name`
 
+## Qualidade de codigo
+
+Instalar ferramentas de desenvolvimento:
+- `python3 -m pip install -e ".[dev]"`
+
+Configurar pre-commit:
+- `pre-commit install`
+
+Rodar manualmente:
+- `ruff check .`
+- `black .`
+- `mypy src/`
+
 ## API Interna
 
 src/io_utils:
