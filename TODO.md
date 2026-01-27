@@ -48,3 +48,61 @@
 
 ### Pending
 - [ ] Adjust default limits (`max_strings`, `max_doc_chars`) after dataset profiling.
+
+## Request: Remover duplicacao de utilitarios CLI
+
+### Completed
+- [x] Centralizar parse_overrides e gather_paths em `src/cli_utils.py`.
+- [x] Atualizar scripts para reutilizar utilitarios CLI.
+
+### Pending
+- [ ] None.
+
+## Request: Organizacao de imports
+
+### Completed
+- [x] Reordenar imports por grupo (stdlib/third-party/local) em arquivos relevantes.
+
+### Pending
+- [ ] None.
+
+## Request: Configuracao e packaging
+
+### Completed
+- [x] Adicionar `pyproject.toml` com metadata, dependencias e entry points.
+- [x] Criar pacote `scripts` para entry points.
+- [x] Adicionar versoes minimas em `requirements.txt`.
+- [x] Refatorar `scripts/inspect_tokens.py` para reutilizar utilitarios CLI.
+
+### Pending
+- [ ] None.
+
+## Request: Documentacao de codigo
+
+### Completed
+- [x] Atualizar docstrings de funcoes publicas.
+- [x] Adicionar secao API Interna no README.
+
+### Pending
+- [ ] None.
+
+## Request: Consistencia de termos
+
+### Completed
+- [x] Ajustar README para incluir --output nos exemplos de extracao.
+- [x] Alinhar descricao de features com o que o pipeline gera.
+- [x] Atualizar descricao do projeto em pyproject.toml com acentos.
+
+### Pending
+- [ ] None.
+
+## Request: Pipeline incompleto
+
+### Completed
+- [ ] None.
+
+### Pending
+- [ ] Implementar script de treino de modelos (Extra Trees e Random Forest).
+- [ ] Implementar script de avaliacao com metricas e confusion matrix.
+- [ ] Implementar split train/val/test com seeds fixos.
+- [ ] Implementar geracao de relatorios em reports/.
