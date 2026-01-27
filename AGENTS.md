@@ -1,30 +1,30 @@
 # Agent Operating Guide (AGENTS.md)
 
-This repository is an academic TCC project on automated firmware
-classification using static analysis and machine learning. The guidance
-below is for agentic coding assistants working here.
+This repository is a TCC project on automated firmware classification
+using static analysis and supervised ML. The guidance below is for
+agentic coding assistants operating in this repo.
 
-## Project Scope (Immutable Premises)
+## Project Scope (Immutable)
 - Static firmware analysis only (no dynamic execution).
-- Supervised vendor/manufacturer classification.
+- Supervised vendor/manufacturer classification only.
 - Hybrid features:
   - Statistical: size, entropy, byte distribution, compressibility.
   - Semantic: ASCII strings + Doc2Vec embeddings (DM or DBOW).
 - Models:
   - Extra Trees as the main model.
-  - Random Forest as a baseline.
+  - Random Forest as the baseline.
 - Avoid heavy deep learning due to small datasets.
-- All decisions must be academically justified and reproducible.
+- All changes must be academically justified and reproducible.
 
 ## Agent Responsibilities
 - dataset-agent
   - Curate, sample, and version datasets under `dataset/`.
-  - Maintain clear labels and provenance metadata.
+  - Preserve labels and provenance metadata.
 - feature-agent
   - Implement statistical and string-based feature extraction in `src/`.
   - Keep feature code modular and auditable.
 - doc2vec-agent
-  - Train Doc2Vec only on strings extracted from the local dataset.
+  - Train Doc2Vec only on strings from the local dataset.
   - Save model and embeddings; document hyperparameters.
 - model-agent
   - Train, tune, and evaluate Extra Trees and Random Forest.
@@ -91,7 +91,7 @@ below is for agentic coding assistants working here.
   - Use the `logging` module for pipeline steps.
   - Include dataset size, feature counts, and model parameters.
   - Log deterministic seeds and dataset splits.
-- File I/O:
+- File I/O and safety:
   - Treat firmware binaries as untrusted input.
   - Use safe, defensive reads and size checks.
   - Do not assume file encodings beyond ASCII for strings.
@@ -99,7 +99,7 @@ below is for agentic coding assistants working here.
   - Fix random seeds for NumPy/sklearn and document them.
   - Persist trained models and embeddings under `models/`.
   - Persist datasets under `dataset/processed/` with metadata.
-  - Keep experiment outputs in `reports/` with timestamps.
+  - Store experiment outputs under `reports/` with timestamps.
 - Data boundaries:
   - No data leakage between train/validation/test splits.
   - Document sampling procedures in scripts.
@@ -134,8 +134,8 @@ below is for agentic coding assistants working here.
 - `reports/` for metrics and figures.
 
 ## TODO Tracking
-- Keep a `TODO.md` checklist updated for each request.
-- List completed points and pending points in every update.
+- Keep `TODO.md` updated for each request.
+- List completed and pending points on every update.
 - Use short, actionable checklist items.
 
 ## Cursor/Copilot Rules
@@ -147,5 +147,5 @@ below is for agentic coding assistants working here.
 - Document decisions and justify changes academically.
 - Never generate or claim empirical results without execution.
 - Keep the repository organized and auditable.
-- Avoid adding hidden automation or non-deterministic steps.
+- Avoid hidden automation or non-deterministic steps.
 - Respond in pt-br only; allow English only for technical terms.
