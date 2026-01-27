@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "firmware-ml-classifier"
+version = "0.1.0"
+description = "Classificação de firmware por fabricante usando ML"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "numpy>=1.21",
+    "pandas>=1.4",
+    "scikit-learn>=1.1",
+    "gensim>=4.2",
+    "tqdm>=4.64",
+    "matplotlib>=3.6",
+    "pyyaml>=6.0",
+    "pyarrow>=8.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+]
+
+[project.scripts]
+extract-features = "scripts.extract_features:main"
+train-doc2vec = "scripts.train_doc2vec:main"
+inspect-tokens = "scripts.inspect_tokens:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*", "pipeline*", "scripts*"]

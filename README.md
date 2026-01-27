@@ -22,14 +22,26 @@ firmwares embarcados usando análise estática e aprendizado de máquina.
 Instalar dependências:
 - `python3 -m pip install -r requirements.txt`
 
+Instalar em modo editável (habilita comandos de CLI):
+- `python3 -m pip install -e .`
+
 Treinar Doc2Vec (treino separado):
 - `python3 scripts/train_doc2vec.py --config configs/feature_extraction.yaml --input dataset/raw/`
 
+Treinar Doc2Vec via CLI instalada:
+- `train-doc2vec --config configs/feature_extraction.yaml --input dataset/raw/`
+
 Extrair features com embeddings:
-- `python3 scripts/extract_features.py --config configs/feature_extraction.yaml --input dataset/raw/`
+- `python3 scripts/extract_features.py --config configs/feature_extraction.yaml --input dataset/raw/ --output dataset/processed/features.parquet`
+
+Extrair features via CLI instalada:
+- `extract-features --config configs/feature_extraction.yaml --input dataset/raw/ --output dataset/processed/features.parquet`
 
 Inspecionar tokens usados no Doc2Vec:
 - `python3 scripts/inspect_tokens.py --config configs/feature_extraction.yaml --input dataset/raw/ --limit 50 --max-docs 20`
+
+Inspecionar tokens via CLI instalada:
+- `inspect-tokens --config configs/feature_extraction.yaml --input dataset/raw/ --limit 50 --max-docs 20`
 
 Limite de leitura por firmware:
 - configurado em `configs/feature_extraction.yaml` via `max_bytes`.
