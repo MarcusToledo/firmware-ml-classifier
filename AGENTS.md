@@ -52,25 +52,29 @@ agentic coding assistants operating in this repo.
   - `python -m mypy src`
 - Keep pytest as the mandatory test runner.
 
-## Pipeline Commands (Placeholders)
-- Build dataset:
-  - `python scripts/build_dataset.py`
-- Sample dataset:
-  - `python scripts/sample_dataset.py`
-- Train models:
-  - `python scripts/train.py`
+## Pipeline Commands
+- Extrair features (batch):
+  - `python scripts/extract_features.py --input dataset/raw --output dataset/processed/features.parquet`
+  - `python scripts/extract_features.py --input dataset/raw --output dataset/processed/features.csv --format csv`
+  - `python scripts/extract_features.py --input dataset/raw --output dataset/processed/features.parquet --override feature.max_strings=5000`
+- Treinar Doc2Vec:
+  - `python scripts/train_doc2vec.py --input dataset/raw --output models/doc2vec.model`
+  - `python scripts/train_doc2vec.py --input dataset/raw --override doc2vec.vector_size=200`
+- Inspecionar tokens:
+  - `python scripts/inspect_tokens.py --input dataset/raw --limit 50 --max-docs 20`
+  - `python scripts/inspect_tokens.py --input dataset/raw --override feature.max_doc_chars=200000`
 
 ## Code Style Guidelines
 - Imports:
   - Order: standard library, third-party, local modules.
-  - Prefer explicit imports over wildcard imports.
-  - Group imports with a blank line between groups.
+  - Use explicit imports; avoid wildcard imports.
+  - Separate groups with a blank line.
 - Formatting:
   - 4-space indentation.
-  - Default line length target: 88 characters.
+  - Target line length: 88 characters.
   - Keep functions focused and under ~60 lines when possible.
   - Use consistent blank lines between logical blocks.
-  - Avoid trailing whitespace; keep a newline at EOF.
+  - Avoid trailing whitespace; ensure a newline at EOF.
   - Prefer early returns to reduce nesting.
 - Types:
   - Add type hints to all public functions and class methods.
