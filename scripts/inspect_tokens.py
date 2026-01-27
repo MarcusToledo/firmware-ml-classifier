@@ -5,13 +5,15 @@ import hashlib
 import logging
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, List
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))
 
 from pipeline.feature_extraction import load_pipeline_config
+from src.cli_utils import gather_paths as gather_cli_paths
+from src.cli_utils import parse_overrides
 from src.features.strings import (
     extract_ascii_strings,
     limit_strings,

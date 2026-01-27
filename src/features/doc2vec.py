@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import random
+from dataclasses import dataclass
 from typing import Iterable, List, Sequence, Tuple
 
 import numpy as np
@@ -23,7 +23,7 @@ class Doc2VecConfig:
 
 
 def build_corpus(documents: Iterable[Tuple[str, Sequence[str]]]) -> List[TaggedDocument]:
-    """Create a TaggedDocument corpus for Doc2Vec training."""
+    """Converte pares (doc_id, tokens) em TaggedDocument para treino."""
     return [
         TaggedDocument(words=list(doc_tokens), tags=[doc_id])
         for doc_id, doc_tokens in documents

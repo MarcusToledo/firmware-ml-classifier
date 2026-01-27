@@ -12,7 +12,9 @@ if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))
 
 from pipeline.feature_extraction import load_pipeline_config
-from src.features.doc2vec import build_corpus, train_doc2vec, save_doc2vec
+from src.cli_utils import gather_paths as gather_cli_paths
+from src.cli_utils import parse_overrides
+from src.features.doc2vec import build_corpus, save_doc2vec, train_doc2vec
 from src.features.strings import (
     extract_ascii_strings,
     limit_strings,

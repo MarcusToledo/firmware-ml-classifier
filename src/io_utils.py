@@ -1,17 +1,17 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Optional
-
-import logging
 
 LOGGER = logging.getLogger(__name__)
 
 
 def read_binary(path: Path, max_bytes: Optional[int] = None) -> bytes:
-    """Read a firmware binary from disk.
+    """Le bytes de um arquivo de firmware.
 
-    Returns empty bytes on failure for batch safety.
+    Limita a leitura a max_bytes quando fornecido. Retorna b"" em falha
+    de leitura ou quando max_bytes <= 0.
     """
     if max_bytes is not None and max_bytes <= 0:
         LOGGER.warning("max_bytes=%s results in empty read", max_bytes)
