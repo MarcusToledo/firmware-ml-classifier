@@ -7,7 +7,7 @@ firmwares embarcados usando análise estática e aprendizado de máquina.
 
 ## Objetivos
 - Classificar firmware por fabricante (supervisionado).
-- Extrair features estatísticas de binários (tamanho, entropia, bytes).
+- Extrair features estatisticas de binarios (entropia, media de bytes, compress_ratio).
 - Extrair strings ASCII e embeddings Doc2Vec para features semânticas.
 - Treinar modelos Extra Trees (principal) e Random Forest (baseline).
 
@@ -50,3 +50,28 @@ Testes:
 - `python3 -m pytest`
 - `python3 -m pytest tests/path::test_name`
 
+## API Interna
+
+src/io_utils:
+- `read_binary`: leitura segura de binarios com limite opcional.
+- `normalize_binary`: validacao de tipo para bytes.
+
+src/features/statistics:
+- `shannon_entropy`, `byte_mean`, `compress_ratio`: features estatisticas.
+
+src/features/strings:
+- `extract_ascii_strings`: extracao de strings ASCII.
+- `limit_strings`, `strings_to_document`, `tokenize_document`: processamento de texto.
+
+src/features/doc2vec:
+- `build_corpus`, `train_doc2vec`: treino de Doc2Vec.
+- `infer_embedding`: inferencia de embeddings.
+- `save_doc2vec`, `load_doc2vec`: persistencia de modelos.
+
+src/feature_extraction:
+- `extract_features`: extracao completa (stats + embedding).
+- `combine_features`: conversao para dicionario plano.
+
+pipeline/feature_extraction:
+- `load_pipeline_config`: carregamento de YAML com overrides.
+- `extract_features_from_path`, `extract_features_batch`: pipeline de extracao.
