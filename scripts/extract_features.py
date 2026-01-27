@@ -4,7 +4,7 @@ import argparse
 import logging
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import pandas as pd
 
@@ -12,9 +12,12 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))
 
-from pipeline.feature_extraction import extract_features_batch, load_pipeline_config
-from src.cli_utils import gather_paths as gather_cli_paths
-from src.cli_utils import parse_overrides
+from pipeline.feature_extraction import (  # noqa: E402
+    extract_features_batch,
+    load_pipeline_config,
+)
+from src.cli_utils import gather_paths as gather_cli_paths  # noqa: E402
+from src.cli_utils import parse_overrides  # noqa: E402
 
 ALLOWED_EXTENSIONS = {".bin", ".img", ".trx", ".chk", ".fw", ".rom"}
 OUTPUT_FORMATS = {"parquet", "csv"}
@@ -22,7 +25,7 @@ OUTPUT_FORMATS = {"parquet", "csv"}
 LOGGER = logging.getLogger(__name__)
 
 
-def gather_paths(input_path: Path) -> List[Path]:
+def gather_paths(input_path: Path) -> list[Path]:
     """Wrapper que filtra paths com extensoes permitidas."""
     return gather_cli_paths(input_path, ALLOWED_EXTENSIONS)
 
@@ -70,7 +73,7 @@ def main() -> None:
     paths = gather_paths(Path(args.input))
 
     results = extract_features_batch(paths, config)
-    records: List[Dict[str, Any]] = []
+    records: list[dict[str, Any]] = []
     if not args.label_from_path:
         for result in results:
             result.metadata["brand"] = None
@@ -86,7 +89,7 @@ def main() -> None:
             metadata.get("doc2vec_used"),
             metadata.get("error"),
         )
-        record: Dict[str, Any] = {
+        record: dict[str, Any] = {
             "firmware_id": result.firmware_id,
             **result.features,
         }

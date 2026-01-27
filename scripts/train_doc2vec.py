@@ -5,39 +5,43 @@ import hashlib
 import logging
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))
 
-from pipeline.feature_extraction import load_pipeline_config
-from src.cli_utils import gather_paths as gather_cli_paths
-from src.cli_utils import parse_overrides
-from src.features.doc2vec import build_corpus, save_doc2vec, train_doc2vec
-from src.features.strings import (
+from pipeline.feature_extraction import load_pipeline_config  # noqa: E402
+from src.cli_utils import gather_paths as gather_cli_paths  # noqa: E402
+from src.cli_utils import parse_overrides  # noqa: E402
+from src.features.doc2vec import (  # noqa: E402
+    build_corpus,
+    save_doc2vec,
+    train_doc2vec,
+)
+from src.features.strings import (  # noqa: E402
     extract_ascii_strings,
     limit_strings,
     strings_to_document,
     tokenize_document,
 )
-from src.io_utils import normalize_binary, read_binary
+from src.io_utils import normalize_binary, read_binary  # noqa: E402
 
 LOGGER = logging.getLogger(__name__)
 ALLOWED_EXTENSIONS = {".bin", ".img", ".trx", ".chk", ".fw", ".rom"}
 
 
-def gather_paths(input_path: Path) -> List[Path]:
+def gather_paths(input_path: Path) -> list[Path]:
     """Wrapper que filtra paths com extensoes permitidas."""
     return gather_cli_paths(input_path, ALLOWED_EXTENSIONS)
 
 
-def build_documents(paths: List[Path], config: Any) -> List[Tuple[str, List[str]]]:
+def build_documents(paths: list[Path], config: Any) -> list[tuple[str, list[str]]]:
     """Gera documentos tokenizados (firmware_id, tokens).
 
     Ignora arquivos vazios ou sem tokens.
     """
-    documents: List[Tuple[str, List[str]]] = []
+    documents: list[tuple[str, list[str]]] = []
     for path in paths:
         data = read_binary(path, max_bytes=config.max_bytes)
         data = normalize_binary(data)

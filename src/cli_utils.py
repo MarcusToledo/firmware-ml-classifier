@@ -2,17 +2,17 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Set
+from typing import Any
 
 LOGGER = logging.getLogger(__name__)
 
 
-def parse_overrides(values: List[str]) -> Dict[str, Any]:
+def parse_overrides(values: list[str]) -> dict[str, Any]:
     """Converte lista de strings key=value em dicionario.
 
     Levanta ValueError se algum item nao tiver o formato esperado.
     """
-    overrides: Dict[str, Any] = {}
+    overrides: dict[str, Any] = {}
     for entry in values:
         if "=" not in entry:
             raise ValueError(f"Invalid override: {entry}")
@@ -21,18 +21,23 @@ def parse_overrides(values: List[str]) -> Dict[str, Any]:
     return overrides
 
 
-def gather_paths(input_path: Path, allowed_extensions: Set[str]) -> List[Path]:
+def gather_paths(input_path: Path, allowed_extensions: set[str]) -> list[Path]:
     """Coleta paths de firmware a partir de dir, lista .txt ou path unico.
 
     Filtra por extensoes permitidas e ignora arquivos ocultos.
     """
+
     def is_allowed(path: Path) -> bool:
-        return path.suffix.lower() in allowed_extensions and not path.name.startswith(".")
+        return path.suffix.lower() in allowed_extensions and not path.name.startswith(
+            "."
+        )
 
     if input_path.is_dir():
         paths = [path for path in input_path.rglob("*") if path.is_file()]
         allowed = [path for path in paths if is_allowed(path)]
-        LOGGER.info("Filtered %s files to %s firmware candidates", len(paths), len(allowed))
+        LOGGER.info(
+            "Filtered %s files to %s firmware candidates", len(paths), len(allowed)
+        )
         return allowed
     if input_path.is_file() and input_path.suffix == ".txt":
         entries = [
@@ -41,7 +46,9 @@ def gather_paths(input_path: Path, allowed_extensions: Set[str]) -> List[Path]:
             if line.strip()
         ]
         allowed = [path for path in entries if is_allowed(path)]
-        LOGGER.info("Filtered %s files to %s firmware candidates", len(entries), len(allowed))
+        LOGGER.info(
+            "Filtered %s files to %s firmware candidates", len(entries), len(allowed)
+        )
         return allowed
     if input_path.is_file() and not is_allowed(input_path):
         LOGGER.warning("Skipping non-firmware file: %s", input_path)

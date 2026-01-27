@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Optional
 
 LOGGER = logging.getLogger(__name__)
 
 
-def read_binary(path: Path, max_bytes: Optional[int] = None) -> bytes:
+def read_binary(path: Path, max_bytes: int | None = None) -> bytes:
     """Le bytes de um arquivo de firmware.
 
     Limita a leitura a max_bytes quando fornecido. Retorna b"" em falha

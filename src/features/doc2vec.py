@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import random
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Iterable, List, Sequence, Tuple
+from typing import cast
 
 import numpy as np
 from gensim.models import Doc2Vec
@@ -22,7 +23,9 @@ class Doc2VecConfig:
     min_alpha: float = 0.0001
 
 
-def build_corpus(documents: Iterable[Tuple[str, Sequence[str]]]) -> List[TaggedDocument]:
+def build_corpus(
+    documents: Iterable[tuple[str, Sequence[str]]],
+) -> list[TaggedDocument]:
     """Converte pares (doc_id, tokens) em TaggedDocument para treino."""
     return [
         TaggedDocument(words=list(doc_tokens), tags=[doc_id])
@@ -30,7 +33,7 @@ def build_corpus(documents: Iterable[Tuple[str, Sequence[str]]]) -> List[TaggedD
     ]
 
 
-def train_doc2vec(corpus: List[TaggedDocument], config: Doc2VecConfig) -> Doc2Vec:
+def train_doc2vec(corpus: list[TaggedDocument], config: Doc2VecConfig) -> Doc2Vec:
     """Treina Doc2Vec com parametros de config.
 
     Exige workers=1 para reprodutibilidade e levanta ValueError se
@@ -54,7 +57,11 @@ def train_doc2vec(corpus: List[TaggedDocument], config: Doc2VecConfig) -> Doc2Ve
     return model
 
 
-def infer_embedding(model: Doc2Vec, tokens: Sequence[str], config: Doc2VecConfig) -> np.ndarray:
+def infer_embedding(
+    model: Doc2Vec,
+    tokens: Sequence[str],
+    config: Doc2VecConfig,
+) -> np.ndarray:
     """Infere vetor de embedding para tokens.
 
     Fixa seed antes da inferencia para determinismo. Retorna vetor zero
@@ -63,11 +70,14 @@ def infer_embedding(model: Doc2Vec, tokens: Sequence[str], config: Doc2VecConfig
     if not tokens:
         return np.zeros(config.vector_size, dtype=np.float32)
     set_global_seed(config.seed)
-    return model.infer_vector(
-        list(tokens),
-        epochs=config.epochs,
-        alpha=config.alpha,
-        min_alpha=config.min_alpha,
+    return cast(
+        np.ndarray,
+        model.infer_vector(
+            list(tokens),
+            epochs=config.epochs,
+            alpha=config.alpha,
+            min_alpha=config.min_alpha,
+        ),
     )
 
 

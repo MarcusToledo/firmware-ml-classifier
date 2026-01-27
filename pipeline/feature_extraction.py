@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import hashlib
 import logging
+from collections.abc import Iterable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Union, cast
 
 import yaml
 from gensim.models import Doc2Vec
@@ -18,7 +19,7 @@ LOGGER = logging.getLogger(__name__)
 
 def infer_brand_model_label_from_path(
     path: Path,
-) -> tuple[Optional[str], Optional[str], Optional[str]]:
+) -> tuple[str | None, str | None, str | None]:
     """Extrai brand, model e label de */raw/<brand>/<model>/*.
 
     Retorna (None, None, None) quando o padrao nao casar.
@@ -42,20 +43,23 @@ def infer_brand_model_label_from_path(
 
 @dataclass(frozen=True)
 class PipelineConfig:
-    max_bytes: Optional[int]
+    max_bytes: int | None
     feature: FeatureConfig
     doc2vec: Doc2VecConfig
-    doc2vec_model_path: Optional[Path]
+    doc2vec_model_path: Path | None
 
 
 @dataclass(frozen=True)
 class PipelineResult:
-    firmware_id: Optional[str]
-    features: Dict[str, float]
-    metadata: Dict[str, Any]
+    firmware_id: str | None
+    features: dict[str, float]
+    metadata: dict[str, Any]
 
 
-def apply_overrides(config: Dict[str, Any], overrides: Dict[str, Any]) -> Dict[str, Any]:
+def apply_overrides(
+    config: dict[str, Any],
+    overrides: dict[str, Any],
+) -> dict[str, Any]:
     """Aplica overrides com dot-path em um dicionario de config."""
     updated = dict(config)
     for key, value in overrides.items():
@@ -67,12 +71,12 @@ def apply_overrides(config: Dict[str, Any], overrides: Dict[str, Any]) -> Dict[s
     return updated
 
 
-def load_pipeline_config(path: Path, overrides: Dict[str, Any]) -> PipelineConfig:
+def load_pipeline_config(path: Path, overrides: dict[str, Any]) -> PipelineConfig:
     """Carrega YAML de configuracao e aplica overrides.
 
     Overrides usam dot-path (ex.: feature.max_strings=500).
     """
-    raw: Dict[str, Any] = {}
+    raw: dict[str, Any] = {}
     if path.exists():
         raw = yaml.safe_load(path.read_text()) or {}
     merged = apply_overrides(raw, overrides)
@@ -99,17 +103,21 @@ def load_pipeline_config(path: Path, overrides: Dict[str, Any]) -> PipelineConfi
     )
 
     model_path = doc2vec_raw.get("model_path")
-    max_bytes = merged.get("max_bytes")
+    max_bytes_raw = merged.get("max_bytes")
+    if max_bytes_raw in (None, "null"):
+        max_bytes_value = None
+    else:
+        max_bytes_value = int(cast(Union[int, str], max_bytes_raw))
 
     return PipelineConfig(
-        max_bytes=None if max_bytes in (None, "null") else int(max_bytes),
+        max_bytes=max_bytes_value,
         feature=feature,
         doc2vec=feature.doc2vec,
         doc2vec_model_path=Path(model_path) if model_path else None,
     )
 
 
-def load_doc2vec_model(path: Optional[Path]) -> Optional[Doc2Vec]:
+def load_doc2vec_model(path: Path | None) -> Doc2Vec | None:
     """Carrega modelo Doc2Vec quando disponivel.
 
     Retorna None com warning se o path for None ou inexistente.
@@ -126,17 +134,17 @@ def load_doc2vec_model(path: Optional[Path]) -> Optional[Doc2Vec]:
 def extract_features_from_path(
     path: Path,
     config: PipelineConfig,
-    model: Optional[Doc2Vec],
-    brand: Optional[str] = None,
-    model_name: Optional[str] = None,
-    label: Optional[str] = None,
+    model: Doc2Vec | None,
+    brand: str | None = None,
+    model_name: str | None = None,
+    label: str | None = None,
 ) -> PipelineResult:
     """Extrai features e metadados de um firmware.
 
     Metadados incluem read_ok, error, truncated, doc2vec_used, brand,
     model e label. firmware_id e o SHA256 do conteudo lido.
     """
-    error: Optional[str] = None
+    error: str | None = None
     data = read_binary(path, max_bytes=config.max_bytes)
     data = normalize_binary(data)
 
@@ -183,12 +191,12 @@ def extract_features_from_path(
 def extract_features_batch(
     paths: Iterable[Path],
     config: PipelineConfig,
-) -> List[PipelineResult]:
+) -> list[PipelineResult]:
     """Processa uma lista de paths com tolerancia a falhas.
 
     Retorna um resultado para cada path, inclusive em caso de erro.
     """
-    results: List[PipelineResult] = []
+    results: list[PipelineResult] = []
     model = load_doc2vec_model(config.doc2vec_model_path)
     for path in paths:
         brand, model_name, label = infer_brand_model_label_from_path(path)

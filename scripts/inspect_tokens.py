@@ -5,33 +5,33 @@ import hashlib
 import logging
 import sys
 from pathlib import Path
-from typing import Any, List
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))
 
-from pipeline.feature_extraction import load_pipeline_config
-from src.cli_utils import gather_paths as gather_cli_paths
-from src.cli_utils import parse_overrides
-from src.features.strings import (
+from pipeline.feature_extraction import load_pipeline_config  # noqa: E402
+from src.cli_utils import gather_paths as gather_cli_paths  # noqa: E402
+from src.cli_utils import parse_overrides  # noqa: E402
+from src.features.strings import (  # noqa: E402
     extract_ascii_strings,
     limit_strings,
     strings_to_document,
     tokenize_document,
 )
-from src.io_utils import normalize_binary, read_binary
+from src.io_utils import normalize_binary, read_binary  # noqa: E402
 
 LOGGER = logging.getLogger(__name__)
 ALLOWED_EXTENSIONS = {".bin", ".img", ".trx", ".chk", ".fw", ".rom"}
 
 
-def gather_paths(input_path: Path) -> List[Path]:
+def gather_paths(input_path: Path) -> list[Path]:
     """Wrapper que filtra paths com extensoes permitidas."""
     return gather_cli_paths(input_path, ALLOWED_EXTENSIONS)
 
 
-def extract_tokens(data: bytes, config: Any) -> List[str]:
+def extract_tokens(data: bytes, config: Any) -> list[str]:
     """Extrai tokens aplicando limites de strings e documento."""
     raw_strings = extract_ascii_strings(
         data,

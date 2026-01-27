@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 from gensim.models import Doc2Vec
@@ -43,7 +42,7 @@ class FeatureVector:
 def extract_features(
     data: bytes,
     config: FeatureConfig,
-    model: Optional[Doc2Vec] = None,
+    model: Doc2Vec | None = None,
 ) -> FeatureVector:
     """Extrai features estatisticas e embedding Doc2Vec de bytes de firmware.
 
