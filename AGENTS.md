@@ -40,8 +40,8 @@ agentic coding assistants operating in this repo.
   - `python -m pip install -r requirements.txt`
 - Run all tests:
   - `python -m pytest`
-- Run a single test:
-  - `python -m pytest tests/path::test_name`
+- Run a single test (preferred format):
+  - `python -m pytest tests/path/to/test_file.py::test_name`
 - Run tests with verbose output:
   - `python -m pytest -vv`
 - Lint (if adopted):
