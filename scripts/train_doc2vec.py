@@ -61,6 +61,7 @@ def build_documents(paths: List[Path], config: Any) -> List[Tuple[str, List[str]
 
 
 def main() -> None:
+    """CLI para treino de Doc2Vec com config e overrides."""
     parser = argparse.ArgumentParser(description="Train Doc2Vec on firmware strings")
     parser.add_argument(
         "--config",

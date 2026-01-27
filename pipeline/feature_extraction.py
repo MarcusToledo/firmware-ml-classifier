@@ -19,7 +19,10 @@ LOGGER = logging.getLogger(__name__)
 def infer_brand_model_label_from_path(
     path: Path,
 ) -> tuple[Optional[str], Optional[str], Optional[str]]:
-    """Infer brand/model/label from a dataset/raw/<brand>/<model> path."""
+    """Extrai brand, model e label de */raw/<brand>/<model>/*.
+
+    Retorna (None, None, None) quando o padrao nao casar.
+    """
     raw_index = None
     for idx, part in enumerate(path.parts):
         if part.lower() == "raw":
@@ -53,7 +56,7 @@ class PipelineResult:
 
 
 def apply_overrides(config: Dict[str, Any], overrides: Dict[str, Any]) -> Dict[str, Any]:
-    """Apply dot-path overrides to a config dict."""
+    """Aplica overrides com dot-path em um dicionario de config."""
     updated = dict(config)
     for key, value in overrides.items():
         cursor = updated
@@ -65,7 +68,10 @@ def apply_overrides(config: Dict[str, Any], overrides: Dict[str, Any]) -> Dict[s
 
 
 def load_pipeline_config(path: Path, overrides: Dict[str, Any]) -> PipelineConfig:
-    """Load pipeline configuration from YAML and apply overrides."""
+    """Carrega YAML de configuracao e aplica overrides.
+
+    Overrides usam dot-path (ex.: feature.max_strings=500).
+    """
     raw: Dict[str, Any] = {}
     if path.exists():
         raw = yaml.safe_load(path.read_text()) or {}
@@ -104,7 +110,10 @@ def load_pipeline_config(path: Path, overrides: Dict[str, Any]) -> PipelineConfi
 
 
 def load_doc2vec_model(path: Optional[Path]) -> Optional[Doc2Vec]:
-    """Load a Doc2Vec model if available."""
+    """Carrega modelo Doc2Vec quando disponivel.
+
+    Retorna None com warning se o path for None ou inexistente.
+    """
     if path is None:
         LOGGER.warning("Doc2Vec model path not provided; embeddings will be zero")
         return None
@@ -122,7 +131,11 @@ def extract_features_from_path(
     model_name: Optional[str] = None,
     label: Optional[str] = None,
 ) -> PipelineResult:
-    """Extract features for a single firmware path."""
+    """Extrai features e metadados de um firmware.
+
+    Metadados incluem read_ok, error, truncated, doc2vec_used, brand,
+    model e label. firmware_id e o SHA256 do conteudo lido.
+    """
     error: Optional[str] = None
     data = read_binary(path, max_bytes=config.max_bytes)
     data = normalize_binary(data)
@@ -171,7 +184,10 @@ def extract_features_batch(
     paths: Iterable[Path],
     config: PipelineConfig,
 ) -> List[PipelineResult]:
-    """Extract features for a batch of firmware paths."""
+    """Processa uma lista de paths com tolerancia a falhas.
+
+    Retorna um resultado para cada path, inclusive em caso de erro.
+    """
     results: List[PipelineResult] = []
     model = load_doc2vec_model(config.doc2vec_model_path)
     for path in paths:

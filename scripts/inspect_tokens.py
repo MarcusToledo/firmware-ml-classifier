@@ -44,6 +44,7 @@ def extract_tokens(data: bytes, config: Any) -> List[str]:
 
 
 def main() -> None:
+    """CLI para inspecionar tokens com limites configuraveis."""
     parser = argparse.ArgumentParser(description="Inspect firmware tokens")
     parser.add_argument(
         "--config",

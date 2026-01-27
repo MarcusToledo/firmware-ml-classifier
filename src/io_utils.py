@@ -28,7 +28,10 @@ def read_binary(path: Path, max_bytes: Optional[int] = None) -> bytes:
 
 
 def normalize_binary(data: bytes) -> bytes:
-    """Ensure data is bytes; return empty bytes on invalid input."""
+    """Garante que a entrada seja bytes.
+
+    Retorna b"" se receber um tipo invalido.
+    """
     if isinstance(data, (bytes, bytearray)):
         return bytes(data)
     LOGGER.warning("normalize_binary received non-bytes input")

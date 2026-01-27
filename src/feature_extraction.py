@@ -45,7 +45,12 @@ def extract_features(
     config: FeatureConfig,
     model: Optional[Doc2Vec] = None,
 ) -> FeatureVector:
-    """Extract statistical and Doc2Vec features from firmware bytes."""
+    """Extrai features estatisticas e embedding Doc2Vec de bytes de firmware.
+
+    Aplica limites de max_strings e max_doc_chars. Retorna embedding zero
+    quando model for None ou quando nao houver tokens. O campo truncated
+    indica se houve truncamento de strings ou do documento.
+    """
     byte_len = len(data)
     stats = Stats(
         entropy=shannon_entropy(data),
@@ -76,7 +81,10 @@ def extract_features(
 
 
 def combine_features(feature_vector: FeatureVector) -> dict[str, float]:
-    """Combine stats and embedding into a flat feature mapping."""
+    """Converte FeatureVector em dicionario plano para DataFrame.
+
+    As chaves incluem entropy, byte_mean, compress_ratio e doc2vec_0..N.
+    """
     features: dict[str, float] = {
         "entropy": feature_vector.stats.entropy,
         "byte_mean": feature_vector.stats.byte_mean,

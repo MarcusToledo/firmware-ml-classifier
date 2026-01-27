@@ -11,9 +11,10 @@ def extract_ascii_strings(
     min_len: int = 4,
     max_string_len: int = 1024,
 ) -> List[str]:
-    """Extract printable ASCII strings from byte data.
+    """Extrai strings ASCII imprimiveis (32-126) de bytes.
 
-    Only characters in ASCII range 32-126 are considered.
+    Ignora strings menores que min_len e trunca cada string em
+    max_string_len. Retorna lista vazia para entrada vazia.
     """
     if not data:
         return []
@@ -36,7 +37,10 @@ def extract_ascii_strings(
 
 
 def limit_strings(strings: Iterable[str], max_strings: int) -> List[str]:
-    """Limit the number of strings for stability."""
+    """Limita a lista de strings a max_strings elementos.
+
+    Retorna lista vazia se max_strings <= 0.
+    """
     if max_strings <= 0:
         return []
     limited: List[str] = []
@@ -48,7 +52,10 @@ def limit_strings(strings: Iterable[str], max_strings: int) -> List[str]:
 
 
 def strings_to_document(strings: Iterable[str], max_doc_chars: int) -> str:
-    """Join strings into a single document, truncated by length."""
+    """Concatena strings com \n e trunca em max_doc_chars.
+
+    Retorna string vazia se max_doc_chars <= 0.
+    """
     if max_doc_chars <= 0:
         return ""
     doc = "\n".join(strings)
@@ -56,5 +63,5 @@ def strings_to_document(strings: Iterable[str], max_doc_chars: int) -> str:
 
 
 def tokenize_document(doc: str) -> List[str]:
-    """Tokenize a document with minimal semantics."""
+    """Divide documento por whitespace e remove tokens vazios."""
     return [token for token in doc.split() if token]

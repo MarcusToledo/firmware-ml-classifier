@@ -9,9 +9,9 @@ LOGGER = logging.getLogger(__name__)
 
 
 def shannon_entropy(data: bytes) -> float:
-    """Return Shannon entropy for byte data.
+    """Calcula a entropia de Shannon (bits) da distribuicao de bytes.
 
-    Returns 0.0 for empty input.
+    Retorna 0.0 para entrada vazia.
     """
     if not data:
         return 0.0
@@ -23,9 +23,9 @@ def shannon_entropy(data: bytes) -> float:
 
 
 def byte_mean(data: bytes) -> float:
-    """Return arithmetic mean of byte values.
+    """Calcula a media aritmetica dos valores de bytes (0-255).
 
-    Returns 0.0 for empty input.
+    Retorna 0.0 para entrada vazia.
     """
     if not data:
         return 0.0
@@ -34,9 +34,10 @@ def byte_mean(data: bytes) -> float:
 
 
 def compress_ratio(data: bytes, level: int = 9) -> float:
-    """Return compressibility ratio using zlib.
+    """Calcula a razao tamanho_comprimido/tamanho_original com zlib.
 
-    Returns 1.0 for empty input.
+    Retorna 1.0 para entrada vazia. Normaliza level para 9 se fora do
+    intervalo 0-9.
     """
     if not data:
         return 1.0

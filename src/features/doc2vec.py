@@ -31,7 +31,11 @@ def build_corpus(documents: Iterable[Tuple[str, Sequence[str]]]) -> List[TaggedD
 
 
 def train_doc2vec(corpus: List[TaggedDocument], config: Doc2VecConfig) -> Doc2Vec:
-    """Train a Doc2Vec model from a tokenized corpus."""
+    """Treina Doc2Vec com parametros de config.
+
+    Exige workers=1 para reprodutibilidade e levanta ValueError se
+    diferente.
+    """
     if config.workers != 1:
         raise ValueError("workers must be 1 for reproducibility")
     model = Doc2Vec(
@@ -51,7 +55,11 @@ def train_doc2vec(corpus: List[TaggedDocument], config: Doc2VecConfig) -> Doc2Ve
 
 
 def infer_embedding(model: Doc2Vec, tokens: Sequence[str], config: Doc2VecConfig) -> np.ndarray:
-    """Infer an embedding for a tokenized document."""
+    """Infere vetor de embedding para tokens.
+
+    Fixa seed antes da inferencia para determinismo. Retorna vetor zero
+    quando tokens estiverem vazios.
+    """
     if not tokens:
         return np.zeros(config.vector_size, dtype=np.float32)
     set_global_seed(config.seed)
@@ -64,17 +72,17 @@ def infer_embedding(model: Doc2Vec, tokens: Sequence[str], config: Doc2VecConfig
 
 
 def set_global_seed(seed: int) -> None:
-    """Set random seeds for reproducibility."""
+    """Fixa seeds de random e numpy para reprodutibilidade."""
     random.seed(seed)
     np.random.seed(seed)
 
 
 def save_doc2vec(model: Doc2Vec, path: str) -> None:
-    """Serialize a Doc2Vec model."""
+    """Serializa modelo Doc2Vec em arquivo."""
     model.save(path)
 
 
 def load_doc2vec(path: str) -> Doc2Vec:
-    """Load a serialized Doc2Vec model."""
+    """Carrega modelo Doc2Vec de arquivo serializado."""
     model = Doc2Vec.load(path)
     return model  # type: ignore[return-value, no-any-return, assignment]
