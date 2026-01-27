@@ -61,7 +61,9 @@ def extract_features(
         min_len=config.min_string_len,
         max_string_len=config.max_string_len,
     )
-    truncated_strings = len(raw_strings) > config.max_strings if config.max_strings > 0 else False
+    truncated_strings = (
+        len(raw_strings) > config.max_strings if config.max_strings > 0 else False
+    )
     strings = limit_strings(raw_strings, max_strings=config.max_strings)
     doc_full = "\n".join(strings)
     truncated_doc = config.max_doc_chars > 0 and len(doc_full) > config.max_doc_chars

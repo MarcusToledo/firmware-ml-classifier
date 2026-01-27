@@ -94,5 +94,4 @@ def save_doc2vec(model: Doc2Vec, path: str) -> None:
 
 def load_doc2vec(path: str) -> Doc2Vec:
     """Carrega modelo Doc2Vec de arquivo serializado."""
-    model = Doc2Vec.load(path)
-    return model  # type: ignore[return-value, no-any-return, assignment]
+    return Doc2Vec.load(path)  # type: ignore[return-value]

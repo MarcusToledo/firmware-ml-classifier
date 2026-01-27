@@ -44,7 +44,9 @@ def test_normalize_binary_bytes_passthrough() -> None:
     assert normalize_binary(payload) == payload
 
 
-def test_normalize_binary_invalid_returns_empty(caplog: pytest.LogCaptureFixture) -> None:
+def test_normalize_binary_invalid_returns_empty(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     with caplog.at_level("WARNING"):
         result = normalize_binary("invalid")  # type: ignore[arg-type]
 

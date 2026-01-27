@@ -36,9 +36,7 @@ def test_load_pipeline_config_with_overrides(tmp_path: Path) -> None:
 
 def test_override_nested_doc2vec(tmp_path: Path) -> None:
     config_path = tmp_path / "config.yaml"
-    config_path.write_text(
-        "doc2vec:\n  vector_size: 50\n  window: 2\n  seed: 42\n"
-    )
+    config_path.write_text("doc2vec:\n  vector_size: 50\n  window: 2\n  seed: 42\n")
 
     overrides = {"doc2vec.window": "7"}
 
