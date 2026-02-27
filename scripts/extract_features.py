@@ -16,18 +16,49 @@ from pipeline.feature_extraction import (  # noqa: E402
     extract_features_batch,
     load_pipeline_config,
 )
-from src.cli_utils import gather_paths as gather_cli_paths  # noqa: E402
 from src.cli_utils import parse_overrides  # noqa: E402
 
-ALLOWED_EXTENSIONS = {".bin", ".img", ".trx", ".chk", ".fw", ".rom"}
+EXCLUDED_EXTENSIONS = {
+    ".html",
+    ".pdf",
+    ".conf",
+    ".txt",
+    ".md",
+    ".csv",
+    ".json",
+    ".zip",
+    ".exe",
+    ".msi",
+    ".mib",
+    ".xml",
+}
 OUTPUT_FORMATS = {"parquet", "csv"}
 
 LOGGER = logging.getLogger(__name__)
 
 
 def gather_paths(input_path: Path) -> list[Path]:
-    """Wrapper que filtra paths com extensoes permitidas."""
-    return gather_cli_paths(input_path, ALLOWED_EXTENSIONS)
+    """Coleta paths de firmware excluindo extensoes conhecidas de nao-firmware."""
+    if input_path.is_dir():
+        paths = [p for p in input_path.rglob("*") if p.is_file()]
+    elif input_path.is_file() and input_path.suffix == ".txt":
+        paths = [
+            Path(line.strip())
+            for line in input_path.read_text().splitlines()
+            if line.strip()
+        ]
+    elif input_path.is_file():
+        paths = [input_path]
+    else:
+        return []
+
+    allowed = [
+        p
+        for p in paths
+        if p.suffix.lower() not in EXCLUDED_EXTENSIONS and not p.name.startswith(".")
+    ]
+    LOGGER.info("Filtered %d files to %d firmware candidates", len(paths), len(allowed))
+    return allowed
 
 
 def main() -> None:
