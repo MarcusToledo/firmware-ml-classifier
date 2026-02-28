@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +16,14 @@ from src.features.doc2vec import Doc2VecConfig, load_doc2vec
 from src.io_utils import normalize_binary, read_binary
 
 LOGGER = logging.getLogger(__name__)
+
+_VERSION_SUFFIX_RE = re.compile(r"^([a-z]+\d+[a-z]*)_\d+\.", re.IGNORECASE)
+
+
+def _strip_version_suffix(model: str) -> str:
+    """Strip firmware version suffix: 'NWA110AX_7.10(ABTG.4)C0' -> 'nwa110ax'."""
+    m = _VERSION_SUFFIX_RE.match(model)
+    return m.group(1).lower() if m else model.lower()
 
 
 def infer_brand_model_label_from_path(
@@ -33,8 +42,8 @@ def infer_brand_model_label_from_path(
         return None, None, None
     if len(path.parts) <= raw_index + 2:
         return None, None, None
-    brand = path.parts[raw_index + 1].strip()
-    model = path.parts[raw_index + 2].strip()
+    brand = path.parts[raw_index + 1].strip().lower()
+    model = _strip_version_suffix(path.parts[raw_index + 2].strip())
     if not brand or not model:
         return None, None, None
     label = f"{brand}_{model}"

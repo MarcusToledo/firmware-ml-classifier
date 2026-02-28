@@ -156,8 +156,8 @@ def test_cli_label_from_path(tmp_path: Path) -> None:
     df = pd.read_parquet(output_path)
     assert not df.empty
     assert df["meta_brand"].iloc[0] == "dlink"
-    assert df["meta_model"].iloc[0] == "DIR300"
-    assert df["meta_label"].iloc[0] == "dlink_DIR300"
+    assert df["meta_model"].iloc[0] == "dir300"
+    assert df["meta_label"].iloc[0] == "dlink_dir300"
 
 
 def test_cli_csv_output(tmp_path: Path) -> None:
