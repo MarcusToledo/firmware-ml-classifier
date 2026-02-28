@@ -23,22 +23,31 @@ def _merge_cve_features(
     row: dict[str, Any],
     cve_cache: dict[str, Any],
 ) -> dict[str, Any]:
-    """Merge CVE features from cache into a feature row."""
-    firmware_id = row.get("firmware_id", "")
-    cve_entry = cve_cache.get(firmware_id, {})
+    """Merge CVE features from cache into a feature row.
+
+    Looks up by ``{meta_brand}/{meta_model}`` (lowercase) to match
+    the keys produced by ``fetch_cves.py``.
+    """
+    brand = str(row.get("meta_brand", "")).strip().lower()
+    model = str(row.get("meta_model", "")).strip().lower()
+    if not brand or not model or brand == "nan" or model == "nan":
+        return row
+
+    key = f"{brand}/{model}"
+    cve_entry = cve_cache.get(key, {})
     if not cve_entry:
         return row
 
     merged = dict(row)
-    for key in (
+    for field in (
         "cvss_max",
         "cve_count_critical",
         "cve_count_high",
         "cve_count_medium",
         "cve_count_low",
     ):
-        if key in cve_entry:
-            merged[key] = cve_entry[key]
+        if field in cve_entry:
+            merged[field] = cve_entry[field]
     return merged
 
 
