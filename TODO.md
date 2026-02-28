@@ -96,16 +96,80 @@
 ### Pending
 - [ ] None.
 
-## Request: Pipeline incompleto
+## Request: Roadmap TCC — Pipeline completo de classificacao de seguranca
+
+### Fase 1 — Pipeline Minimo Viavel (Mes 1-2)
+
+#### Coleta e Rotulagem
+- [x] Coletar 50+ firmwares de roteadores de pelo menos 5 fabricantes (D-Link, TP-Link, Netgear, Zyxel, Tenda).
+- [x] Organizar firmwares em `dataset/raw/<vendor>/<model>/`.
+- [ ] Implementar `scripts/fetch_cves.py` para consultar NVD API (vendor+model → CVSS max + contagem por severidade).
+- [x] Criar `dataset/labels.csv` com colunas: firmware_id, vendor, model, cvss_max, cve_count, security_level.
+- [x] Definir scoring deterministico para mapeamento automatico score → nivel de seguranca.
+- [ ] Comecar com 3 classes (Seguro, Vulneravel, Critico); testar 5 classes se dataset > 150.
+- [ ] Revisao manual dos rotulos gerados automaticamente.
+
+#### Features — Binwalk
+- [ ] Integrar Binwalk ao pipeline de extracao de features.
+- [ ] Extrair features derivadas: `n_filesystems`, `n_crypto_signatures`, `has_encrypted_sections`, `entropy_variance_across_sections`.
+
+#### Features — Strings suspeitas e bibliotecas
+- [ ] Implementar regex patterns sobre strings existentes para detectar: hardcoded passwords, IPs, backdoors.
+- [ ] Extrair versoes de bibliotecas (libssl, busybox, dropbear) via regex nas strings.
+- [ ] Gerar features: `count_hardcoded_passwords`, `count_hardcoded_ips`, `has_telnetd`, `libssl_version_age`.
+
+#### Treino e Avaliacao
+- [ ] Implementar `scripts/train.py` com 4 modelos: Random Forest, Extra Trees, XGBoost, MLP.
+- [ ] Implementar `RepeatedStratifiedKFold(n_splits=5, n_repeats=10)` como estrategia de validacao.
+- [ ] Implementar LOOCV como validacao secundaria.
+- [ ] Reportar macro F1-score, acuracia, confusion matrix normalizada e intervalo de confianca.
+- [ ] Implementar split train/val/test com seeds fixos.
+- [ ] Implementar geracao de relatorios em `reports/`.
+
+#### Pre-processamento
+- [ ] Aplicar `StandardScaler` ou `MinMaxScaler` nas features estatisticas (entropia, byte_mean, compress_ratio).
+- [ ] Reduzir dimensionalidade do Doc2Vec: PCA para 10-20 componentes ou reduzir `vector_size` para 30.
+- [ ] Treinar baseline com apenas 3 features estatisticas (sem Doc2Vec) para validar contribuicao.
+- [ ] Comparar baseline vs baseline + Doc2Vec vs baseline + Doc2Vec + Binwalk features.
+
+### Fase 2 — Enriquecimento de Features (Mes 3-4)
+
+- [ ] Implementar deteccao de metadados ELF (arch, endianness, sections) com `pyelftools`.
+- [ ] Avaliar integracao do Ghidra headless para grafo de chamadas e funcoes perigosas (strcpy, sprintf).
+- [ ] Implementar ablation study (contribuicao de cada grupo de features).
+- [ ] Implementar feature importance com SHAP ou built-in do RF/XGBoost.
+
+### Fase 3 — Refinamento e Escrita (Mes 5-6)
+
+- [ ] Experimentar com 5 classes se dataset > 150 amostras.
+- [ ] Hyperparameter tuning com Optuna ou GridSearchCV.
+- [ ] Gerar graficos e tabelas finais para o TCC.
+- [ ] Escrever capitulo de metodologia e resultados.
+
+## Request: Sistema de scoring deterministico para labels de treino
 
 ### Completed
-- [ ] None.
+- [x] Criar `src/scoring.py` com weighted signals + hard rules (stats, cve, strings, binwalk).
+- [x] Criar `configs/scoring.yaml` com thresholds, pesos e hard rules configuraveis.
+- [x] Criar `scripts/generate_labels.py` com CLI (--features, --cves, --config, --output, --dry-run).
+- [x] Adicionar entry point `generate-labels` em `pyproject.toml`.
+- [x] Criar `tests/test_scoring.py` com 14 testes (determinismo, hard rules, redistribuicao de peso, fallback).
+- [x] Mudar filtro de extensoes de allowlist para excludelist em `extract_features.py` (3 → 305 firmwares).
+- [x] Extrair firmware de ZIPs e remover ZIPs sem firmware do dataset.
+- [x] Re-extrair features para os 305 firmwares (6 vendors: dlink, netgear, openwrt, belkin, tplink, zyxel).
 
 ### Pending
-- [ ] Implementar script de treino de modelos (Extra Trees e Random Forest).
-- [ ] Implementar script de avaliacao com metricas e confusion matrix.
-- [ ] Implementar split train/val/test com seeds fixos.
-- [ ] Implementar geracao de relatorios em reports/.
+- [ ] Re-gerar labels apos implementar CVEs e strings para distribuicao mais equilibrada.
+
+### Decisoes Arquiteturais Registradas
+- Priorizar tree-based models (RF, Extra Trees) sobre MLP para datasets pequenos.
+- MLP tende a overfitting com <200 amostras; manter como experimento comparativo.
+- ISA tem baixo valor como feature para roteadores (quase sempre MIPS/ARM).
+- Sequencia de ferramentas: Binwalk (Fase 1) → Regex strings (Fase 1) → pyelftools (Fase 2) → Ghidra (Fase 2).
+- Nao reportar apenas acuracia; usar macro F1-score como metrica principal.
+- Dataset atual: 305 firmwares de 6 vendors (dlink=103, netgear=80, openwrt=49, belkin=43, tplink=27, zyxel=3).
+- Usar class_weight='balanced' em todos os modelos sklearn para compensar desbalanceamento.
+- Scoring atual (so stats): seguro=23%, vulneravel=17%, critico=60% — esperado rebalancear com CVE+strings.
 
 ## Request: Qualidade e ferramentas
 
