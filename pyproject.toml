@@ -38,6 +38,9 @@ generate-labels = "scripts.generate_labels:main"
 where = ["."]
 include = ["src*", "pipeline*", "scripts*"]
 
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
 [tool.ruff]
 line-length = 88
 target-version = "py39"
