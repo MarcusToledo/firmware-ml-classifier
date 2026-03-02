@@ -33,6 +33,27 @@ def byte_mean(data: bytes) -> float:
     return float(arr.mean(dtype=np.float64))
 
 
+BLOCK_SIZE = 65536  # 64 KB
+
+
+def entropy_variance_across_sections(
+    data: bytes, block_size: int = BLOCK_SIZE
+) -> float:
+    """Variance of Shannon entropy across fixed-size blocks.
+
+    Splits *data* into non-overlapping blocks of *block_size* bytes,
+    computes ``shannon_entropy`` for each, and returns the variance.
+    Returns 0.0 when there are fewer than 2 complete blocks.
+    """
+    if len(data) < block_size * 2:
+        return 0.0
+    entropies = [
+        shannon_entropy(data[i : i + block_size])
+        for i in range(0, len(data) - block_size + 1, block_size)
+    ]
+    return float(np.var(entropies))
+
+
 def compress_ratio(data: bytes, level: int = 9) -> float:
     """Calcula a razao tamanho_comprimido/tamanho_original com zlib.
 

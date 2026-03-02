@@ -12,8 +12,18 @@ import yaml
 from gensim.models import Doc2Vec
 
 from src.feature_extraction import FeatureConfig, combine_features, extract_features
+from src.features.binwalk import (
+    count_crypto_signatures,
+    count_filesystems,
+    detect_compression_type,
+    detect_fs_type,
+    has_encrypted_sections,
+)
 from src.features.doc2vec import Doc2VecConfig, load_doc2vec
+from src.features.statistics import entropy_variance_across_sections
 from src.io_utils import normalize_binary, read_binary
+
+FeatureValue = Union[float, int, bool, str, None]
 
 LOGGER = logging.getLogger(__name__)
 
@@ -61,7 +71,7 @@ class PipelineConfig:
 @dataclass(frozen=True)
 class PipelineResult:
     firmware_id: str | None
-    features: dict[str, float]
+    features: dict[str, FeatureValue]
     metadata: dict[str, Any]
 
 
@@ -140,6 +150,28 @@ def load_doc2vec_model(path: Path | None) -> Doc2Vec | None:
     return load_doc2vec(str(path))
 
 
+def _extract_binwalk_descriptions(path: Path) -> list[str]:
+    """Run binwalk signature scan and return description strings.
+
+    Returns an empty list when binwalk3 is not installed or the scan fails.
+    """
+    try:
+        import binwalk  # type: ignore[import-untyped]
+    except ImportError:
+        LOGGER.debug("binwalk3 not installed; skipping structural analysis")
+        return []
+    try:
+        modules = binwalk.scan(str(path), signature=True, quiet=True)
+        descriptions: list[str] = []
+        for module in modules:
+            for result in module.results:
+                descriptions.append(result.description)
+        return descriptions
+    except Exception as exc:
+        LOGGER.warning("binwalk scan failed for %s: %s", path, exc)
+        return []
+
+
 def extract_features_from_path(
     path: Path,
     config: PipelineConfig,
@@ -173,7 +205,18 @@ def extract_features_from_path(
         LOGGER.warning("Failed to read firmware %s: %s", path, error)
 
     feature_vector = extract_features(data, config.feature, model)
-    features = combine_features(feature_vector)
+    features: dict[str, FeatureValue] = {**combine_features(feature_vector)}
+
+    # Binwalk structural features
+    descriptions = _extract_binwalk_descriptions(path) if read_ok else []
+    features["n_filesystems"] = count_filesystems(descriptions)
+    features["n_crypto_signatures"] = count_crypto_signatures(descriptions)
+    features["has_encrypted_sections"] = has_encrypted_sections(descriptions)
+    features["fs_type"] = detect_fs_type(descriptions)
+    features["compression_type"] = detect_compression_type(descriptions)
+    features["entropy_variance_across_sections"] = (
+        entropy_variance_across_sections(data) if read_ok else 0.0
+    )
 
     metadata = {
         "read_ok": read_ok,

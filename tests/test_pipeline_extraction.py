@@ -1,4 +1,6 @@
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 from pipeline.feature_extraction import (
     extract_features_batch,
@@ -93,3 +95,47 @@ def test_extract_features_batch_continues_on_error(tmp_path: Path) -> None:
     assert results[1].metadata["model"] is None
     assert results[1].metadata["label"] is None
     assert results[1].firmware_id is None
+
+
+def test_extract_features_includes_binwalk_keys(tmp_path: Path) -> None:
+    """Binwalk feature keys are always present even without binwalk3."""
+    firmware_path = tmp_path / "firmware.bin"
+    firmware_path.write_bytes(b"firmware-data")
+
+    config = load_pipeline_config(tmp_path / "missing.yaml", overrides={})
+    result = extract_features_from_path(firmware_path, config, model=None)
+
+    expected_keys = {
+        "n_filesystems",
+        "n_crypto_signatures",
+        "has_encrypted_sections",
+        "fs_type",
+        "compression_type",
+        "entropy_variance_across_sections",
+    }
+    assert expected_keys.issubset(result.features.keys())
+
+
+def test_extract_features_with_mocked_binwalk(tmp_path: Path) -> None:
+    """Binwalk features are populated when binwalk3 returns results."""
+    firmware_path = tmp_path / "firmware.bin"
+    firmware_path.write_bytes(b"firmware-data")
+
+    fake_result_1 = SimpleNamespace(description="Squashfs filesystem, little endian")
+    fake_result_2 = SimpleNamespace(description="gzip compressed data, from Unix")
+    fake_result_3 = SimpleNamespace(description="AES encrypted block")
+    fake_module = SimpleNamespace(results=[fake_result_1, fake_result_2, fake_result_3])
+
+    mock_binwalk = MagicMock()
+    mock_binwalk.scan.return_value = [fake_module]
+
+    config = load_pipeline_config(tmp_path / "missing.yaml", overrides={})
+
+    with patch.dict("sys.modules", {"binwalk": mock_binwalk}):
+        result = extract_features_from_path(firmware_path, config, model=None)
+
+    assert result.features["n_filesystems"] == 1
+    assert result.features["n_crypto_signatures"] == 1
+    assert result.features["has_encrypted_sections"] is True
+    assert result.features["fs_type"] == "squashfs"
+    assert result.features["compression_type"] == "gzip"

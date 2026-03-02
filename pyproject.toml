@@ -17,6 +17,7 @@ dependencies = [
     "matplotlib>=3.6",
     "pyyaml>=6.0",
     "pyarrow>=8.0",
+    "binwalk3>=3.0",
 ]
 
 [project.optional-dependencies]
