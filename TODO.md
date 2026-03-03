@@ -101,9 +101,12 @@
 ### Fase 1 — Pipeline Minimo Viavel (Mes 1-2)
 
 #### Coleta e Rotulagem
-- [x] Coletar 50+ firmwares de roteadores de pelo menos 5 fabricantes (D-Link, TP-Link, Netgear, Zyxel, Tenda).
+- [x] Coletar 50+ firmwares de roteadores de pelo menos 5 fabricantes (D-Link, TP-Link, Netgear, Zyxel, Belkin).
 - [x] Organizar firmwares em `dataset/raw/<vendor>/<model>/`.
-- [ ] Implementar `scripts/fetch_cves.py` para consultar NVD API (vendor+model → CVSS max + contagem por severidade).
+- [x] Implementar `scripts/fetch_cves.py` para consultar NVD API (vendor+model → CVSS max + contagem por severidade).
+- [x] Mover normalizacao de modelo (version suffix stripping) de `fetch_cves.py` para `feature_extraction.py`.
+- [x] Corrigir lookup do CVE cache para usar `brand/model` em vez de `firmware_id`.
+- [x] Migrar chaves Zyxel no `cve_cache.json` para nomes normalizados.
 - [x] Criar `dataset/labels.csv` com colunas: firmware_id, vendor, model, cvss_max, cve_count, security_level.
 - [x] Definir scoring deterministico para mapeamento automatico score → nivel de seguranca.
 - [ ] Comecar com 3 classes (Seguro, Vulneravel, Critico); testar 5 classes se dataset > 150.
@@ -168,6 +171,8 @@
 - Sequencia de ferramentas: Binwalk (Fase 1) → Regex strings (Fase 1) → pyelftools (Fase 2) → Ghidra (Fase 2).
 - Nao reportar apenas acuracia; usar macro F1-score como metrica principal.
 - Dataset atual: 305 firmwares de 6 vendors (dlink=103, netgear=80, openwrt=49, belkin=43, tplink=27, zyxel=3).
+- Firmwares identificados como "data" pelo `file` com entropia >7.5 + `n_filesystems=0` + `compression_type=None` são padrão típico de firmware encriptado com formato proprietário. O scoring já captura esse padrão via `entropy_variance_across_sections`.
+- OpenWrt retorna 0 CVEs na NVD (open-source, CVEs reportados contra chipsets/vendors originais) — substituir por Linksys.
 - Usar class_weight='balanced' em todos os modelos sklearn para compensar desbalanceamento.
 - Scoring atual (so stats): seguro=23%, vulneravel=17%, critico=60% — esperado rebalancear com CVE+strings.
 
@@ -178,6 +183,15 @@
 - [x] Criar .pre-commit-config.yaml com hooks.
 - [x] Criar src/py.typed para PEP 561.
 - [x] Atualizar README com secao de qualidade.
+
+### Pending
+- [ ] None.
+
+## Request: Configurar debug Python no VS Code para arquivo atual
+
+### Completed
+- [x] Criar `.vscode/launch.json` com configuracao `Python: Arquivo atual` usando `${file}`.
+- [x] Definir `cwd` como `${workspaceFolder}` e terminal integrado para execucao consistente.
 
 ### Pending
 - [ ] None.

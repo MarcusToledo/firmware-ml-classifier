@@ -188,3 +188,20 @@ def test_binwalk_features_contribute() -> None:
     r_without = score_firmware(features_without, DEFAULT_CONFIG)
     r_with = score_firmware(features_with, DEFAULT_CONFIG)
     assert r_with.numeric_score > r_without.numeric_score
+
+
+def test_n_filesystems_contributes_to_score() -> None:
+    """Multiple filesystems raise the binwalk sub-score."""
+    base = {"entropy": 6.0}
+    with_single_fs = {**base, "n_filesystems": 1}
+    with_multi_fs = {**base, "n_filesystems": 3}
+    r_single = score_firmware(with_single_fs, DEFAULT_CONFIG)
+    r_multi = score_firmware(with_multi_fs, DEFAULT_CONFIG)
+    assert r_multi.numeric_score > r_single.numeric_score
+
+
+def test_n_filesystems_zero_does_not_activate_binwalk_signal() -> None:
+    """n_filesystems=0 must not mark the binwalk signal as present."""
+    result = score_firmware({"n_filesystems": 0}, DEFAULT_CONFIG)
+    binwalk_signal = next(s for s in result.signals if s.name == "binwalk")
+    assert binwalk_signal.present is False

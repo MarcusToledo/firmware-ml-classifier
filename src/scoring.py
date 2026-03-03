@@ -8,6 +8,21 @@ from typing import Any
 import yaml
 
 # ---------------------------------------------------------------------------
+# Binwalk scoring constants
+# ---------------------------------------------------------------------------
+
+_ENCRYPTED_SCORE: float = 0.8
+_CRYPTO_SIGS_SATURATION: float = 5.0
+_CRYPTO_SIGS_WEIGHT: float = 0.5
+_ENTROPY_VAR_SATURATION: float = 3.0
+_LEGACY_FS_SCORE: float = 0.4
+_LEGACY_FS_TYPES: frozenset[str] = frozenset({"cramfs", "jffs2"})
+_LEGACY_COMPRESSION_SCORE: float = 0.2
+_LEGACY_COMPRESSION_TYPES: frozenset[str] = frozenset({"gzip"})
+_N_FILESYSTEMS_SATURATION: float = 3.0
+_N_FILESYSTEMS_WEIGHT: float = 0.3
+
+# ---------------------------------------------------------------------------
 # Configuration dataclasses
 # ---------------------------------------------------------------------------
 
@@ -197,10 +212,20 @@ def _score_binwalk(features: dict[str, Any]) -> SignalResult:
     entropy_var = features.get("entropy_variance_across_sections")
     fs_type = features.get("fs_type")
     compression = features.get("compression_type")
+    n_filesystems = features.get("n_filesystems")
 
     available = [
         v
-        for v in [encrypted, crypto_sigs, entropy_var, fs_type, compression]
+        for v in [
+            encrypted,
+            crypto_sigs,
+            entropy_var,
+            fs_type,
+            compression,
+            n_filesystems
+            if (n_filesystems is not None and n_filesystems > 0)
+            else None,
+        ]
         if v is not None
     ]
     if not available:
@@ -210,32 +235,40 @@ def _score_binwalk(features: dict[str, Any]) -> SignalResult:
     details: list[str] = []
 
     if encrypted is not None:
-        s = 0.8 if encrypted else 0.0
+        s = _ENCRYPTED_SCORE if encrypted else 0.0
         parts.append(s)
         details.append(f"encrypted={encrypted}→{s:.2f}")
 
     if crypto_sigs is not None:
-        s = min(1.0, crypto_sigs / 5.0) * 0.5
+        s = min(1.0, crypto_sigs / _CRYPTO_SIGS_SATURATION) * _CRYPTO_SIGS_WEIGHT
         parts.append(s)
         details.append(f"crypto_sigs={crypto_sigs}→{s:.2f}")
 
     if entropy_var is not None:
         # High variance → mixed content → suspicious
-        s = min(1.0, entropy_var / 3.0)
+        s = min(1.0, entropy_var / _ENTROPY_VAR_SATURATION)
         parts.append(s)
         details.append(f"entropy_var={entropy_var:.2f}→{s:.2f}")
 
-    legacy_fs = {"cramfs", "jffs2"}
     if fs_type is not None:
-        s = 0.4 if str(fs_type).lower() in legacy_fs else 0.0
+        s = _LEGACY_FS_SCORE if str(fs_type).lower() in _LEGACY_FS_TYPES else 0.0
         parts.append(s)
         details.append(f"fs_type={fs_type}→{s:.2f}")
 
-    legacy_compression = {"gzip"}
     if compression is not None:
-        s = 0.2 if str(compression).lower() in legacy_compression else 0.0
+        s = (
+            _LEGACY_COMPRESSION_SCORE
+            if str(compression).lower() in _LEGACY_COMPRESSION_TYPES
+            else 0.0
+        )
         parts.append(s)
         details.append(f"compression={compression}→{s:.2f}")
+
+    if n_filesystems is not None and n_filesystems > 0:
+        # Multiple embedded filesystems suggest hidden partitions or overlays
+        s = min(1.0, n_filesystems / _N_FILESYSTEMS_SATURATION) * _N_FILESYSTEMS_WEIGHT
+        parts.append(s)
+        details.append(f"n_filesystems={n_filesystems}→{s:.2f}")
 
     score = sum(parts) / len(parts) if parts else 0.0
     return SignalResult("binwalk", score, 1.0, True, "; ".join(details))

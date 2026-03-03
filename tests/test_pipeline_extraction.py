@@ -1,6 +1,5 @@
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from pipeline.feature_extraction import (
     extract_features_batch,
@@ -117,21 +116,28 @@ def test_extract_features_includes_binwalk_keys(tmp_path: Path) -> None:
 
 
 def test_extract_features_with_mocked_binwalk(tmp_path: Path) -> None:
-    """Binwalk features are populated when binwalk3 returns results."""
+    """Binwalk features are populated when binwalk CLI returns results."""
+    import subprocess
+
     firmware_path = tmp_path / "firmware.bin"
     firmware_path.write_bytes(b"firmware-data")
 
-    fake_result_1 = SimpleNamespace(description="Squashfs filesystem, little endian")
-    fake_result_2 = SimpleNamespace(description="gzip compressed data, from Unix")
-    fake_result_3 = SimpleNamespace(description="AES encrypted block")
-    fake_module = SimpleNamespace(results=[fake_result_1, fake_result_2, fake_result_3])
-
-    mock_binwalk = MagicMock()
-    mock_binwalk.scan.return_value = [fake_module]
+    fake_stdout = (
+        "DECIMAL       HEXADECIMAL     DESCRIPTION\n"
+        "--------------------------------------------------------------------------------\n"
+        "0             0x0             Squashfs filesystem, little endian\n"
+        "64            0x40            gzip compressed data, from Unix\n"
+        "128           0x80            AES encrypted block\n"
+    )
+    fake_completed = subprocess.CompletedProcess(
+        args=[], returncode=0, stdout=fake_stdout, stderr=""
+    )
 
     config = load_pipeline_config(tmp_path / "missing.yaml", overrides={})
 
-    with patch.dict("sys.modules", {"binwalk": mock_binwalk}):
+    with patch("shutil.which", return_value="/usr/bin/binwalk"), patch(
+        "subprocess.run", return_value=fake_completed
+    ):
         result = extract_features_from_path(firmware_path, config, model=None)
 
     assert result.features["n_filesystems"] == 1

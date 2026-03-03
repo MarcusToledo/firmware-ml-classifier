@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
+import shutil
+import subprocess
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -153,19 +155,25 @@ def load_doc2vec_model(path: Path | None) -> Doc2Vec | None:
 def _extract_binwalk_descriptions(path: Path) -> list[str]:
     """Run binwalk signature scan and return description strings.
 
-    Returns an empty list when binwalk3 is not installed or the scan fails.
+    Uses the binwalk CLI via subprocess. Returns an empty list when binwalk
+    is not installed or the scan fails.
     """
-    try:
-        import binwalk  # type: ignore[import-untyped]
-    except ImportError:
-        LOGGER.debug("binwalk3 not installed; skipping structural analysis")
+    binwalk_bin = shutil.which("binwalk")
+    if binwalk_bin is None:
+        LOGGER.debug("binwalk not found in PATH; skipping structural analysis")
         return []
     try:
-        modules = binwalk.scan(str(path), signature=True, quiet=True)
+        result = subprocess.run(
+            [binwalk_bin, str(path)],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
         descriptions: list[str] = []
-        for module in modules:
-            for result in module.results:
-                descriptions.append(result.description)
+        for line in result.stdout.splitlines():
+            parts = line.split(None, 2)
+            if len(parts) == 3 and parts[0].isdigit():
+                descriptions.append(parts[2].strip())
         return descriptions
     except Exception as exc:
         LOGGER.warning("binwalk scan failed for %s: %s", path, exc)
