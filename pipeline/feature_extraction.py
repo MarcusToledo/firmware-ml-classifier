@@ -23,6 +23,8 @@ from src.features.binwalk import (
 )
 from src.features.doc2vec import Doc2VecConfig, load_doc2vec
 from src.features.statistics import entropy_variance_across_sections
+from src.features.string_patterns import scan_strings
+from src.features.strings import extract_ascii_strings, limit_strings
 from src.io_utils import normalize_binary, read_binary
 
 FeatureValue = Union[float, int, bool, str, None]
@@ -225,6 +227,18 @@ def extract_features_from_path(
     features["entropy_variance_across_sections"] = (
         entropy_variance_across_sections(data) if read_ok else 0.0
     )
+
+    # String pattern security features
+    if read_ok:
+        raw_strings = extract_ascii_strings(
+            data,
+            min_len=config.feature.min_string_len,
+            max_string_len=config.feature.max_string_len,
+        )
+        limited = limit_strings(raw_strings, config.feature.max_strings)
+        features.update(scan_strings(limited))
+    else:
+        features.update(scan_strings([]))
 
     metadata = {
         "read_ok": read_ok,

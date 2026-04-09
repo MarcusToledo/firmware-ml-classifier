@@ -115,6 +115,28 @@ def test_extract_features_includes_binwalk_keys(tmp_path: Path) -> None:
     assert expected_keys.issubset(result.features.keys())
 
 
+def test_extract_features_includes_string_pattern_keys(tmp_path: Path) -> None:
+    """String pattern feature keys are always present after extraction."""
+    firmware_path = tmp_path / "firmware.bin"
+    firmware_path.write_bytes(b"firmware-data")
+
+    config = load_pipeline_config(tmp_path / "missing.yaml", overrides={})
+    result = extract_features_from_path(firmware_path, config, model=None)
+
+    expected_keys = {
+        "count_hardcoded_passwords",
+        "count_hardcoded_ips",
+        "has_telnetd",
+        "has_debug_account",
+        "has_outdated_libssl",
+        "has_outdated_busybox",
+        "has_outdated_dropbear",
+        "count_urls",
+        "count_api_tokens",
+    }
+    assert expected_keys.issubset(result.features.keys())
+
+
 def test_extract_features_with_mocked_binwalk(tmp_path: Path) -> None:
     """Binwalk features are populated when binwalk CLI returns results."""
     import subprocess

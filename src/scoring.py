@@ -21,6 +21,7 @@ _LEGACY_COMPRESSION_SCORE: float = 0.2
 _LEGACY_COMPRESSION_TYPES: frozenset[str] = frozenset({"gzip"})
 _N_FILESYSTEMS_SATURATION: float = 3.0
 _N_FILESYSTEMS_WEIGHT: float = 0.3
+_OUTDATED_LIB_SCORE: float = 0.6
 
 # ---------------------------------------------------------------------------
 # Configuration dataclasses
@@ -166,12 +167,14 @@ def _score_strings(features: dict[str, Any]) -> SignalResult:
     """Sub-score for suspicious string features."""
     passwords = features.get("count_hardcoded_passwords")
     ips = features.get("count_hardcoded_ips")
-    ssl_age = features.get("libssl_version_age")
-    busybox_age = features.get("busybox_version_age")
-    dropbear_age = features.get("dropbear_version_age")
+    outdated_libssl = features.get("has_outdated_libssl")
+    outdated_busybox = features.get("has_outdated_busybox")
+    outdated_dropbear = features.get("has_outdated_dropbear")
 
     available = [
-        v for v in [passwords, ips, ssl_age, busybox_age, dropbear_age] if v is not None
+        v
+        for v in [passwords, ips, outdated_libssl, outdated_busybox, outdated_dropbear]
+        if v is not None
     ]
     if not available:
         return SignalResult("strings", 0.0, 0.0, False, "no string features")
@@ -179,27 +182,25 @@ def _score_strings(features: dict[str, Any]) -> SignalResult:
     parts: list[float] = []
     details: list[str] = []
 
-    if passwords is not None:
+    if passwords is not None and passwords > 0:
         s = _sigmoid(passwords, 1.0, 2.0)
         parts.append(s)
         details.append(f"passwords={passwords}→{s:.2f}")
 
-    if ips is not None:
+    if ips is not None and ips > 0:
         s = _sigmoid(ips, 2.0, 1.0)
         parts.append(s)
         details.append(f"ips={ips}→{s:.2f}")
 
-    # Library age in months → score by tiers
-    for name, age in [
-        ("libssl", ssl_age),
-        ("busybox", busybox_age),
-        ("dropbear", dropbear_age),
+    for name, outdated in [
+        ("libssl", outdated_libssl),
+        ("busybox", outdated_busybox),
+        ("dropbear", outdated_dropbear),
     ]:
-        if age is not None:
-            # 0-12 months: low risk; 12-36: moderate; 36+: high
-            s = max(0.0, min(1.0, (age - 6) / 48.0))
+        if outdated is not None:
+            s = _OUTDATED_LIB_SCORE if outdated else 0.0
             parts.append(s)
-            details.append(f"{name}_age={age}m→{s:.2f}")
+            details.append(f"{name}_outdated={outdated}→{s:.2f}")
 
     score = sum(parts) / len(parts) if parts else 0.0
     return SignalResult("strings", score, 1.0, True, "; ".join(details))

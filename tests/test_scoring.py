@@ -3,6 +3,7 @@ from __future__ import annotations
 from src.scoring import (
     ScoringConfig,
     ThresholdConfig,
+    _score_strings,
     score_firmware,
 )
 
@@ -205,3 +206,69 @@ def test_n_filesystems_zero_does_not_activate_binwalk_signal() -> None:
     result = score_firmware({"n_filesystems": 0}, DEFAULT_CONFIG)
     binwalk_signal = next(s for s in result.signals if s.name == "binwalk")
     assert binwalk_signal.present is False
+
+
+# ---------------------------------------------------------------------------
+# _score_strings with has_outdated_* booleans
+# ---------------------------------------------------------------------------
+
+
+def test_score_strings_no_features_absent() -> None:
+    """No string features → signal absent with score 0."""
+    result = _score_strings({})
+    assert result.present is False
+    assert result.score == 0.0
+
+
+def test_score_strings_outdated_libssl_raises_score() -> None:
+    """has_outdated_libssl=True should produce a non-zero score."""
+    result = _score_strings({"has_outdated_libssl": True})
+    assert result.present is True
+    assert result.score > 0.0
+
+
+def test_score_strings_no_outdated_lib_zero() -> None:
+    """All outdated flags False with no other features → score 0."""
+    result = _score_strings(
+        {
+            "has_outdated_libssl": False,
+            "has_outdated_busybox": False,
+            "has_outdated_dropbear": False,
+        }
+    )
+    assert result.present is True
+    assert result.score == 0.0
+
+
+def test_score_strings_outdated_busybox_contributes() -> None:
+    """has_outdated_busybox=True should be reflected in score."""
+    r_false = _score_strings({"has_outdated_busybox": False})
+    r_true = _score_strings({"has_outdated_busybox": True})
+    assert r_true.score > r_false.score
+
+
+def test_score_strings_outdated_dropbear_contributes() -> None:
+    """has_outdated_dropbear=True should be reflected in score."""
+    r_false = _score_strings({"has_outdated_dropbear": False})
+    r_true = _score_strings({"has_outdated_dropbear": True})
+    assert r_true.score > r_false.score
+
+
+def test_score_strings_passwords_contributes() -> None:
+    """count_hardcoded_passwords should contribute to score."""
+    r_none = _score_strings({})
+    r_some = _score_strings({"count_hardcoded_passwords": 3})
+    assert r_some.score > r_none.score
+
+
+def test_score_strings_combined_features() -> None:
+    """Multiple string features produce higher score than single feature."""
+    r_single = _score_strings({"has_outdated_libssl": True})
+    r_combined = _score_strings(
+        {
+            "has_outdated_libssl": True,
+            "has_outdated_busybox": True,
+            "count_hardcoded_passwords": 2,
+        }
+    )
+    assert r_combined.score >= r_single.score
