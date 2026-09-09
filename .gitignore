@@ -49,6 +49,8 @@ scripts/extract_firmwares.py
 
 scripts/prune_firmwares.py
 
+scripts/download_firmwaredrive.py
+
 dataset/cve_cache.json
 
 dataset/firmadyne_data.sql
@@ -58,5 +60,7 @@ dataset/firmadyne_data.sql.xz
 dataset/labels.csv
 
 .vscode/
+
+.idea/
 
 .playwright-mcp/
