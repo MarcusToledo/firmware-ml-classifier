@@ -142,7 +142,7 @@ def test_low_risk_maps_to_seguro() -> None:
         "cve_count_high": 0,
     }
     result = score_firmware(features, DEFAULT_CONFIG)
-    assert result.numeric_score < 0.30
+    assert result.numeric_score < 0.20
     assert result.level == "seguro"
 
 
@@ -272,3 +272,30 @@ def test_score_strings_combined_features() -> None:
         }
     )
     assert r_combined.score >= r_single.score
+
+
+def test_score_strings_cred_pairs_contributes() -> None:
+    """count_credential_pairs > 0 should raise the strings sub-score."""
+    r_none = _score_strings({})
+    r_some = _score_strings({"count_credential_pairs": 1})
+    assert r_some.score > r_none.score
+
+
+def test_score_strings_public_ips_contributes() -> None:
+    """count_public_ips > 0 should raise the strings sub-score."""
+    r_none = _score_strings({})
+    r_some = _score_strings({"count_public_ips": 1})
+    assert r_some.score > r_none.score
+
+
+def test_score_strings_zero_new_counts_no_dilution() -> None:
+    """New count features at zero must not dilute the existing score."""
+    r_without = _score_strings({"has_outdated_libssl": True})
+    r_with_zeros = _score_strings(
+        {
+            "has_outdated_libssl": True,
+            "count_credential_pairs": 0,
+            "count_public_ips": 0,
+        }
+    )
+    assert r_with_zeros.score == r_without.score

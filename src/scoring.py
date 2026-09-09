@@ -30,7 +30,7 @@ _OUTDATED_LIB_SCORE: float = 0.6
 
 @dataclass(frozen=True)
 class ThresholdConfig:
-    low: float = 0.30
+    low: float = 0.20
     high: float = 0.60
 
 
@@ -166,14 +166,24 @@ def _score_cve(features: dict[str, Any]) -> SignalResult:
 def _score_strings(features: dict[str, Any]) -> SignalResult:
     """Sub-score for suspicious string features."""
     passwords = features.get("count_hardcoded_passwords")
+    cred_pairs = features.get("count_credential_pairs")
     ips = features.get("count_hardcoded_ips")
+    public_ips = features.get("count_public_ips")
     outdated_libssl = features.get("has_outdated_libssl")
     outdated_busybox = features.get("has_outdated_busybox")
     outdated_dropbear = features.get("has_outdated_dropbear")
 
     available = [
         v
-        for v in [passwords, ips, outdated_libssl, outdated_busybox, outdated_dropbear]
+        for v in [
+            passwords,
+            cred_pairs,
+            ips,
+            public_ips,
+            outdated_libssl,
+            outdated_busybox,
+            outdated_dropbear,
+        ]
         if v is not None
     ]
     if not available:
@@ -187,10 +197,20 @@ def _score_strings(features: dict[str, Any]) -> SignalResult:
         parts.append(s)
         details.append(f"passwords={passwords}→{s:.2f}")
 
+    if cred_pairs is not None and cred_pairs > 0:
+        s = _sigmoid(cred_pairs, 1.0, 3.0)
+        parts.append(s)
+        details.append(f"cred_pairs={cred_pairs}→{s:.2f}")
+
     if ips is not None and ips > 0:
         s = _sigmoid(ips, 2.0, 1.0)
         parts.append(s)
         details.append(f"ips={ips}→{s:.2f}")
+
+    if public_ips is not None and public_ips > 0:
+        s = _sigmoid(public_ips, 1.0, 2.5)
+        parts.append(s)
+        details.append(f"public_ips={public_ips}→{s:.2f}")
 
     for name, outdated in [
         ("libssl", outdated_libssl),

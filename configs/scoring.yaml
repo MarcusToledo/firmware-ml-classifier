@@ -1,6 +1,6 @@
 scoring:
   thresholds:
-    low: 0.30    # < 0.30 → seguro
+    low: 0.20    # < 0.20 → seguro
     high: 0.60   # >= 0.60 → critico
 
   weights:

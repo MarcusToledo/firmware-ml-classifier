@@ -44,6 +44,38 @@ _DEFAULT_PASSWORDS: frozenset[str] = frozenset(
 )
 
 # ---------------------------------------------------------------------------
+# Credential pair patterns (user:pass where both are weak defaults)
+# ---------------------------------------------------------------------------
+
+_CRED_PAIR_RE = re.compile(r"\b([A-Za-z0-9]{1,20}):([A-Za-z0-9]{1,20})\b")
+_CRED_PAIR_WEAK: frozenset[str] = frozenset(
+    {
+        "admin",
+        "root",
+        "guest",
+        "test",
+        "default",
+        "user",
+        "support",
+        "supervisor",
+        "service",
+        "system",
+        "ubnt",
+        "huawei",
+        "zte521",
+        "password",
+        "1234",
+        "12345",
+        "123456",
+        "admin123",
+        "toor",
+        "pass",
+        "enable",
+        "telnet",
+    }
+)
+
+# ---------------------------------------------------------------------------
 # IP address patterns
 # ---------------------------------------------------------------------------
 
@@ -61,8 +93,8 @@ _DEBUG_ACCOUNT_RE = re.compile(r"\b(?:debug|guest|test)\b", re.IGNORECASE)
 # Library version patterns
 # ---------------------------------------------------------------------------
 
-_LIBSSL_RE = re.compile(r"OpenSSL\s+([\d]+\.[\d]+\.[\d]+[a-z]?)", re.IGNORECASE)
-_BUSYBOX_RE = re.compile(r"BusyBox\s+v?([\d]+\.[\d]+\.[\d]+)", re.IGNORECASE)
+_LIBSSL_RE = re.compile(r"OpenSSL[\s/]+([\d]+\.[\d]+\.[\d]+[a-z]?)", re.IGNORECASE)
+_BUSYBOX_RE = re.compile(r"BusyBox[\s_]*v?([\d]+\.[\d]+\.[\d]+)", re.IGNORECASE)
 _DROPBEAR_RE = re.compile(r"Dropbear\s+(?:SSH\s+)?v?([\d]{4}\.[\d]+)", re.IGNORECASE)
 _VERSION_THRESHOLDS: dict[str, tuple[int, ...]] = {
     "libssl": (1, 1, 1),  # < OpenSSL 1.1.1 → outdated
@@ -94,7 +126,7 @@ def _parse_version(v: str) -> tuple[int, ...]:
         _parse_version("2022.82") -> (2022, 82)
     """
     parts: list[int] = []
-    for segment in re.split(r"[.\-]", v):
+    for segment in re.split(r"[.\-_]", v):
         digits = re.match(r"(\d+)", segment)
         if digits:
             parts.append(int(digits.group(1)))
@@ -126,6 +158,26 @@ def count_hardcoded_passwords(strings: list[str]) -> int:
     return count
 
 
+def count_credential_pairs(strings: list[str]) -> int:
+    """Count strings containing colon-separated weak credential pairs.
+
+    Matches patterns like ``admin:admin`` or ``root:1234`` where both the
+    username and password appear in the set of known default/weak values.
+    Both sides must be 1–20 alphanumeric characters.  Counts per string,
+    not per token — a string with multiple pairs is counted once.
+    """
+    count = 0
+    for s in strings:
+        for m in _CRED_PAIR_RE.finditer(s):
+            if (
+                m.group(1).lower() in _CRED_PAIR_WEAK
+                and m.group(2).lower() in _CRED_PAIR_WEAK
+            ):
+                count += 1
+                break
+    return count
+
+
 def count_hardcoded_ips(strings: list[str]) -> int:
     """Count strings that contain valid non-excluded IPv4 addresses."""
     count = 0
@@ -140,6 +192,41 @@ def count_hardcoded_ips(strings: list[str]) -> int:
             # Exclude loopback (127.x.x.x)
             if octets[0] == 127:
                 continue
+            count += 1
+    return count
+
+
+def count_public_ips(strings: list[str]) -> int:
+    """Count strings containing hardcoded public (non-RFC-1918) IPv4 addresses.
+
+    Excludes loopback (127.x), link-local (169.254.x), RFC-1918 private
+    ranges (10.x, 172.16-31.x, 192.168.x), multicast (224-239.x),
+    reserved (240+), and broadcast/all-zeros.  Public IPs hardcoded in
+    firmware are high-confidence indicators of C2 or telemetry endpoints.
+    """
+    count = 0
+    for s in strings:
+        for m in _IPV4_RE.finditer(s):
+            a, b, c, d = (int(g) for g in m.groups())
+            if any(o > 255 for o in (a, b, c, d)):
+                continue
+            ip = f"{a}.{b}.{c}.{d}"
+            if ip in _IP_EXCLUDES:
+                continue
+            if a == 127:
+                continue  # loopback
+            if a == 10:
+                continue  # RFC-1918 /8
+            if a == 172 and 16 <= b <= 31:
+                continue  # RFC-1918 /12
+            if a == 192 and b == 168:
+                continue  # RFC-1918 /16
+            if a == 169 and b == 254:
+                continue  # link-local
+            if 224 <= a <= 239:
+                continue  # multicast
+            if a >= 240:
+                continue  # reserved / class E
             count += 1
     return count
 
@@ -210,14 +297,17 @@ def scan_strings(strings: list[str]) -> dict[str, int | bool]:
     """Run all pattern checks and return a flat feature dict.
 
     Keys returned:
-        count_hardcoded_passwords, count_hardcoded_ips,
+        count_hardcoded_passwords, count_credential_pairs,
+        count_hardcoded_ips, count_public_ips,
         has_telnetd, has_debug_account,
         has_outdated_libssl, has_outdated_busybox, has_outdated_dropbear,
         count_urls, count_api_tokens
     """
     return {
         "count_hardcoded_passwords": count_hardcoded_passwords(strings),
+        "count_credential_pairs": count_credential_pairs(strings),
         "count_hardcoded_ips": count_hardcoded_ips(strings),
+        "count_public_ips": count_public_ips(strings),
         "has_telnetd": has_telnetd(strings),
         "has_debug_account": has_debug_account(strings),
         "has_outdated_libssl": has_outdated_libssl(strings),

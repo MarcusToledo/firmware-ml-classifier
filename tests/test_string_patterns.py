@@ -1,7 +1,9 @@
 from src.features.string_patterns import (
     count_api_tokens,
+    count_credential_pairs,
     count_hardcoded_ips,
     count_hardcoded_passwords,
+    count_public_ips,
     count_urls,
     has_debug_account,
     has_outdated_busybox,
@@ -50,6 +52,42 @@ def test_passwords_multiple_strings() -> None:
 
 
 # ---------------------------------------------------------------------------
+# count_credential_pairs
+# ---------------------------------------------------------------------------
+
+
+def test_cred_pairs_empty() -> None:
+    assert count_credential_pairs([]) == 0
+
+
+def test_cred_pairs_admin_admin() -> None:
+    assert count_credential_pairs(["admin:admin"]) == 1
+
+
+def test_cred_pairs_root_1234() -> None:
+    assert count_credential_pairs(["root:1234"]) == 1
+
+
+def test_cred_pairs_non_weak_ignored() -> None:
+    # neither side is in the weak set
+    assert count_credential_pairs(["john:complexpassword"]) == 0
+
+
+def test_cred_pairs_long_hash_ignored() -> None:
+    # right side > 20 chars — excluded by {1,20} bound
+    assert count_credential_pairs(["sha256:deadbeefdeadbeefdeadbeef"]) == 0
+
+
+def test_cred_pairs_multiple_strings() -> None:
+    assert count_credential_pairs(["admin:admin", "root:root", "guest:guest"]) == 3
+
+
+def test_cred_pairs_multiple_in_one_string_counts_once() -> None:
+    # multiple weak pairs in a single string — counted once per string
+    assert count_credential_pairs(["admin:admin root:root"]) == 1
+
+
+# ---------------------------------------------------------------------------
 # count_hardcoded_ips
 # ---------------------------------------------------------------------------
 
@@ -88,6 +126,52 @@ def test_ips_invalid_octet_256() -> None:
 
 def test_ips_no_match() -> None:
     assert count_hardcoded_ips(["version 1.2.3"]) == 0
+
+
+# ---------------------------------------------------------------------------
+# count_public_ips
+# ---------------------------------------------------------------------------
+
+
+def test_public_ips_empty() -> None:
+    assert count_public_ips([]) == 0
+
+
+def test_public_ips_routable() -> None:
+    assert count_public_ips(["8.8.8.8"]) == 1
+
+
+def test_public_ips_c2_candidate() -> None:
+    assert count_public_ips(["45.33.32.156"]) == 1
+
+
+def test_public_ips_ignores_private_10() -> None:
+    assert count_public_ips(["10.0.0.1"]) == 0
+
+
+def test_public_ips_ignores_private_192_168() -> None:
+    assert count_public_ips(["192.168.1.1"]) == 0
+
+
+def test_public_ips_ignores_rfc1918_172() -> None:
+    assert count_public_ips(["172.16.0.1", "172.31.255.255"]) == 0
+
+
+def test_public_ips_172_32_is_public() -> None:
+    # 172.32.x.x is outside the RFC-1918 /12 range
+    assert count_public_ips(["172.32.0.1"]) == 1
+
+
+def test_public_ips_ignores_link_local() -> None:
+    assert count_public_ips(["169.254.1.1"]) == 0
+
+
+def test_public_ips_ignores_multicast() -> None:
+    assert count_public_ips(["224.0.0.1"]) == 0
+
+
+def test_public_ips_multiple_in_one_string() -> None:
+    assert count_public_ips(["8.8.8.8 and 1.1.1.1"]) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -174,6 +258,11 @@ def test_libssl_no_match() -> None:
     assert has_outdated_libssl(["libc version 2.31"]) is False
 
 
+def test_libssl_slash_separator() -> None:
+    # HTTP server banner: "Apache/2.2.31 OpenSSL/1.0.2k"
+    assert has_outdated_libssl(["Apache/2.2.31 OpenSSL/1.0.2k"]) is True
+
+
 # ---------------------------------------------------------------------------
 # has_outdated_busybox
 # ---------------------------------------------------------------------------
@@ -197,6 +286,14 @@ def test_busybox_newer() -> None:
 
 def test_busybox_no_match() -> None:
     assert has_outdated_busybox(["kernel 5.15.0"]) is False
+
+
+def test_busybox_no_space_variant() -> None:
+    assert has_outdated_busybox(["BusyBox1.19.4"]) is True
+
+
+def test_busybox_underscore_separator() -> None:
+    assert has_outdated_busybox(["busybox_1.19.4"]) is True
 
 
 # ---------------------------------------------------------------------------
@@ -280,7 +377,9 @@ def test_scan_strings_returns_all_keys() -> None:
     result = scan_strings([])
     expected_keys = {
         "count_hardcoded_passwords",
+        "count_credential_pairs",
         "count_hardcoded_ips",
+        "count_public_ips",
         "has_telnetd",
         "has_debug_account",
         "has_outdated_libssl",
