@@ -96,6 +96,15 @@ def main() -> None:
         action="store_true",
         help="Inferir brand/model/label a partir do path",
     )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=None,
+        help=(
+            "Numero de processos paralelos (default: auto = "
+            "min(num_arquivos, cpus)). Use 1 para forcar execucao sequencial."
+        ),
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
@@ -103,7 +112,7 @@ def main() -> None:
     config = load_pipeline_config(Path(args.config), parse_overrides(args.override))
     paths = gather_paths(Path(args.input))
 
-    results = extract_features_batch(paths, config)
+    results = extract_features_batch(paths, config, max_workers=args.workers)
     records: list[dict[str, Any]] = []
     if not args.label_from_path:
         for result in results:

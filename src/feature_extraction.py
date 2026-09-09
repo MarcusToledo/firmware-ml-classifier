@@ -37,6 +37,7 @@ class FeatureVector:
     embedding: np.ndarray
     byte_len: int
     truncated: bool
+    strings: list[str]
 
 
 def extract_features(
@@ -78,6 +79,7 @@ def extract_features(
         embedding=embedding,
         byte_len=byte_len,
         truncated=truncated_strings or truncated_doc,
+        strings=strings,
     )
 
 
