@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import pandas as pd
+
 from scripts.fetch_cves import (
     _aggregate_scores,
+    _should_save,
     extract_cvss,
+    extract_pairs,
     normalize_model,
     normalize_vendor,
 )
@@ -161,3 +165,65 @@ def test_aggregate_none_severity_ignored() -> None:
     assert result["cve_count_high"] == 0
     assert result["cve_count_medium"] == 0
     assert result["cve_count_low"] == 0
+
+
+# ---------------------------------------------------------------------------
+# extract_pairs
+# ---------------------------------------------------------------------------
+
+
+def test_extract_pairs_dedupes_and_normalizes() -> None:
+    """Should dedupe, lowercase, and strip whitespace from pairs."""
+    df = pd.DataFrame(
+        {
+            "meta_brand": ["Netgear", "netgear", " TP-Link "],
+            "meta_model": ["DIR-300", "dir-300", "AC1750"],
+        }
+    )
+    assert extract_pairs(df) == [("netgear", "dir-300"), ("tp-link", "ac1750")]
+
+
+def test_extract_pairs_skips_missing_values() -> None:
+    """Rows with empty or NaN brand/model should be skipped."""
+    df = pd.DataFrame(
+        {
+            "meta_brand": ["netgear", "", None, "dlink"],
+            "meta_model": ["dir-300", "x1000", "y2000", None],
+        }
+    )
+    assert extract_pairs(df) == [("netgear", "dir-300")]
+
+
+def test_extract_pairs_empty_dataframe() -> None:
+    """Empty dataframe should return an empty list."""
+    df = pd.DataFrame({"meta_brand": [], "meta_model": []})
+    assert extract_pairs(df) == []
+
+
+def test_extract_pairs_sorted() -> None:
+    """Result should be sorted for deterministic ordering."""
+    df = pd.DataFrame(
+        {
+            "meta_brand": ["zyxel", "asus"],
+            "meta_model": ["m1", "m2"],
+        }
+    )
+    assert extract_pairs(df) == [("asus", "m2"), ("zyxel", "m1")]
+
+
+# ---------------------------------------------------------------------------
+# _should_save
+# ---------------------------------------------------------------------------
+
+
+def test_should_save_at_interval() -> None:
+    """Should flush exactly on multiples of the interval."""
+    assert _should_save(10, interval=10) is True
+    assert _should_save(20, interval=10) is True
+
+
+def test_should_save_between_intervals() -> None:
+    """Should not flush between interval boundaries."""
+    assert _should_save(1, interval=10) is False
+    assert _should_save(9, interval=10) is False
+    assert _should_save(11, interval=10) is False
