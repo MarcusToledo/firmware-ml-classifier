@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 import re
 import shutil
 import subprocess
 from collections.abc import Iterable
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Union, cast
@@ -24,7 +26,6 @@ from src.features.binwalk import (
 from src.features.doc2vec import Doc2VecConfig, load_doc2vec
 from src.features.statistics import entropy_variance_across_sections
 from src.features.string_patterns import scan_strings
-from src.features.strings import extract_ascii_strings, limit_strings
 from src.io_utils import normalize_binary, read_binary
 
 FeatureValue = Union[float, int, bool, str, None]
@@ -228,17 +229,11 @@ def extract_features_from_path(
         entropy_variance_across_sections(data) if read_ok else 0.0
     )
 
-    # String pattern security features
-    if read_ok:
-        raw_strings = extract_ascii_strings(
-            data,
-            min_len=config.feature.min_string_len,
-            max_string_len=config.feature.max_string_len,
-        )
-        limited = limit_strings(raw_strings, config.feature.max_strings)
-        features.update(scan_strings(limited))
-    else:
-        features.update(scan_strings([]))
+    # String pattern security features. Reusa feature_vector.strings (ja
+    # limitado a max_strings) em vez de rodar extract_ascii_strings de novo
+    # sobre os mesmos bytes: extract_features() ja fez essa extracao para
+    # montar o documento do doc2vec, e ela e vazia quando read_ok e False.
+    features.update(scan_strings(feature_vector.strings))
 
     metadata = {
         "read_ok": read_ok,
@@ -262,48 +257,121 @@ def extract_features_from_path(
     )
 
 
+def _build_error_result(
+    path: Path,
+    config: PipelineConfig,
+    brand: str | None,
+    model_name: str | None,
+    label: str | None,
+    exc: Exception,
+) -> PipelineResult:
+    """Monta um PipelineResult de erro preservando o schema de metadata."""
+    return PipelineResult(
+        firmware_id=None,
+        features={},
+        metadata={
+            "read_ok": False,
+            "byte_len": 0,
+            "bytes_used": 0,
+            "max_bytes": config.max_bytes,
+            "truncated": False,
+            "max_bytes_applied": config.max_bytes is not None,
+            "doc2vec_used": False,
+            "error": str(exc),
+            "path": str(path),
+            "brand": brand,
+            "model": model_name,
+            "label": label,
+        },
+    )
+
+
+def _process_path(
+    path: Path,
+    config: PipelineConfig,
+    model: Doc2Vec | None,
+) -> PipelineResult:
+    """Extrai features de um path com tolerancia a falhas.
+
+    Compartilhada entre o modo sequencial e os workers do process pool.
+    """
+    brand, model_name, label = infer_brand_model_label_from_path(path)
+    try:
+        return extract_features_from_path(
+            path,
+            config,
+            model,
+            brand=brand,
+            model_name=model_name,
+            label=label,
+        )
+    except Exception as exc:  # pragma: no cover - defensive for batch safety
+        LOGGER.warning("Failed to extract features for %s: %s", path, exc)
+        return _build_error_result(path, config, brand, model_name, label, exc)
+
+
+# Estado por processo worker, preenchido uma unica vez em _init_worker para
+# evitar recarregar o modelo Doc2Vec a cada arquivo.
+_WORKER_CONFIG: PipelineConfig | None = None
+_WORKER_MODEL: Doc2Vec | None = None
+
+
+def _init_worker(config: PipelineConfig) -> None:
+    """Inicializador do ProcessPoolExecutor: roda uma vez por processo."""
+    global _WORKER_CONFIG, _WORKER_MODEL
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    _WORKER_CONFIG = config
+    _WORKER_MODEL = load_doc2vec_model(config.doc2vec_model_path)
+
+
+def _process_path_in_worker(path: Path) -> PipelineResult:
+    """Wrapper picklable por nome que roda dentro do worker process."""
+    assert _WORKER_CONFIG is not None, "worker nao inicializado"
+    return _process_path(path, _WORKER_CONFIG, _WORKER_MODEL)
+
+
 def extract_features_batch(
     paths: Iterable[Path],
     config: PipelineConfig,
+    max_workers: int | None = None,
 ) -> list[PipelineResult]:
     """Processa uma lista de paths com tolerancia a falhas.
 
-    Retorna um resultado para cada path, inclusive em caso de erro.
+    Retorna um resultado para cada path, inclusive em caso de erro, na
+    mesma ordem da entrada. Com mais de um path e mais de um worker
+    disponivel, distribui o trabalho em um ProcessPoolExecutor: cada
+    arquivo roda um binwalk via subprocess e faz extracao de
+    strings/entropy CPU-bound, entao processos paralelos escalam quase
+    linearmente com o numero de nucleos disponiveis.
+
+    Passe max_workers=1 para forcar execucao sequencial no processo
+    atual (necessario em testes que fazem monkeypatch de subprocess.run
+    ou shutil.which, que nao propaga para processos filhos).
     """
-    results: list[PipelineResult] = []
-    model = load_doc2vec_model(config.doc2vec_model_path)
-    for path in paths:
-        brand, model_name, label = infer_brand_model_label_from_path(path)
-        try:
-            result = extract_features_from_path(
-                path,
-                config,
-                model,
-                brand=brand,
-                model_name=model_name,
-                label=label,
-            )
-            results.append(result)
-        except Exception as exc:  # pragma: no cover - defensive for batch safety
-            LOGGER.warning("Failed to extract features for %s: %s", path, exc)
-            results.append(
-                PipelineResult(
-                    firmware_id=None,
-                    features={},
-                    metadata={
-                        "read_ok": False,
-                        "byte_len": 0,
-                        "bytes_used": 0,
-                        "max_bytes": config.max_bytes,
-                        "truncated": False,
-                        "max_bytes_applied": config.max_bytes is not None,
-                        "doc2vec_used": False,
-                        "error": str(exc),
-                        "path": str(path),
-                        "brand": brand,
-                        "model": model_name,
-                        "label": label,
-                    },
-                )
-            )
-    return results
+    path_list = list(paths)
+    if not path_list:
+        return []
+
+    if max_workers is None:
+        max_workers = min(len(path_list), os.cpu_count() or 1)
+    max_workers = max(1, max_workers)
+
+    if max_workers == 1:
+        model = load_doc2vec_model(config.doc2vec_model_path)
+        return [_process_path(path, config, model) for path in path_list]
+
+    results: list[PipelineResult | None] = [None] * len(path_list)
+    with ProcessPoolExecutor(
+        max_workers=max_workers,
+        initializer=_init_worker,
+        initargs=(config,),
+    ) as executor:
+        future_to_index = {
+            executor.submit(_process_path_in_worker, path): idx
+            for idx, path in enumerate(path_list)
+        }
+        for future in as_completed(future_to_index):
+            idx = future_to_index[future]
+            results[idx] = future.result()
+
+    return cast(list[PipelineResult], results)

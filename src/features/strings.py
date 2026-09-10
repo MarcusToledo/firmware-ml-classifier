@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 
 ASCII_MIN = 32
 ASCII_MAX = 126
+
+# Regex sobre bytes (executado em C via re) casando runs de ASCII imprimivel.
+# Substitui o loop byte-a-byte em Python puro, que dominava o tempo de
+# extracao em firmwares grandes (ver perfil em pipeline/feature_extraction.py).
+_PRINTABLE_RUN_RE = re.compile(
+    b"[" + bytes([ASCII_MIN]) + b"-" + bytes([ASCII_MAX]) + b"]+"
+)
 
 
 def extract_ascii_strings(
@@ -20,19 +28,11 @@ def extract_ascii_strings(
         return []
     min_len = max(1, min_len)
     max_string_len = max(1, max_string_len)
-    current: list[int] = []
     strings: list[str] = []
-    for value in data:
-        if ASCII_MIN <= value <= ASCII_MAX:
-            current.append(value)
-            continue
-        if len(current) >= min_len:
-            decoded = bytes(current).decode("ascii", errors="ignore")
-            strings.append(decoded[:max_string_len])
-        current = []
-    if len(current) >= min_len:
-        decoded = bytes(current).decode("ascii", errors="ignore")
-        strings.append(decoded[:max_string_len])
+    for match in _PRINTABLE_RUN_RE.finditer(data):
+        run = match.group()
+        if len(run) >= min_len:
+            strings.append(run[:max_string_len].decode("ascii"))
     return strings
 
 

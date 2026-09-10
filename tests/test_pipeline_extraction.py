@@ -137,6 +137,77 @@ def test_extract_features_includes_string_pattern_keys(tmp_path: Path) -> None:
     assert expected_keys.issubset(result.features.keys())
 
 
+def test_extract_features_from_path_calls_extract_ascii_strings_once(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Regressao: extract_ascii_strings deve rodar 1x por arquivo, nao 2x.
+
+    Antes da correcao, o doc2vec (via extract_features) e o scan_strings
+    (string_patterns) chamavam extract_ascii_strings separadamente sobre os
+    mesmos bytes, dobrando o custo dessa etapa em firmwares grandes.
+    """
+    import src.feature_extraction as fe
+
+    firmware_path = tmp_path / "firmware.bin"
+    firmware_path.write_bytes(b"firmware-data-with-strings")
+
+    config = load_pipeline_config(tmp_path / "missing.yaml", overrides={})
+
+    call_count = 0
+    original = fe.extract_ascii_strings
+
+    def counting_wrapper(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(fe, "extract_ascii_strings", counting_wrapper)
+
+    extract_features_from_path(firmware_path, config, model=None)
+
+    assert call_count == 1
+
+
+def test_extract_features_batch_empty_list_returns_empty(tmp_path: Path) -> None:
+    config = load_pipeline_config(tmp_path / "missing.yaml", overrides={})
+
+    assert extract_features_batch([], config) == []
+
+
+def test_extract_features_batch_sequential_mode(tmp_path: Path) -> None:
+    """max_workers=1 forca o caminho sequencial (sem process pool)."""
+    good_path = tmp_path / "good.bin"
+    good_path.write_bytes(b"good")
+
+    config = load_pipeline_config(tmp_path / "missing.yaml", overrides={})
+
+    results = extract_features_batch([good_path], config, max_workers=1)
+
+    assert len(results) == 1
+    assert results[0].metadata["read_ok"] is True
+
+
+def test_extract_features_batch_preserves_order_with_multiple_workers(
+    tmp_path: Path,
+) -> None:
+    """Com workers>1, a ordem dos resultados deve seguir a ordem de entrada,
+    independente da ordem em que os processos terminam."""
+    paths = []
+    for i in range(4):
+        firmware_path = tmp_path / f"firmware_{i}.bin"
+        firmware_path.write_bytes(f"firmware-{i}".encode())
+        paths.append(firmware_path)
+
+    config = load_pipeline_config(tmp_path / "missing.yaml", overrides={})
+
+    results = extract_features_batch(paths, config, max_workers=2)
+
+    assert len(results) == 4
+    for path, result in zip(paths, results):
+        assert result.metadata["path"] == str(path)
+        assert result.metadata["read_ok"] is True
+
+
 def test_extract_features_with_mocked_binwalk(tmp_path: Path) -> None:
     """Binwalk features are populated when binwalk CLI returns results."""
     import subprocess
