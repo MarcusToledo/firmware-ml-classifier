@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -112,7 +113,17 @@ def main() -> None:
     config = load_pipeline_config(Path(args.config), parse_overrides(args.override))
     paths = gather_paths(Path(args.input))
 
+    start_time = time.perf_counter()
     results = extract_features_batch(paths, config, max_workers=args.workers)
+    elapsed_seconds = time.perf_counter() - start_time
+    avg_seconds = elapsed_seconds / len(results) if results else 0.0
+    LOGGER.info(
+        "Extraction of %d file(s) completed in %.2fs (avg %.3fs/file)",
+        len(results),
+        elapsed_seconds,
+        avg_seconds,
+    )
+
     records: list[dict[str, Any]] = []
     if not args.label_from_path:
         for result in results:
@@ -144,6 +155,13 @@ def main() -> None:
         df.to_parquet(output_path, index=False)
     else:
         df.to_csv(output_path, index=False)
+
+    LOGGER.info(
+        "Extraction succeeded: %d record(s) written to %s in %.2fs",
+        len(records),
+        output_path,
+        elapsed_seconds,
+    )
 
 
 if __name__ == "__main__":
