@@ -109,7 +109,11 @@
 - [x] Migrar chaves Zyxel no `cve_cache.json` para nomes normalizados.
 - [x] Criar `dataset/labels.csv` com colunas: firmware_id, vendor, model, cvss_max, cve_count, security_level.
 - [x] Definir scoring deterministico para mapeamento automatico score → nivel de seguranca.
-- [ ] Comecar com 3 classes (Seguro, Vulneravel, Critico); testar 5 classes se dataset > 150.
+- [x] Comecar com 3 classes (Seguro, Vulneravel, Critico); testar 5 classes se dataset > 150.
+  - Decisao: manter 3 classes mesmo com dataset em 840 (> 150). Distribuicao atual (seguro
+    42.9%, vulneravel 12.5%, critico 44.6%) ja deixa "vulneravel" como classe fina; abrir mais
+    fronteiras de threshold sem revisao manual previa so aumentaria ruido de rotulo. Experimento
+    com 5 classes fica para a Fase 3, conforme o roadmap ja previa.
 - [ ] Revisao manual dos rotulos gerados automaticamente.
 
 #### Features — Binwalk
