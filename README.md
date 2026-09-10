@@ -39,6 +39,28 @@ Extrair features com embeddings:
 Extrair features via CLI instalada:
 - `uv run extract-features --config configs/feature_extraction.yaml --input dataset/raw/ --output dataset/processed/features.parquet`
 
+> **`--label-from-path`**: para montar o dataset de treino, adicione essa flag aos comandos
+> acima (ex.: `... --output dataset/processed/features.parquet --label-from-path`).
+> O pipeline (`pipeline/feature_extraction.py`) já infere `brand`/`model`/`label` a partir do
+> path `dataset/raw/<brand>/<model>/...`, mas `scripts/extract_features.py` **zera esses campos
+> por padrão** (para não vazar rótulo em extrações de inferência/produção). Sem a flag,
+> `meta_brand`/`meta_model` saem `None` em 100% das linhas, o que quebra silenciosamente o
+> merge com o cache de CVE em `generate_labels.py` e impede qualquer firmware de ser
+> classificado como `critico` (o sinal de CVE tem peso 0.45, o maior, e é o único caminho de
+> escalonamento direto para `critico`).
+
+Gerar cache de CVEs por fabricante/modelo (opcional, mas necessário para labels `critico`):
+- `uv run python scripts/fetch_cves.py --features dataset/processed/features.parquet --output dataset/cve_cache.json`
+- Usa a API pública da NVD v2.0; sem `NVD_API_KEY` no ambiente, o delay entre requisições é de
+  6s (1s com a key). Pares já presentes no cache são pulados automaticamente (use `--force`
+  para refazer). `--dry-run` lista os pares vendor/model sem fazer requisições.
+
+Gerar labels de segurança a partir das features (+ CVEs, se disponíveis):
+- `uv run python scripts/generate_labels.py --features dataset/processed/features.parquet --cves dataset/cve_cache.json --config configs/scoring.yaml --output dataset/labels.csv`
+- Classifica cada firmware em `seguro` / `vulneravel` / `critico` combinando sinais de stats,
+  strings suspeitas, binwalk e CVE (pesos em `configs/scoring.yaml`). `--dry-run` mostra a
+  distribuição de classes sem salvar.
+
 Inspecionar tokens usados no Doc2Vec:
 - `uv run python scripts/inspect_tokens.py --config configs/feature_extraction.yaml --input dataset/raw/ --limit 50 --max-docs 20`
 
