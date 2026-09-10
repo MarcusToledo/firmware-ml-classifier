@@ -19,49 +19,57 @@ firmwares embarcados usando análise estática e aprendizado de máquina.
 5. Geração de métricas e relatórios.
 
 ## Como executar
-Instalar dependências:
-- `python3 -m pip install -r requirements.txt`
+Instalar dependências (cria `.venv` e resolve a partir de `pyproject.toml`/`uv.lock`):
+- `uv sync`
 
-Instalar em modo editável (habilita comandos de CLI):
-- `python3 -m pip install -e .`
+Instalar incluindo ferramentas de desenvolvimento (pytest, ruff, black, mypy, pre-commit):
+- `uv sync --extra dev`
+
+O modo editável e os comandos de CLI (`train-doc2vec`, `extract-features`, `inspect-tokens`, `generate-labels`) já ficam disponíveis dentro do `.venv` após o `uv sync`, sem passo separado de instalação.
 
 Treinar Doc2Vec (treino separado):
-- `python3 scripts/train_doc2vec.py --config configs/feature_extraction.yaml --input dataset/raw/`
+- `uv run python scripts/train_doc2vec.py --config configs/feature_extraction.yaml --input dataset/raw/`
 
 Treinar Doc2Vec via CLI instalada:
-- `train-doc2vec --config configs/feature_extraction.yaml --input dataset/raw/`
+- `uv run train-doc2vec --config configs/feature_extraction.yaml --input dataset/raw/`
 
 Extrair features com embeddings:
-- `python3 scripts/extract_features.py --config configs/feature_extraction.yaml --input dataset/raw/ --output dataset/processed/features.parquet`
+- `uv run python scripts/extract_features.py --config configs/feature_extraction.yaml --input dataset/raw/ --output dataset/processed/features.parquet`
 
 Extrair features via CLI instalada:
-- `extract-features --config configs/feature_extraction.yaml --input dataset/raw/ --output dataset/processed/features.parquet`
+- `uv run extract-features --config configs/feature_extraction.yaml --input dataset/raw/ --output dataset/processed/features.parquet`
 
 Inspecionar tokens usados no Doc2Vec:
-- `python3 scripts/inspect_tokens.py --config configs/feature_extraction.yaml --input dataset/raw/ --limit 50 --max-docs 20`
+- `uv run python scripts/inspect_tokens.py --config configs/feature_extraction.yaml --input dataset/raw/ --limit 50 --max-docs 20`
 
 Inspecionar tokens via CLI instalada:
-- `inspect-tokens --config configs/feature_extraction.yaml --input dataset/raw/ --limit 50 --max-docs 20`
+- `uv run inspect-tokens --config configs/feature_extraction.yaml --input dataset/raw/ --limit 50 --max-docs 20`
 
 Limite de leitura por firmware:
 - configurado em `configs/feature_extraction.yaml` via `max_bytes`.
 
-Testes:
-- `python3 -m pytest`
-- `python3 -m pytest tests/path::test_name`
+Testes (requer `uv sync --extra dev`):
+- `uv run pytest`
+- `uv run pytest tests/path::test_name`
 
 ## Qualidade de codigo
 
 Instalar ferramentas de desenvolvimento:
-- `python3 -m pip install -e ".[dev]"`
+- `uv sync --extra dev`
 
 Configurar pre-commit:
-- `pre-commit install`
+- `uv run pre-commit install`
 
 Rodar manualmente:
-- `ruff check .`
-- `black .`
-- `mypy src/`
+- `uv run ruff check .`
+- `uv run black .`
+- `uv run mypy src/`
+
+Atualizar/travar dependências:
+- `uv add <pacote>` — adiciona dependência de produção (atualiza `pyproject.toml` e `uv.lock`).
+- `uv add --optional dev <pacote>` — adiciona dependência de desenvolvimento.
+- `uv remove <pacote>` — remove dependência.
+- `uv lock --upgrade` — atualiza versões travadas no `uv.lock` sem mudar o `pyproject.toml`.
 
 ## API Interna
 
