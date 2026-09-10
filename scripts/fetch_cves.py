@@ -27,6 +27,9 @@ NVD_API_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 RESULTS_PER_PAGE = 2000
 DEFAULT_DELAY_NO_KEY = 6
 DEFAULT_DELAY_WITH_KEY = 1
+# Persist the cache to disk every N successful fetches instead of after
+# every single one, since a full JSON rewrite grows with the cache size.
+SAVE_INTERVAL = 10
 
 # Maps internal brand names to the vendor name NVD uses in CVE descriptions.
 VENDOR_ALIASES: dict[str, str] = {
@@ -238,13 +241,23 @@ def save_cache(cache: dict[str, Any], path: Path) -> None:
 
 def extract_pairs(df: pd.DataFrame) -> list[tuple[str, str]]:
     """Extract unique (brand, model) pairs from features dataframe."""
-    pairs: set[tuple[str, str]] = set()
-    for _, row in df.iterrows():
-        brand = str(row.get("meta_brand", "")).strip().lower()
-        model = str(row.get("meta_model", "")).strip().lower()
-        if brand and model and brand != "nan" and model != "nan":
-            pairs.add((brand, model))
+    # fillna before stringifying so missing values (None/NaN, regardless of
+    # column dtype) normalize to "" instead of the literal string "nan".
+    brand = df["meta_brand"].fillna("").astype(str).str.strip().str.lower()
+    model = df["meta_model"].fillna("").astype(str).str.strip().str.lower()
+    valid = (brand != "") & (model != "")
+    pairs = set(zip(brand[valid], model[valid]))
     return sorted(pairs)
+
+
+def _should_save(fetched_count: int, interval: int = SAVE_INTERVAL) -> bool:
+    """Return True when the cache should be flushed to disk.
+
+    Saving after every fetch rewrites the whole (ever-growing) cache file,
+    which is O(n^2) I/O over a full run. Flushing periodically instead keeps
+    resumability (bounded loss on a crash) without that blowup.
+    """
+    return fetched_count % interval == 0
 
 
 def main() -> None:
@@ -288,9 +301,10 @@ def main() -> None:
         else (DEFAULT_DELAY_WITH_KEY if has_key else DEFAULT_DELAY_NO_KEY)
     )
 
-    # Read features
+    # Read features (only the two columns actually needed — the parquet may
+    # also carry heavy feature/embedding columns we don't want to load).
     features_path = Path(args.features)
-    df = pd.read_parquet(features_path)
+    df = pd.read_parquet(features_path, columns=["meta_brand", "meta_model"])
     LOGGER.info("Loaded %d records from %s", len(df), features_path)
 
     pairs = extract_pairs(df)
@@ -313,33 +327,39 @@ def main() -> None:
     headers = _build_headers()
     stats = {"fetched": 0, "cached": 0, "failed": 0, "total_cves": 0}
 
-    for i, (vendor, model) in enumerate(pairs, 1):
-        key = f"{vendor}/{model}"
+    try:
+        for i, (vendor, model) in enumerate(pairs, 1):
+            key = f"{vendor}/{model}"
 
-        if key in cache and not args.force:
-            LOGGER.info("[SKIP] %d/%d %s (cached)", i, len(pairs), key)
-            stats["cached"] += 1
-            stats["total_cves"] += cache[key].get("cve_total", 0)
-            continue
+            if key in cache and not args.force:
+                LOGGER.info("[SKIP] %d/%d %s (cached)", i, len(pairs), key)
+                stats["cached"] += 1
+                stats["total_cves"] += cache[key].get("cve_total", 0)
+                continue
 
-        try:
-            LOGGER.info("[FETCH] %d/%d %s", i, len(pairs), key)
-            result = fetch_cves_for_pair(vendor, model, headers, delay)
-            cache[key] = result
-            save_cache(cache, output_path)
-            stats["fetched"] += 1
-            stats["total_cves"] += result["cve_total"]
-            LOGGER.info(
-                "  -> %d CVEs (max CVSS: %.1f)",
-                result["cve_total"],
-                result["cvss_max"],
-            )
-        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as exc:
-            LOGGER.error("[FAIL] %s: %s", key, exc)
-            stats["failed"] += 1
+            try:
+                LOGGER.info("[FETCH] %d/%d %s", i, len(pairs), key)
+                result = fetch_cves_for_pair(vendor, model, headers, delay)
+                cache[key] = result
+                stats["fetched"] += 1
+                stats["total_cves"] += result["cve_total"]
+                if _should_save(stats["fetched"]):
+                    save_cache(cache, output_path)
+                LOGGER.info(
+                    "  -> %d CVEs (max CVSS: %.1f)",
+                    result["cve_total"],
+                    result["cvss_max"],
+                )
+            except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as exc:
+                LOGGER.error("[FAIL] %s: %s", key, exc)
+                stats["failed"] += 1
 
-        if i < len(pairs):
-            time.sleep(delay)
+            if i < len(pairs):
+                time.sleep(delay)
+    finally:
+        # Always persist whatever was fetched, even on an unfinished/interrupted
+        # run, so progress since the last periodic save isn't lost.
+        save_cache(cache, output_path)
 
     LOGGER.info("--- Summary ---")
     LOGGER.info("  Fetched: %d", stats["fetched"])
