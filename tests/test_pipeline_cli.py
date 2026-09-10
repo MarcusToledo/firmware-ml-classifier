@@ -1,8 +1,51 @@
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 import pandas as pd
+
+
+def test_cli_reports_elapsed_time(tmp_path: Path) -> None:
+    firmware_path = tmp_path / "firmware.bin"
+    firmware_path.write_bytes(b"firmware")
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("")
+    output_path = tmp_path / "features.parquet"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/extract_features.py",
+            "--config",
+            str(config_path),
+            "--input",
+            str(firmware_path),
+            "--output",
+            str(output_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0
+    output = result.stdout + result.stderr
+    match = re.search(
+        r"Extraction of 1 file\(s\) completed in (\d+\.\d{2})s "
+        r"\(avg (\d+\.\d{3})s/file\)",
+        output,
+    )
+    assert match is not None, output
+    assert float(match.group(1)) >= 0.0
+    assert float(match.group(2)) >= 0.0
+
+    success_match = re.search(
+        r"Extraction succeeded: 1 record\(s\) written to .+ in (\d+\.\d{2})s",
+        output,
+    )
+    assert success_match is not None, output
+    assert float(success_match.group(1)) >= 0.0
 
 
 def test_cli_basic_file(tmp_path: Path) -> None:
