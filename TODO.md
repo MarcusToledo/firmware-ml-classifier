@@ -162,7 +162,11 @@
 - [x] Re-extrair features para os 305 firmwares (6 vendors: dlink, netgear, openwrt, belkin, tplink, zyxel).
 
 ### Pending
-- [ ] Re-gerar labels apos implementar CVEs e strings para distribuicao mais equilibrada.
+- [x] Re-gerar labels apos implementar CVEs e strings para distribuicao mais equilibrada.
+- [ ] Considerar GroupKFold/StratifiedGroupKFold por vendor/model no treino (`scripts/train.py`,
+      ainda nao implementado) — o rotulo `critico` correlaciona fortemente com vendor/model via
+      CVE, entao um split aleatorio pode deixar o mesmo fabricante em treino e teste e inflar
+      metricas sem o modelo aprender sinal real do binario.
 
 ### Decisoes Arquiteturais Registradas
 - Priorizar tree-based models (RF, Extra Trees) sobre MLP para datasets pequenos.
@@ -175,6 +179,20 @@
 - OpenWrt retorna 0 CVEs na NVD (open-source, CVEs reportados contra chipsets/vendors originais) — substituir por Linksys.
 - Usar class_weight='balanced' em todos os modelos sklearn para compensar desbalanceamento.
 - Scoring atual (so stats): seguro=23%, vulneravel=17%, critico=60% — esperado rebalancear com CVE+strings.
+- **CVE (`cvss_max`/`cve_count_*`) e apenas insumo de rotulo (y), nunca feature de treino (X)**:
+  esses campos nunca sao persistidos em `features.parquet`, so entram em memoria durante
+  `generate_labels.py`. Motivo: se tambem virassem feature, o modelo aprenderia a formula do
+  proprio rotulo (target leakage), inflando metricas sem validar se analise estatica do binario
+  prediz risco de verdade. `scripts/train.py` (a implementar) deve montar `X` so com colunas
+  derivadas do binario (stats/strings/binwalk/Doc2Vec), excluindo `meta_*` e qualquer `cve_*`/`signal_*`.
+- **Hard rule `cvss_critical` rebaixado de "critico" para "vulneravel"** (default em
+  `HardRuleConfig.cvss_critical_min_level`, configuravel): antes decidia 368/375 (98%) dos
+  rotulos `critico` sozinho, porque `cvss_max` e constante por vendor/model — na pratica o
+  rotulo virava um lookup de CVE por fabricante, nao uma leitura do binario. Pesos rebalanceados
+  em `configs/scoring.yaml` (stats: 0.10→0.0, cve: 0.45→0.60, strings: 0.30→0.25) pra "critico"
+  exigir CVE alto **combinado** com sinal real do firmware. Distribuicao final: seguro 43.1%
+  (362), vulneravel 51.0% (428), critico 6.0% (50) — antes: seguro 42.9%, vulneravel 12.5%,
+  critico 44.6% (quase todo via CVE isolado).
 
 ## Request: Qualidade e ferramentas
 

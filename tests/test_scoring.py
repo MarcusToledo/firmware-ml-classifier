@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from src.scoring import (
+    HardRuleConfig,
     ScoringConfig,
     ThresholdConfig,
     _score_strings,
@@ -83,12 +84,34 @@ def test_hard_rule_hardcoded_passwords() -> None:
     assert result.level != "seguro"
 
 
-def test_hard_rule_cvss_critical_overrides_to_critico() -> None:
-    """cvss_max >= 9.0 forces 'critico' even when score alone wouldn't."""
-    # Use high thresholds so score alone maps to "vulneravel", then hard rule
-    # escalates to "critico"
+def test_hard_rule_cvss_critical_default_only_escalates_to_vulneravel() -> None:
+    """By default, cvss_max >= 9.0 alone escalates only to 'vulneravel'.
+
+    'critico' requires corroboration from the weighted score (CVE combined
+    with binary-derived signals), not CVE severity in isolation — otherwise
+    the label collapses into a vendor/model CVE lookup, since cvss_max does
+    not vary per firmware binary.
+    """
     high_threshold_config = ScoringConfig(
         thresholds=ThresholdConfig(low=0.30, high=0.90),
+    )
+    features = {
+        "entropy": 4.0,
+        "byte_mean": 127.5,
+        "compress_ratio": 0.50,
+        "cvss_max": 9.5,
+    }
+    result = score_firmware(features, high_threshold_config)
+    # Whether "vulneravel" comes from the score itself or from the hard rule
+    # escalating it, it must never reach "critico" from cvss_max alone here.
+    assert result.level == "vulneravel"
+
+
+def test_hard_rule_cvss_critical_configurable_to_critico() -> None:
+    """cvss_critical_min_level can be raised back to 'critico' if desired."""
+    high_threshold_config = ScoringConfig(
+        thresholds=ThresholdConfig(low=0.30, high=0.90),
+        hard_rules=HardRuleConfig(cvss_critical_min_level="critico"),
     )
     features = {
         "entropy": 4.0,

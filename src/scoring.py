@@ -48,6 +48,7 @@ class HardRuleConfig:
     has_debug_account_min_level: str = "vulneravel"
     hardcoded_passwords_min_level: str = "vulneravel"
     cvss_critical_threshold: float = 9.0
+    cvss_critical_min_level: str = "vulneravel"
 
 
 @dataclass(frozen=True)
@@ -373,8 +374,9 @@ def score_firmware(
 
     cvss_max = features.get("cvss_max")
     if cvss_max is not None and cvss_max >= config.hard_rules.cvss_critical_threshold:
-        if LEVEL_ORDER.get("critico", 0) > LEVEL_ORDER.get(level, 0):
-            level = "critico"
+        min_level = config.hard_rules.cvss_critical_min_level
+        if LEVEL_ORDER.get(min_level, 0) > LEVEL_ORDER.get(level, 0):
+            level = min_level
             hard_rule_applied = "cvss_critical"
 
     return ScoringResult(

@@ -4,9 +4,12 @@ scoring:
     high: 0.60   # >= 0.60 → critico
 
   weights:
-    stats: 0.10    # peso baixo — ambíguo sem contexto
-    cve: 0.45
-    strings: 0.30
+    # stats zerado: sinal fraco/ambiguo sem contexto (ver historico do arquivo).
+    # Peso redistribuido para cve/strings, exigindo que "critico" combine CVE
+    # com evidencia real do binario (nao so metadado de vendor/model).
+    stats: 0.0
+    cve: 0.60
+    strings: 0.25
     binwalk: 0.15
 
   hard_rules:
@@ -14,3 +17,10 @@ scoring:
     has_debug_account_min_level: "vulneravel"
     hardcoded_passwords_min_level: "vulneravel"
     cvss_critical_threshold: 9.0
+    # Antes ia direto para "critico", ignorando o score ponderado combinado.
+    # Como cvss_max e constante por vendor/model (nao varia por binario), isso fazia
+    # o rotulo virar quase so um lookup de CVE por fabricante (368/375 "critico" via
+    # essa regra sozinha) — nao refletia sinais do binario (stats/strings/binwalk).
+    # Rebaixado para "vulneravel", igual aos outros hard rules: "critico" agora so e
+    # alcancado combinando CVE com sinais reais do firmware no score ponderado.
+    cvss_critical_min_level: "vulneravel"
