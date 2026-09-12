@@ -234,6 +234,32 @@ def _has_plaintext_credential(s: str) -> bool:
     return False
 
 
+_WORD_RE = re.compile(r"[A-Za-z0-9]+")
+
+
+def _has_default_password_token(s: str) -> bool:
+    """Return True if *s* has a weak password token with auth context nearby.
+
+    A bare occurrence of a common word like "test" or "admin" is too weak a
+    signal alone (ordinary firmware text is full of them — "self test",
+    "system ready"). Require an authentication-context cue elsewhere in the
+    same string before counting it as a credential.
+
+    Matching is whole-word, not substring: a naive substring check would
+    match the trigger "auth" inside "authentication", wrongly flagging the
+    hard negative "Password authentication failed" (report §9.3) as a
+    credential just because "password" is also a default-password value.
+    """
+    words = [w.lower() for w in _WORD_RE.findall(s)]
+    word_set = set(words)
+    for t_lower in words:
+        if t_lower not in _DEFAULT_PASSWORDS:
+            continue
+        if word_set & (_AUTH_CONTEXT_TRIGGERS - {t_lower}):
+            return True
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Public functions
 # ---------------------------------------------------------------------------
@@ -245,16 +271,12 @@ def count_hardcoded_passwords(strings: list[str]) -> int:
     Counts key=value/key:value pairs with a concrete literal — rejecting
     format specifiers, variable references, templates, null literals and
     metadata keys (``password_length``, ``password_hash``) — plus bare
-    occurrences of well-known default passwords (see
-    ``_has_default_password_token``, added in Task 2).
+    occurrences of well-known default passwords that appear alongside an
+    authentication-context cue (see ``_has_default_password_token``).
     """
     count = 0
     for s in strings:
-        if _has_plaintext_credential(s):
-            count += 1
-            continue
-        tokens = s.split()
-        if any(t.lower() in _DEFAULT_PASSWORDS for t in tokens):
+        if _has_plaintext_credential(s) or _has_default_password_token(s):
             count += 1
     return count
 

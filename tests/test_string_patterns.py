@@ -105,12 +105,31 @@ def test_passwords_query_string_after_rejected_key() -> None:
     assert count_hardcoded_passwords(["http://x/?mode=auto&password=admin"]) == 1
 
 
-def test_passwords_default_token() -> None:
-    assert count_hardcoded_passwords(["admin"]) == 1
+def test_passwords_default_token_without_context_not_flagged() -> None:
+    # bare "admin" with zero surrounding context is too weak a signal on its
+    # own (it's the false-positive source found in the first generated
+    # sample) — no longer counted unless auth context is present nearby.
+    assert count_hardcoded_passwords(["admin"]) == 0
 
 
-def test_passwords_default_token_root() -> None:
-    assert count_hardcoded_passwords(["root"]) == 1
+def test_passwords_default_token_root_without_context_not_flagged() -> None:
+    assert count_hardcoded_passwords(["root"]) == 0
+
+
+def test_passwords_default_token_with_context() -> None:
+    assert count_hardcoded_passwords(["default login: admin"]) == 1
+
+
+def test_passwords_default_token_root_with_context() -> None:
+    assert count_hardcoded_passwords(["login as root"]) == 1
+
+
+def test_passwords_default_token_avoids_substring_trigger_match() -> None:
+    # "auth" must not match as a substring of "authentication" — this exact
+    # string is a required hard negative in the technical report (§9.3):
+    # "password" is a default-password value, but this is a log message,
+    # not a credential.
+    assert count_hardcoded_passwords(["Password authentication failed"]) == 0
 
 
 def test_passwords_no_match() -> None:
