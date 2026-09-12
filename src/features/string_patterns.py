@@ -127,6 +127,8 @@ _CRED_PAIR_USERNAMES: frozenset[str] = frozenset(
     }
 )
 
+_URL_USERINFO_RE = re.compile(r"https?://([^\s:@/]{1,32}):([^\s@/]{1,64})@")
+
 # ---------------------------------------------------------------------------
 # IP address patterns
 # ---------------------------------------------------------------------------
@@ -277,6 +279,21 @@ def _has_weak_username_pair(s: str) -> bool:
     return False
 
 
+def _has_url_userinfo_pair(s: str) -> bool:
+    """Return True if *s* has a user:pass pair embedded in a URL's userinfo.
+
+    The URL's own protocol delimiter (``scheme://user:pass@``) is a strong
+    enough structural signal on its own — the username does not need to be
+    on the recognized-username list, unlike ``_has_weak_username_pair``.
+    """
+    for m in _URL_USERINFO_RE.finditer(s):
+        secret = m.group(2)
+        if _is_rejected_value(secret):
+            continue
+        return True
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Public functions
 # ---------------------------------------------------------------------------
@@ -302,13 +319,15 @@ def count_credential_pairs(strings: list[str]) -> int:
     """Count strings containing a user:pass credential pair.
 
     Matches colon-separated pairs where the username is a known
-    default/weak value (``admin:S3cur3Pass9``) — the password side only
-    needs to be a concrete, non-placeholder value. Counts per string, not
-    per match — a string with multiple pairs is counted once.
+    default/weak value (``admin:S3cur3Pass9``), and userinfo credentials
+    embedded in URLs (``https://apiuser:Str0ngP4ss@host/``) — the URL's
+    protocol delimiter is itself a strong structural signal, so the
+    username is not required to be on the weak list there. Counts per
+    string, not per match — a string with multiple pairs is counted once.
     """
     count = 0
     for s in strings:
-        if _has_weak_username_pair(s):
+        if _has_weak_username_pair(s) or _has_url_userinfo_pair(s):
             count += 1
     return count
 

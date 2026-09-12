@@ -177,6 +177,18 @@ def test_cred_pairs_rejects_placeholder_password() -> None:
     assert count_credential_pairs(["admin:%s"]) == 0
 
 
+def test_cred_pairs_url_userinfo() -> None:
+    assert count_credential_pairs(["https://apiuser:Str0ngP4ss@iot.example.com/"]) == 1
+
+
+def test_cred_pairs_url_userinfo_rejects_placeholder() -> None:
+    assert count_credential_pairs(["https://user:%s@host/"]) == 0
+
+
+def test_cred_pairs_url_userinfo_http() -> None:
+    assert count_credential_pairs(["http://admin:admin@192.168.1.1/"]) == 1
+
+
 def test_cred_pairs_multiple_strings() -> None:
     assert count_credential_pairs(["admin:admin", "root:root", "guest:guest"]) == 3
 
