@@ -12,10 +12,46 @@ import re
 # Password patterns
 # ---------------------------------------------------------------------------
 
-_PASSWORD_KV_RE = re.compile(
-    r"\b(?:password|passwd|pass|pwd|secret|credential)\s*[=:]\s*(\S+)",
-    re.IGNORECASE,
+# Generic identifier=value / identifier:value scanner. The value stops at
+# whitespace, "&" and ";" so that a rejected match earlier in a delimiter-free
+# string (e.g. a URL query string) never swallows a real credential later in
+# the same string. Whether a given key/value pair is actually a credential is
+# decided afterwards by _is_credential_key() and _is_rejected_value().
+_PASSWORD_KV_RE = re.compile(r"\b([A-Za-z][A-Za-z0-9_-]{0,40})\s*[=:]\s*([^\s&;]+)")
+
+_CREDENTIAL_KEY_TOKENS: frozenset[str] = frozenset(
+    {
+        "password",
+        "passwd",
+        "pwd",
+        "pass",
+        "secret",
+        "credential",
+        "passphrase",
+        "pswd",
+        "psw",
+        "userpass",
+        "loginpass",
+        "psk",
+    }
 )
+
+# A key token from this set means the match describes *metadata about* a
+# credential (its length, hash, rotation policy...) rather than the
+# credential itself — e.g. password_length=8, password_hash=<digest>.
+_METADATA_KEY_TOKENS: frozenset[str] = frozenset(
+    {"length", "len", "size", "hash", "algorithm", "algo", "policy", "timeout"}
+)
+
+_NULL_LITERALS: frozenset[str] = frozenset(
+    {"null", "none", "nil", "undefined", "(null)"}
+)
+
+_VARIABLE_REF_RE = re.compile(r"^\$\{?\w+\}?$")
+_TEMPLATE_RE = re.compile(r"^\{\{?\w+\}?\}$|^<\w+>$")
+_CAMEL_BOUNDARY_RE = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
+
+# TODO: Review passwords list and add more common default passwords if necessary
 _DEFAULT_PASSWORDS: frozenset[str] = frozenset(
     {
         "admin",
@@ -40,6 +76,22 @@ _DEFAULT_PASSWORDS: frozenset[str] = frozenset(
         "zte521",
         "telnet",
         "enable",
+    }
+)
+
+_AUTH_CONTEXT_TRIGGERS: frozenset[str] = frozenset(
+    {
+        "login",
+        "user",
+        "username",
+        "account",
+        "credential",
+        "auth",
+        "senha",
+        "password",
+        "passwd",
+        "pwd",
+        "default",
     }
 )
 
@@ -133,6 +185,55 @@ def _parse_version(v: str) -> tuple[int, ...]:
     return tuple(parts)
 
 
+def _key_tokens(key: str) -> list[str]:
+    """Split a key into lowercase tokens across snake_case/kebab-case/camelCase.
+
+    Examples::
+
+        _key_tokens("admin_password") -> ["admin", "password"]
+        _key_tokens("adminPassword") -> ["admin", "password"]
+        _key_tokens("wl0_wpa_psk") -> ["wl0", "wpa", "psk"]
+    """
+    spaced = _CAMEL_BOUNDARY_RE.sub("_", key)
+    return [t.lower() for t in re.split(r"[_-]", spaced) if t]
+
+
+def _is_credential_key(key: str) -> bool:
+    """Return True if *key* denotes a credential value, not metadata about one."""
+    tokens = set(_key_tokens(key))
+    if tokens & _METADATA_KEY_TOKENS:
+        return False
+    return bool(tokens & _CREDENTIAL_KEY_TOKENS)
+
+
+def _is_rejected_value(value: str) -> bool:
+    """Return True if *value* is a placeholder, variable ref, template or null.
+
+    These never represent a concrete, hardcoded credential.
+    """
+    if value.startswith("%"):
+        return True
+    if _VARIABLE_REF_RE.match(value):
+        return True
+    if _TEMPLATE_RE.match(value):
+        return True
+    if value.strip("()").lower() in _NULL_LITERALS:
+        return True
+    return False
+
+
+def _has_plaintext_credential(s: str) -> bool:
+    """Return True if *s* has a key=value pair with a concrete credential."""
+    for m in _PASSWORD_KV_RE.finditer(s):
+        key, value = m.group(1), m.group(2)
+        if not _is_credential_key(key):
+            continue
+        if _is_rejected_value(value):
+            continue
+        return True
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Public functions
 # ---------------------------------------------------------------------------
@@ -141,17 +242,17 @@ def _parse_version(v: str) -> tuple[int, ...]:
 def count_hardcoded_passwords(strings: list[str]) -> int:
     """Count strings that contain hardcoded credentials.
 
-    Counts both key=value patterns (``password=admin``) and bare occurrences
-    of well-known default passwords.
+    Counts key=value/key:value pairs with a concrete literal — rejecting
+    format specifiers, variable references, templates, null literals and
+    metadata keys (``password_length``, ``password_hash``) — plus bare
+    occurrences of well-known default passwords (see
+    ``_has_default_password_token``, added in Task 2).
     """
     count = 0
     for s in strings:
-        # key=value match
-        m = _PASSWORD_KV_RE.search(s)
-        if m:
+        if _has_plaintext_credential(s):
             count += 1
             continue
-        # exact token match against known defaults
         tokens = s.split()
         if any(t.lower() in _DEFAULT_PASSWORDS for t in tokens):
             count += 1

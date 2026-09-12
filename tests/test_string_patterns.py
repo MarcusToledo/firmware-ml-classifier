@@ -34,6 +34,77 @@ def test_passwords_kv_case_insensitive() -> None:
     assert count_hardcoded_passwords(["PASSWORD=abc"]) == 1
 
 
+def test_passwords_rejects_format_specifier() -> None:
+    assert count_hardcoded_passwords(["password=%s"]) == 0
+
+
+def test_passwords_rejects_format_specifier_precision() -> None:
+    assert count_hardcoded_passwords(["password=%.*s"]) == 0
+
+
+def test_passwords_rejects_variable_reference() -> None:
+    assert count_hardcoded_passwords(["password=${PASSWORD}"]) == 0
+
+
+def test_passwords_rejects_variable_reference_positional() -> None:
+    assert count_hardcoded_passwords(["password=$1"]) == 0
+
+
+def test_passwords_rejects_template() -> None:
+    assert count_hardcoded_passwords(["password={{password}}"]) == 0
+
+
+def test_passwords_rejects_angle_template() -> None:
+    assert count_hardcoded_passwords(["password=<password>"]) == 0
+
+
+def test_passwords_rejects_null_literal() -> None:
+    assert count_hardcoded_passwords(["password=NULL"]) == 0
+
+
+def test_passwords_rejects_none_literal() -> None:
+    assert count_hardcoded_passwords(["password=None"]) == 0
+
+
+def test_passwords_rejects_parenthesized_null() -> None:
+    assert count_hardcoded_passwords(["password=(null)"]) == 0
+
+
+def test_passwords_rejects_metadata_key_length() -> None:
+    assert count_hardcoded_passwords(["password_length=8"]) == 0
+
+
+def test_passwords_rejects_metadata_key_hash() -> None:
+    hash_val = "5f4dcc3b5aa765d61d8327deb882cf99"
+    assert count_hardcoded_passwords([f"password_hash={hash_val}"]) == 0
+
+
+def test_passwords_detects_compound_key_snake_case() -> None:
+    assert count_hardcoded_passwords(["admin_password=admin123"]) == 1
+
+
+def test_passwords_detects_compound_key_camel_case() -> None:
+    assert count_hardcoded_passwords(["adminPassword=admin123"]) == 1
+
+
+def test_passwords_detects_ftp_pass_alias() -> None:
+    assert count_hardcoded_passwords(["ftp_pass=admin123"]) == 1
+
+
+def test_passwords_detects_wpa_psk_alias() -> None:
+    assert count_hardcoded_passwords(["wpa_psk=12345678"]) == 1
+
+
+def test_passwords_detects_wl0_wpa_psk_alias() -> None:
+    assert count_hardcoded_passwords(["wl0_wpa_psk=12345678"]) == 1
+
+
+def test_passwords_query_string_after_rejected_key() -> None:
+    # a rejected key=value earlier in the same (space-free) string must not
+    # swallow a real credential later in the string
+    assert count_hardcoded_passwords(["http://x/?mode=auto&password=admin"]) == 1
+
+
 def test_passwords_default_token() -> None:
     assert count_hardcoded_passwords(["admin"]) == 1
 
