@@ -168,6 +168,15 @@ def test_cred_pairs_long_hash_ignored() -> None:
     assert count_credential_pairs(["sha256:deadbeefdeadbeefdeadbeef"]) == 0
 
 
+def test_cred_pairs_strong_password_with_known_username() -> None:
+    # username is recognized; password is strong/unlisted — still a real pair
+    assert count_credential_pairs(["admin:S3cur3Pass9"]) == 1
+
+
+def test_cred_pairs_rejects_placeholder_password() -> None:
+    assert count_credential_pairs(["admin:%s"]) == 0
+
+
 def test_cred_pairs_multiple_strings() -> None:
     assert count_credential_pairs(["admin:admin", "root:root", "guest:guest"]) == 3
 

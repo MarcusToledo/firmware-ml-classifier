@@ -96,11 +96,11 @@ _AUTH_CONTEXT_TRIGGERS: frozenset[str] = frozenset(
 )
 
 # ---------------------------------------------------------------------------
-# Credential pair patterns (user:pass where both are weak defaults)
+# Credential pair patterns (user:pass where the username is recognizable)
 # ---------------------------------------------------------------------------
 
 _CRED_PAIR_RE = re.compile(r"\b([A-Za-z0-9]{1,20}):([A-Za-z0-9]{1,20})\b")
-_CRED_PAIR_WEAK: frozenset[str] = frozenset(
+_CRED_PAIR_USERNAMES: frozenset[str] = frozenset(
     {
         "admin",
         "root",
@@ -260,6 +260,23 @@ def _has_default_password_token(s: str) -> bool:
     return False
 
 
+def _has_weak_username_pair(s: str) -> bool:
+    """Return True if *s* has a user:pass pair with a recognizable username.
+
+    The password side is not required to be weak — a recognizable username
+    (``admin``, ``root``...) paired with *any* concrete secret is itself the
+    signal; only placeholders/nulls on the password side are rejected.
+    """
+    for m in _CRED_PAIR_RE.finditer(s):
+        username, secret = m.group(1), m.group(2)
+        if username.lower() not in _CRED_PAIR_USERNAMES:
+            continue
+        if _is_rejected_value(secret):
+            continue
+        return True
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Public functions
 # ---------------------------------------------------------------------------
@@ -282,22 +299,17 @@ def count_hardcoded_passwords(strings: list[str]) -> int:
 
 
 def count_credential_pairs(strings: list[str]) -> int:
-    """Count strings containing colon-separated weak credential pairs.
+    """Count strings containing a user:pass credential pair.
 
-    Matches patterns like ``admin:admin`` or ``root:1234`` where both the
-    username and password appear in the set of known default/weak values.
-    Both sides must be 1–20 alphanumeric characters.  Counts per string,
-    not per token — a string with multiple pairs is counted once.
+    Matches colon-separated pairs where the username is a known
+    default/weak value (``admin:S3cur3Pass9``) — the password side only
+    needs to be a concrete, non-placeholder value. Counts per string, not
+    per match — a string with multiple pairs is counted once.
     """
     count = 0
     for s in strings:
-        for m in _CRED_PAIR_RE.finditer(s):
-            if (
-                m.group(1).lower() in _CRED_PAIR_WEAK
-                and m.group(2).lower() in _CRED_PAIR_WEAK
-            ):
-                count += 1
-                break
+        if _has_weak_username_pair(s):
+            count += 1
     return count
 
 
