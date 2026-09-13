@@ -12,10 +12,46 @@ import re
 # Password patterns
 # ---------------------------------------------------------------------------
 
-_PASSWORD_KV_RE = re.compile(
-    r"\b(?:password|passwd|pass|pwd|secret|credential)\s*[=:]\s*(\S+)",
-    re.IGNORECASE,
+# Generic identifier=value / identifier:value scanner. The value stops at
+# whitespace, "&" and ";" so that a rejected match earlier in a delimiter-free
+# string (e.g. a URL query string) never swallows a real credential later in
+# the same string. Whether a given key/value pair is actually a credential is
+# decided afterwards by _is_credential_key() and _is_rejected_value().
+_PASSWORD_KV_RE = re.compile(r"\b([A-Za-z][A-Za-z0-9_-]{0,40})\s*[=:]\s*([^\s&;]+)")
+
+_CREDENTIAL_KEY_TOKENS: frozenset[str] = frozenset(
+    {
+        "password",
+        "passwd",
+        "pwd",
+        "pass",
+        "secret",
+        "credential",
+        "passphrase",
+        "pswd",
+        "psw",
+        "userpass",
+        "loginpass",
+        "psk",
+    }
 )
+
+# A key token from this set means the match describes *metadata about* a
+# credential (its length, hash, rotation policy...) rather than the
+# credential itself — e.g. password_length=8, password_hash=<digest>.
+_METADATA_KEY_TOKENS: frozenset[str] = frozenset(
+    {"length", "len", "size", "hash", "algorithm", "algo", "policy", "timeout"}
+)
+
+_NULL_LITERALS: frozenset[str] = frozenset(
+    {"null", "none", "nil", "undefined", "(null)"}
+)
+
+_VARIABLE_REF_RE = re.compile(r"^\$\{?\w+\}?$")
+_TEMPLATE_RE = re.compile(r"^\{\{?\w+\}?\}$|^<\w+>$")
+_CAMEL_BOUNDARY_RE = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
+
+# TODO: Review passwords list and add more common default passwords if necessary
 _DEFAULT_PASSWORDS: frozenset[str] = frozenset(
     {
         "admin",
@@ -43,12 +79,28 @@ _DEFAULT_PASSWORDS: frozenset[str] = frozenset(
     }
 )
 
+_AUTH_CONTEXT_TRIGGERS: frozenset[str] = frozenset(
+    {
+        "login",
+        "user",
+        "username",
+        "account",
+        "credential",
+        "auth",
+        "senha",
+        "password",
+        "passwd",
+        "pwd",
+        "default",
+    }
+)
+
 # ---------------------------------------------------------------------------
-# Credential pair patterns (user:pass where both are weak defaults)
+# Credential pair patterns (user:pass where the username is recognizable)
 # ---------------------------------------------------------------------------
 
 _CRED_PAIR_RE = re.compile(r"\b([A-Za-z0-9]{1,20}):([A-Za-z0-9]{1,20})\b")
-_CRED_PAIR_WEAK: frozenset[str] = frozenset(
+_CRED_PAIR_USERNAMES: frozenset[str] = frozenset(
     {
         "admin",
         "root",
@@ -73,6 +125,12 @@ _CRED_PAIR_WEAK: frozenset[str] = frozenset(
         "enable",
         "telnet",
     }
+)
+
+# Any reasonable URI scheme, not just http(s) — firmware commonly embeds
+# default credentials in ftp:// and telnet:// URLs too.
+_URL_USERINFO_RE = re.compile(
+    r"\b[A-Za-z][A-Za-z0-9+.\-]{1,15}://([^\s:@/]{1,32}):([^\s@/]{1,64})@"
 )
 
 # ---------------------------------------------------------------------------
@@ -133,6 +191,117 @@ def _parse_version(v: str) -> tuple[int, ...]:
     return tuple(parts)
 
 
+def _key_tokens(key: str) -> list[str]:
+    """Split a key into lowercase tokens across snake_case/kebab-case/camelCase.
+
+    Examples::
+
+        _key_tokens("admin_password") -> ["admin", "password"]
+        _key_tokens("adminPassword") -> ["admin", "password"]
+        _key_tokens("wl0_wpa_psk") -> ["wl0", "wpa", "psk"]
+    """
+    spaced = _CAMEL_BOUNDARY_RE.sub("_", key)
+    return [t.lower() for t in re.split(r"[_-]", spaced) if t]
+
+
+def _is_credential_key(key: str) -> bool:
+    """Return True if *key* denotes a credential value, not metadata about one."""
+    tokens = set(_key_tokens(key))
+    if tokens & _METADATA_KEY_TOKENS:
+        return False
+    return bool(tokens & _CREDENTIAL_KEY_TOKENS)
+
+
+def _is_rejected_value(value: str) -> bool:
+    """Return True if *value* is a placeholder, variable ref, template or null.
+
+    These never represent a concrete, hardcoded credential.
+    """
+    if value.startswith("%"):
+        return True
+    if _VARIABLE_REF_RE.match(value):
+        return True
+    if _TEMPLATE_RE.match(value):
+        return True
+    if value.strip("()").lower() in _NULL_LITERALS:
+        return True
+    return False
+
+
+def _has_plaintext_credential(s: str) -> bool:
+    """Return True if *s* has a key=value pair with a concrete credential."""
+    for m in _PASSWORD_KV_RE.finditer(s):
+        key, value = m.group(1), m.group(2)
+        if not _is_credential_key(key):
+            continue
+        if _is_rejected_value(value):
+            continue
+        return True
+    return False
+
+
+_WORD_RE = re.compile(r"[A-Za-z0-9]+")
+
+
+def _has_default_password_token(s: str) -> bool:
+    """Return True if *s* has a weak password token with auth context nearby.
+
+    A bare occurrence of a common word like "test" or "admin" is too weak a
+    signal alone (ordinary firmware text is full of them — "self test",
+    "system ready"). Require an authentication-context cue elsewhere in the
+    same string before counting it as a credential.
+
+    Matching is whole-word, not substring: a naive substring check would
+    match the trigger "auth" inside "authentication", wrongly flagging the
+    hard negative "Password authentication failed" (report §9.3) as a
+    credential just because "password" is also a default-password value.
+
+    A default-password token that is ALSO an auth-context trigger word
+    (e.g. "password", "default", "system", "test" appear in both sets) can
+    never serve as its own context: excluding it from the candidate set
+    stops ordinary UI/log text like "Enter username and password" or
+    "Password auth failed" from being counted just because the sentence
+    happens to contain the word "password" and some other trigger word.
+    """
+    word_set = {w.lower() for w in _WORD_RE.findall(s)}
+    candidates = (word_set & _DEFAULT_PASSWORDS) - _AUTH_CONTEXT_TRIGGERS
+    if not candidates:
+        return False
+    return bool(word_set & _AUTH_CONTEXT_TRIGGERS)
+
+
+def _has_weak_username_pair(s: str) -> bool:
+    """Return True if *s* has a user:pass pair with a recognizable username.
+
+    The password side is not required to be weak — a recognizable username
+    (``admin``, ``root``...) paired with *any* concrete secret is itself the
+    signal; only placeholders/nulls on the password side are rejected.
+    """
+    for m in _CRED_PAIR_RE.finditer(s):
+        username, secret = m.group(1), m.group(2)
+        if username.lower() not in _CRED_PAIR_USERNAMES:
+            continue
+        if _is_rejected_value(secret):
+            continue
+        return True
+    return False
+
+
+def _has_url_userinfo_pair(s: str) -> bool:
+    """Return True if *s* has a user:pass pair embedded in a URL's userinfo.
+
+    The URL's own protocol delimiter (``scheme://user:pass@``) is a strong
+    enough structural signal on its own — the username does not need to be
+    on the recognized-username list, unlike ``_has_weak_username_pair``.
+    """
+    for m in _URL_USERINFO_RE.finditer(s):
+        secret = m.group(2)
+        if _is_rejected_value(secret):
+            continue
+        return True
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Public functions
 # ---------------------------------------------------------------------------
@@ -141,40 +310,33 @@ def _parse_version(v: str) -> tuple[int, ...]:
 def count_hardcoded_passwords(strings: list[str]) -> int:
     """Count strings that contain hardcoded credentials.
 
-    Counts both key=value patterns (``password=admin``) and bare occurrences
-    of well-known default passwords.
+    Counts key=value/key:value pairs with a concrete literal — rejecting
+    format specifiers, variable references, templates, null literals and
+    metadata keys (``password_length``, ``password_hash``) — plus bare
+    occurrences of well-known default passwords that appear alongside an
+    authentication-context cue (see ``_has_default_password_token``).
     """
     count = 0
     for s in strings:
-        # key=value match
-        m = _PASSWORD_KV_RE.search(s)
-        if m:
-            count += 1
-            continue
-        # exact token match against known defaults
-        tokens = s.split()
-        if any(t.lower() in _DEFAULT_PASSWORDS for t in tokens):
+        if _has_plaintext_credential(s) or _has_default_password_token(s):
             count += 1
     return count
 
 
 def count_credential_pairs(strings: list[str]) -> int:
-    """Count strings containing colon-separated weak credential pairs.
+    """Count strings containing a user:pass credential pair.
 
-    Matches patterns like ``admin:admin`` or ``root:1234`` where both the
-    username and password appear in the set of known default/weak values.
-    Both sides must be 1–20 alphanumeric characters.  Counts per string,
-    not per token — a string with multiple pairs is counted once.
+    Matches colon-separated pairs where the username is a known
+    default/weak value (``admin:S3cur3Pass9``), and userinfo credentials
+    embedded in URLs (``https://apiuser:Str0ngP4ss@host/``) — the URL's
+    protocol delimiter is itself a strong structural signal, so the
+    username is not required to be on the weak list there. Counts per
+    string, not per match — a string with multiple pairs is counted once.
     """
     count = 0
     for s in strings:
-        for m in _CRED_PAIR_RE.finditer(s):
-            if (
-                m.group(1).lower() in _CRED_PAIR_WEAK
-                and m.group(2).lower() in _CRED_PAIR_WEAK
-            ):
-                count += 1
-                break
+        if _has_weak_username_pair(s) or _has_url_userinfo_pair(s):
+            count += 1
     return count
 
 

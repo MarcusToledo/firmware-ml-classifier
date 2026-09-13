@@ -1,3 +1,5 @@
+import pytest
+
 from src.features.string_patterns import (
     count_api_tokens,
     count_credential_pairs,
@@ -34,12 +36,120 @@ def test_passwords_kv_case_insensitive() -> None:
     assert count_hardcoded_passwords(["PASSWORD=abc"]) == 1
 
 
-def test_passwords_default_token() -> None:
-    assert count_hardcoded_passwords(["admin"]) == 1
+def test_passwords_rejects_format_specifier() -> None:
+    assert count_hardcoded_passwords(["password=%s"]) == 0
 
 
-def test_passwords_default_token_root() -> None:
-    assert count_hardcoded_passwords(["root"]) == 1
+def test_passwords_rejects_format_specifier_precision() -> None:
+    assert count_hardcoded_passwords(["password=%.*s"]) == 0
+
+
+def test_passwords_rejects_variable_reference() -> None:
+    assert count_hardcoded_passwords(["password=${PASSWORD}"]) == 0
+
+
+def test_passwords_rejects_variable_reference_positional() -> None:
+    assert count_hardcoded_passwords(["password=$1"]) == 0
+
+
+def test_passwords_rejects_template() -> None:
+    assert count_hardcoded_passwords(["password={{password}}"]) == 0
+
+
+def test_passwords_rejects_angle_template() -> None:
+    assert count_hardcoded_passwords(["password=<password>"]) == 0
+
+
+def test_passwords_rejects_null_literal() -> None:
+    assert count_hardcoded_passwords(["password=NULL"]) == 0
+
+
+def test_passwords_rejects_none_literal() -> None:
+    assert count_hardcoded_passwords(["password=None"]) == 0
+
+
+def test_passwords_rejects_parenthesized_null() -> None:
+    assert count_hardcoded_passwords(["password=(null)"]) == 0
+
+
+def test_passwords_rejects_metadata_key_length() -> None:
+    assert count_hardcoded_passwords(["password_length=8"]) == 0
+
+
+def test_passwords_rejects_metadata_key_hash() -> None:
+    hash_val = "5f4dcc3b5aa765d61d8327deb882cf99"
+    assert count_hardcoded_passwords([f"password_hash={hash_val}"]) == 0
+
+
+def test_passwords_detects_compound_key_snake_case() -> None:
+    assert count_hardcoded_passwords(["admin_password=admin123"]) == 1
+
+
+def test_passwords_detects_compound_key_camel_case() -> None:
+    assert count_hardcoded_passwords(["adminPassword=admin123"]) == 1
+
+
+def test_passwords_detects_ftp_pass_alias() -> None:
+    assert count_hardcoded_passwords(["ftp_pass=admin123"]) == 1
+
+
+def test_passwords_detects_wpa_psk_alias() -> None:
+    assert count_hardcoded_passwords(["wpa_psk=12345678"]) == 1
+
+
+def test_passwords_detects_wl0_wpa_psk_alias() -> None:
+    assert count_hardcoded_passwords(["wl0_wpa_psk=12345678"]) == 1
+
+
+def test_passwords_query_string_after_rejected_key() -> None:
+    # a rejected key=value earlier in the same (space-free) string must not
+    # swallow a real credential later in the string
+    assert count_hardcoded_passwords(["http://x/?mode=auto&password=admin"]) == 1
+
+
+def test_passwords_default_token_without_context_not_flagged() -> None:
+    # bare "admin" with zero surrounding context is too weak a signal on its
+    # own (it's the false-positive source found in the first generated
+    # sample) — no longer counted unless auth context is present nearby.
+    assert count_hardcoded_passwords(["admin"]) == 0
+
+
+def test_passwords_default_token_root_without_context_not_flagged() -> None:
+    assert count_hardcoded_passwords(["root"]) == 0
+
+
+def test_passwords_default_token_with_context() -> None:
+    assert count_hardcoded_passwords(["default login: admin"]) == 1
+
+
+def test_passwords_default_token_root_with_context() -> None:
+    assert count_hardcoded_passwords(["login as root"]) == 1
+
+
+def test_passwords_default_token_avoids_substring_trigger_match() -> None:
+    # "auth" must not match as a substring of "authentication" — this exact
+    # string is a required hard negative in the technical report (§9.3):
+    # "password" is a default-password value, but this is a log message,
+    # not a credential.
+    assert count_hardcoded_passwords(["Password authentication failed"]) == 0
+
+
+def test_passwords_default_token_ui_prompt_not_flagged() -> None:
+    # "password" is both a default-password value AND its own auth-context
+    # trigger — it can't serve as evidence of itself. Ordinary login-form
+    # copy like this must not be flagged.
+    assert count_hardcoded_passwords(["Enter username and password"]) == 0
+
+
+def test_passwords_default_token_error_message_not_flagged() -> None:
+    assert count_hardcoded_passwords(["Invalid username or password"]) == 0
+
+
+def test_passwords_default_token_auth_word_not_flagged() -> None:
+    # distinguishes from "Password authentication failed" (already covered)
+    # by using "auth" as a standalone word rather than embedded in
+    # "authentication" — both must return 0.
+    assert count_hardcoded_passwords(["Password auth failed"]) == 0
 
 
 def test_passwords_no_match() -> None:
@@ -76,6 +186,35 @@ def test_cred_pairs_non_weak_ignored() -> None:
 def test_cred_pairs_long_hash_ignored() -> None:
     # right side > 20 chars — excluded by {1,20} bound
     assert count_credential_pairs(["sha256:deadbeefdeadbeefdeadbeef"]) == 0
+
+
+def test_cred_pairs_strong_password_with_known_username() -> None:
+    # username is recognized; password is strong/unlisted — still a real pair
+    assert count_credential_pairs(["admin:S3cur3Pass9"]) == 1
+
+
+def test_cred_pairs_rejects_placeholder_password() -> None:
+    assert count_credential_pairs(["admin:%s"]) == 0
+
+
+def test_cred_pairs_url_userinfo() -> None:
+    assert count_credential_pairs(["https://apiuser:Str0ngP4ss@iot.example.com/"]) == 1
+
+
+def test_cred_pairs_url_userinfo_rejects_placeholder() -> None:
+    assert count_credential_pairs(["https://user:%s@host/"]) == 0
+
+
+def test_cred_pairs_url_userinfo_http() -> None:
+    assert count_credential_pairs(["http://admin:admin@192.168.1.1/"]) == 1
+
+
+def test_cred_pairs_url_userinfo_ftp() -> None:
+    assert count_credential_pairs(["ftp://apiuser:S3cr3tP4ss@10.0.0.1/"]) == 1
+
+
+def test_cred_pairs_url_userinfo_telnet() -> None:
+    assert count_credential_pairs(["telnet://svcacct:Hunter2@host"]) == 1
 
 
 def test_cred_pairs_multiple_strings() -> None:
@@ -418,3 +557,42 @@ def test_scan_strings_detects_features() -> None:
     assert result["has_telnetd"] is True
     assert result["has_outdated_libssl"] is True
     assert result["count_urls"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Regression sweep — hard negatives and boundary cases from
+# docs/Relatorio_Tecnico_LLM_Deteccao_Credenciais_Firmware.pdf (§6.2, §9.3)
+# ---------------------------------------------------------------------------
+
+_REPORT_PASSWORD_CASES = [
+    # (text, expected count_hardcoded_passwords)
+    ("password=%s", 0),
+    ("password=${PASSWORD}", 0),
+    ("password=NULL", 0),
+    ("password_length=8", 0),
+    ("Password authentication failed", 0),
+    ("setPassword", 0),
+    ("/etc/passwd", 0),
+    ("passwd.c", 0),
+    ("confirm password", 0),
+    ("wpa_psk=12345678", 1),
+    ("ftp_pass=admin123", 1),
+    ("adminPassword=admin123", 1),
+]
+
+
+@pytest.mark.parametrize("text,expected", _REPORT_PASSWORD_CASES)
+def test_report_password_regression(text: str, expected: int) -> None:
+    assert count_hardcoded_passwords([text]) == expected
+
+
+_REPORT_PAIR_CASES = [
+    # (text, expected count_credential_pairs)
+    ("admin:admin123", 1),
+    ("http://admin:admin@192.168.1.1/", 1),
+]
+
+
+@pytest.mark.parametrize("text,expected", _REPORT_PAIR_CASES)
+def test_report_pair_regression(text: str, expected: int) -> None:
+    assert count_credential_pairs([text]) == expected
