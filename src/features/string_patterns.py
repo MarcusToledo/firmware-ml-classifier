@@ -127,7 +127,11 @@ _CRED_PAIR_USERNAMES: frozenset[str] = frozenset(
     }
 )
 
-_URL_USERINFO_RE = re.compile(r"https?://([^\s:@/]{1,32}):([^\s@/]{1,64})@")
+# Any reasonable URI scheme, not just http(s) — firmware commonly embeds
+# default credentials in ftp:// and telnet:// URLs too.
+_URL_USERINFO_RE = re.compile(
+    r"\b[A-Za-z][A-Za-z0-9+.\-]{1,15}://([^\s:@/]{1,32}):([^\s@/]{1,64})@"
+)
 
 # ---------------------------------------------------------------------------
 # IP address patterns
@@ -251,15 +255,19 @@ def _has_default_password_token(s: str) -> bool:
     match the trigger "auth" inside "authentication", wrongly flagging the
     hard negative "Password authentication failed" (report §9.3) as a
     credential just because "password" is also a default-password value.
+
+    A default-password token that is ALSO an auth-context trigger word
+    (e.g. "password", "default", "system", "test" appear in both sets) can
+    never serve as its own context: excluding it from the candidate set
+    stops ordinary UI/log text like "Enter username and password" or
+    "Password auth failed" from being counted just because the sentence
+    happens to contain the word "password" and some other trigger word.
     """
-    words = [w.lower() for w in _WORD_RE.findall(s)]
-    word_set = set(words)
-    for t_lower in words:
-        if t_lower not in _DEFAULT_PASSWORDS:
-            continue
-        if word_set & (_AUTH_CONTEXT_TRIGGERS - {t_lower}):
-            return True
-    return False
+    word_set = {w.lower() for w in _WORD_RE.findall(s)}
+    candidates = (word_set & _DEFAULT_PASSWORDS) - _AUTH_CONTEXT_TRIGGERS
+    if not candidates:
+        return False
+    return bool(word_set & _AUTH_CONTEXT_TRIGGERS)
 
 
 def _has_weak_username_pair(s: str) -> bool:

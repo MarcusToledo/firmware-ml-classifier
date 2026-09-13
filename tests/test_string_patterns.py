@@ -134,6 +134,24 @@ def test_passwords_default_token_avoids_substring_trigger_match() -> None:
     assert count_hardcoded_passwords(["Password authentication failed"]) == 0
 
 
+def test_passwords_default_token_ui_prompt_not_flagged() -> None:
+    # "password" is both a default-password value AND its own auth-context
+    # trigger — it can't serve as evidence of itself. Ordinary login-form
+    # copy like this must not be flagged.
+    assert count_hardcoded_passwords(["Enter username and password"]) == 0
+
+
+def test_passwords_default_token_error_message_not_flagged() -> None:
+    assert count_hardcoded_passwords(["Invalid username or password"]) == 0
+
+
+def test_passwords_default_token_auth_word_not_flagged() -> None:
+    # distinguishes from "Password authentication failed" (already covered)
+    # by using "auth" as a standalone word rather than embedded in
+    # "authentication" — both must return 0.
+    assert count_hardcoded_passwords(["Password auth failed"]) == 0
+
+
 def test_passwords_no_match() -> None:
     assert count_hardcoded_passwords(["network interface eth0"]) == 0
 
@@ -189,6 +207,14 @@ def test_cred_pairs_url_userinfo_rejects_placeholder() -> None:
 
 def test_cred_pairs_url_userinfo_http() -> None:
     assert count_credential_pairs(["http://admin:admin@192.168.1.1/"]) == 1
+
+
+def test_cred_pairs_url_userinfo_ftp() -> None:
+    assert count_credential_pairs(["ftp://apiuser:S3cr3tP4ss@10.0.0.1/"]) == 1
+
+
+def test_cred_pairs_url_userinfo_telnet() -> None:
+    assert count_credential_pairs(["telnet://svcacct:Hunter2@host"]) == 1
 
 
 def test_cred_pairs_multiple_strings() -> None:
