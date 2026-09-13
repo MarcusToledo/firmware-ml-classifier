@@ -1,3 +1,5 @@
+import pytest
+
 from src.features.string_patterns import (
     count_api_tokens,
     count_credential_pairs,
@@ -529,3 +531,42 @@ def test_scan_strings_detects_features() -> None:
     assert result["has_telnetd"] is True
     assert result["has_outdated_libssl"] is True
     assert result["count_urls"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Regression sweep — hard negatives and boundary cases from
+# docs/Relatorio_Tecnico_LLM_Deteccao_Credenciais_Firmware.pdf (§6.2, §9.3)
+# ---------------------------------------------------------------------------
+
+_REPORT_PASSWORD_CASES = [
+    # (text, expected count_hardcoded_passwords)
+    ("password=%s", 0),
+    ("password=${PASSWORD}", 0),
+    ("password=NULL", 0),
+    ("password_length=8", 0),
+    ("Password authentication failed", 0),
+    ("setPassword", 0),
+    ("/etc/passwd", 0),
+    ("passwd.c", 0),
+    ("confirm password", 0),
+    ("wpa_psk=12345678", 1),
+    ("ftp_pass=admin123", 1),
+    ("adminPassword=admin123", 1),
+]
+
+
+@pytest.mark.parametrize("text,expected", _REPORT_PASSWORD_CASES)
+def test_report_password_regression(text: str, expected: int) -> None:
+    assert count_hardcoded_passwords([text]) == expected
+
+
+_REPORT_PAIR_CASES = [
+    # (text, expected count_credential_pairs)
+    ("admin:admin123", 1),
+    ("http://admin:admin@192.168.1.1/", 1),
+]
+
+
+@pytest.mark.parametrize("text,expected", _REPORT_PAIR_CASES)
+def test_report_pair_regression(text: str, expected: int) -> None:
+    assert count_credential_pairs([text]) == expected
