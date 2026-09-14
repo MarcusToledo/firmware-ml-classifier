@@ -43,6 +43,12 @@ Extrair features com embeddings:
 Extrair features via CLI instalada:
 - `uv run extract-features --config configs/feature_extraction.yaml --input dataset/raw/ --output dataset/processed/features.parquet`
 
+> **`--findings-output`**: grava os achados de segurança estruturados (`SecurityFinding`)
+> em JSONL, um por linha, correlacionáveis ao `features.parquet` via `firmware_id` (ex.:
+> `... --findings-output dataset/processed/findings.jsonl`). Opcional — sem essa flag,
+> os achados são calculados mas descartados, só as contagens/flags (`count_*`/`has_*`)
+> vão para o `features.parquet`.
+
 > **`--label-from-path`**: para montar o dataset de treino, adicione essa flag aos comandos
 > acima (ex.: `... --output dataset/processed/features.parquet --label-from-path`).
 > O pipeline infere `brand`/`model` a partir do caminho

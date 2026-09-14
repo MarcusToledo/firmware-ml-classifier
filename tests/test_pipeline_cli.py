@@ -1,3 +1,4 @@
+import json
 import re
 import subprocess
 import sys
@@ -201,6 +202,73 @@ def test_cli_label_from_path(tmp_path: Path) -> None:
     assert df["meta_brand"].iloc[0] == "dlink"
     assert df["meta_model"].iloc[0] == "dir300"
     assert df["meta_label"].iloc[0] == "dlink_dir300"
+
+
+def test_cli_findings_output(tmp_path: Path) -> None:
+    """--findings-output grava os achados estruturados (SecurityFinding),
+    correlacionaveis ao features.parquet via firmware_id."""
+    firmware_path = tmp_path / "firmware.bin"
+    firmware_path.write_bytes(b"password=admin telnetd")
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("")
+    output_path = tmp_path / "features.parquet"
+    findings_path = tmp_path / "findings.jsonl"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/extract_features.py",
+            "--config",
+            str(config_path),
+            "--input",
+            str(firmware_path),
+            "--output",
+            str(output_path),
+            "--findings-output",
+            str(findings_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0
+    assert findings_path.exists()
+
+    lines = findings_path.read_text(encoding="utf-8").strip().splitlines()
+    records = [json.loads(line) for line in lines]
+    detectors = {r["detector"] for r in records}
+    assert "hardcoded_passwords" in detectors
+    assert "telnetd" in detectors
+    assert all("firmware_id" in r and "path" in r for r in records)
+
+
+def test_cli_without_findings_output_does_not_write_file(tmp_path: Path) -> None:
+    """Sem --findings-output, nenhum arquivo de achados e criado (opt-in)."""
+    firmware_path = tmp_path / "firmware.bin"
+    firmware_path.write_bytes(b"password=admin telnetd")
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("")
+    output_path = tmp_path / "features.parquet"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/extract_features.py",
+            "--config",
+            str(config_path),
+            "--input",
+            str(firmware_path),
+            "--output",
+            str(output_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0
+    assert list(tmp_path.glob("*.jsonl")) == []
 
 
 def test_cli_csv_output(tmp_path: Path) -> None:
