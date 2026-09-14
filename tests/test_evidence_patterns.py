@@ -1,15 +1,25 @@
 from src.evidence.patterns import (
+    count_api_tokens,
     count_credential_pairs,
     count_hardcoded_ips,
     count_hardcoded_passwords,
     count_public_ips,
+    count_urls,
+    find_api_tokens,
     find_credential_pairs,
     find_debug_account,
     find_hardcoded_ips,
     find_hardcoded_passwords,
+    find_outdated_busybox,
+    find_outdated_dropbear,
+    find_outdated_libssl,
     find_public_ips,
     find_telnetd,
+    find_urls,
     has_debug_account,
+    has_outdated_busybox,
+    has_outdated_dropbear,
+    has_outdated_libssl,
     has_telnetd,
 )
 
@@ -273,3 +283,154 @@ def test_debug_account_finding_has_low_confidence() -> None:
     assert len(findings) == 1
     assert findings[0].confidence == "low"
     assert findings[0].detector == "debug_account"
+
+
+# ---------------------------------------------------------------------------
+# find_outdated_libssl / has_outdated_libssl
+# ---------------------------------------------------------------------------
+
+
+def test_libssl_empty() -> None:
+    assert has_outdated_libssl([]) is False
+
+
+def test_libssl_outdated() -> None:
+    assert has_outdated_libssl(["OpenSSL 1.0.2k"]) is True
+
+
+def test_libssl_outdated_1_1_0() -> None:
+    assert has_outdated_libssl(["OpenSSL 1.1.0h"]) is True
+
+
+def test_libssl_current() -> None:
+    assert has_outdated_libssl(["OpenSSL 1.1.1n"]) is False
+
+
+def test_libssl_newer() -> None:
+    assert has_outdated_libssl(["OpenSSL 3.0.0"]) is False
+
+
+def test_libssl_no_match() -> None:
+    assert has_outdated_libssl(["libc version 2.31"]) is False
+
+
+def test_libssl_slash_separator() -> None:
+    assert has_outdated_libssl(["Apache/2.2.31 OpenSSL/1.0.2k"]) is True
+
+
+def test_libssl_finding_has_medium_confidence() -> None:
+    findings = find_outdated_libssl(["OpenSSL 1.0.2k"])
+    assert len(findings) == 1
+    assert findings[0].confidence == "medium"
+    assert findings[0].detector == "outdated_libssl"
+
+
+# ---------------------------------------------------------------------------
+# find_outdated_busybox / has_outdated_busybox
+# ---------------------------------------------------------------------------
+
+
+def test_busybox_empty() -> None:
+    assert has_outdated_busybox([]) is False
+
+
+def test_busybox_outdated() -> None:
+    assert has_outdated_busybox(["BusyBox v1.30.1"]) is True
+
+
+def test_busybox_current() -> None:
+    assert has_outdated_busybox(["BusyBox v1.33.0"]) is False
+
+
+def test_busybox_newer() -> None:
+    assert has_outdated_busybox(["BusyBox v1.36.1"]) is False
+
+
+def test_busybox_no_match() -> None:
+    assert has_outdated_busybox(["kernel 5.15.0"]) is False
+
+
+def test_busybox_no_space_variant() -> None:
+    assert has_outdated_busybox(["BusyBox1.19.4"]) is True
+
+
+def test_busybox_underscore_separator() -> None:
+    assert has_outdated_busybox(["busybox_1.19.4"]) is True
+
+
+# ---------------------------------------------------------------------------
+# find_outdated_dropbear / has_outdated_dropbear
+# ---------------------------------------------------------------------------
+
+
+def test_dropbear_empty() -> None:
+    assert has_outdated_dropbear([]) is False
+
+
+def test_dropbear_outdated() -> None:
+    assert has_outdated_dropbear(["Dropbear SSH 2020.81"]) is True
+
+
+def test_dropbear_current() -> None:
+    assert has_outdated_dropbear(["Dropbear SSH 2022.82"]) is False
+
+
+def test_dropbear_newer() -> None:
+    assert has_outdated_dropbear(["Dropbear 2023.1"]) is False
+
+
+def test_dropbear_no_match() -> None:
+    assert has_outdated_dropbear(["openssh 8.9"]) is False
+
+
+# ---------------------------------------------------------------------------
+# find_urls / count_urls
+# ---------------------------------------------------------------------------
+
+
+def test_urls_empty() -> None:
+    assert count_urls([]) == 0
+
+
+def test_urls_http() -> None:
+    assert count_urls(["http://example.com/path"]) == 1
+
+
+def test_urls_https() -> None:
+    assert count_urls(["https://secure.example.com"]) == 1
+
+
+def test_urls_multiple_in_one_string() -> None:
+    assert count_urls(["http://a.com https://b.com"]) == 2
+
+
+def test_urls_no_match() -> None:
+    assert count_urls(["ftp://example.com"]) == 0
+
+
+def test_urls_finding_has_low_confidence() -> None:
+    findings = find_urls(["http://example.com"])
+    assert len(findings) == 1
+    assert findings[0].confidence == "low"
+    assert findings[0].detector == "urls"
+
+
+# ---------------------------------------------------------------------------
+# find_api_tokens / count_api_tokens
+# ---------------------------------------------------------------------------
+
+
+def test_tokens_empty() -> None:
+    assert count_api_tokens([]) == 0
+
+
+def test_tokens_hex_32_chars() -> None:
+    assert count_api_tokens(["abc123" + "0" * 26]) == 1
+
+
+def test_tokens_too_short() -> None:
+    assert count_api_tokens(["a" * 31]) == 0
+
+
+def test_tokens_no_match() -> None:
+    assert count_api_tokens(["short string"]) == 0

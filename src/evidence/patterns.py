@@ -303,3 +303,149 @@ def find_debug_account(strings: list[str]) -> list[SecurityFinding]:
 def has_debug_account(strings: list[str]) -> bool:
     """Return True if any string contains a debug/guest/test account name."""
     return bool(find_debug_account(strings))
+
+
+# ---------------------------------------------------------------------------
+# Library version patterns
+# ---------------------------------------------------------------------------
+
+_LIBSSL_RE = re.compile(r"OpenSSL[\s/]+([\d]+\.[\d]+\.[\d]+[a-z]?)", re.IGNORECASE)
+_BUSYBOX_RE = re.compile(r"BusyBox[\s_]*v?([\d]+\.[\d]+\.[\d]+)", re.IGNORECASE)
+_DROPBEAR_RE = re.compile(r"Dropbear\s+(?:SSH\s+)?v?([\d]{4}\.[\d]+)", re.IGNORECASE)
+_VERSION_THRESHOLDS: dict[str, tuple[int, ...]] = {
+    "libssl": (1, 1, 1),  # < OpenSSL 1.1.1 → outdated
+    "busybox": (1, 33, 0),  # < BusyBox 1.33.0 → outdated
+    "dropbear": (2022, 82),  # < Dropbear 2022.82 → outdated
+}
+
+
+def _parse_version(v: str) -> tuple[int, ...]:
+    """Parse a dotted version string into a tuple of ints.
+
+    Examples::
+
+        _parse_version("1.1.1a") -> (1, 1, 1)
+        _parse_version("2022.82") -> (2022, 82)
+    """
+    parts: list[int] = []
+    for segment in re.split(r"[.\-_]", v):
+        digits = re.match(r"(\d+)", segment)
+        if digits:
+            parts.append(int(digits.group(1)))
+    return tuple(parts)
+
+
+def _find_outdated_version(
+    strings: list[str],
+    pattern: re.Pattern[str],
+    lib_name: str,
+    detector: str,
+) -> list[SecurityFinding]:
+    """Shared scan used by the three outdated-library detectors below."""
+    threshold = _VERSION_THRESHOLDS[lib_name]
+    findings: list[SecurityFinding] = []
+    for s in strings:
+        m = pattern.search(s)
+        if m:
+            version = _parse_version(m.group(1))
+            if version < threshold:
+                findings.append(
+                    SecurityFinding(
+                        type="outdated_library",
+                        source=s,
+                        context=(
+                            f"{lib_name} version {m.group(1)} "
+                            f"below threshold {threshold}"
+                        ),
+                        confidence="medium",
+                        detector=detector,
+                        detector_version=_DETECTOR_VERSION,
+                    )
+                )
+    return findings
+
+
+def find_outdated_libssl(strings: list[str]) -> list[SecurityFinding]:
+    """Find strings with an OpenSSL version string below threshold."""
+    return _find_outdated_version(strings, _LIBSSL_RE, "libssl", "outdated_libssl")
+
+
+def has_outdated_libssl(strings: list[str]) -> bool:
+    """Return True if an OpenSSL version string below threshold is found."""
+    return bool(find_outdated_libssl(strings))
+
+
+def find_outdated_busybox(strings: list[str]) -> list[SecurityFinding]:
+    """Find strings with a BusyBox version string below threshold."""
+    return _find_outdated_version(strings, _BUSYBOX_RE, "busybox", "outdated_busybox")
+
+
+def has_outdated_busybox(strings: list[str]) -> bool:
+    """Return True if a BusyBox version string below threshold is found."""
+    return bool(find_outdated_busybox(strings))
+
+
+def find_outdated_dropbear(strings: list[str]) -> list[SecurityFinding]:
+    """Find strings with a Dropbear version string below threshold."""
+    return _find_outdated_version(strings, _DROPBEAR_RE, "dropbear", "outdated_dropbear")
+
+
+def has_outdated_dropbear(strings: list[str]) -> bool:
+    """Return True if a Dropbear version string below threshold is found."""
+    return bool(find_outdated_dropbear(strings))
+
+
+# ---------------------------------------------------------------------------
+# URL and token patterns
+# ---------------------------------------------------------------------------
+
+_URL_RE = re.compile(r"https?://[^\s\"'<>]+", re.IGNORECASE)
+_API_TOKEN_RE = re.compile(
+    r"(?<![A-Za-z0-9])(?:[0-9a-fA-F]{32,}|[A-Za-z0-9+/=_\-]{32,})(?![A-Za-z0-9])"
+)
+
+
+def find_urls(strings: list[str]) -> list[SecurityFinding]:
+    """Find HTTP/HTTPS URLs across all strings."""
+    findings: list[SecurityFinding] = []
+    for s in strings:
+        for m in _URL_RE.finditer(s):
+            findings.append(
+                SecurityFinding(
+                    type="url",
+                    source=s,
+                    context=f"URL: {m.group(0)}",
+                    confidence="low",
+                    detector="urls",
+                    detector_version=_DETECTOR_VERSION,
+                )
+            )
+    return findings
+
+
+def count_urls(strings: list[str]) -> int:
+    """Count HTTP/HTTPS URLs found across all strings."""
+    return len(find_urls(strings))
+
+
+def find_api_tokens(strings: list[str]) -> list[SecurityFinding]:
+    """Find long hex or base64-like tokens (32+ chars) across all strings."""
+    findings: list[SecurityFinding] = []
+    for s in strings:
+        for m in _API_TOKEN_RE.finditer(s):
+            findings.append(
+                SecurityFinding(
+                    type="api_token_candidate",
+                    source=s,
+                    context=f"long token: {m.group(0)[:12]}…",
+                    confidence="low",
+                    detector="api_tokens",
+                    detector_version=_DETECTOR_VERSION,
+                )
+            )
+    return findings
+
+
+def count_api_tokens(strings: list[str]) -> int:
+    """Count long hex or base64-like tokens (32+ chars) across all strings."""
+    return len(find_api_tokens(strings))
