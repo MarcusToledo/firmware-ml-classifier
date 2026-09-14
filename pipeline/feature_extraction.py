@@ -15,8 +15,14 @@ from typing import Any, Union, cast
 import yaml
 from gensim.models import Doc2Vec
 
-from src.evidence.binwalk_findings import count_crypto_signatures, has_encrypted_sections
-from src.evidence.patterns import scan_strings
+from src.evidence.binwalk_findings import (
+    count_crypto_signatures,
+    find_crypto_signatures,
+    find_encrypted_sections,
+    has_encrypted_sections,
+)
+from src.evidence.findings import SecurityFinding
+from src.evidence.patterns import scan_strings, scan_strings_findings
 from src.feature_extraction import FeatureConfig, combine_features, extract_features
 from src.features.binwalk import (
     count_filesystems,
@@ -77,6 +83,7 @@ class PipelineResult:
     firmware_id: str | None
     features: dict[str, FeatureValue]
     metadata: dict[str, Any]
+    findings: list[SecurityFinding]
 
 
 def apply_overrides(
@@ -234,6 +241,14 @@ def extract_features_from_path(
     # montar o documento do doc2vec, e ela e vazia quando read_ok e False.
     features.update(scan_strings(feature_vector.strings))
 
+    # Structured security evidence — auditable achados (SecurityFinding),
+    # alem das contagens ja usadas como feature. Reusa feature_vector.strings
+    # e descriptions ja extraidos, sem rodar deteccao duas vezes.
+    findings: list[SecurityFinding] = []
+    findings.extend(scan_strings_findings(feature_vector.strings))
+    findings.extend(find_crypto_signatures(descriptions))
+    findings.extend(find_encrypted_sections(descriptions))
+
     metadata = {
         "read_ok": read_ok,
         "byte_len": len(data),
@@ -253,6 +268,7 @@ def extract_features_from_path(
         firmware_id=firmware_id,
         features=features,
         metadata=metadata,
+        findings=findings,
     )
 
 
@@ -282,6 +298,7 @@ def _build_error_result(
             "model": model_name,
             "label": label,
         },
+        findings=[],
     )
 
 

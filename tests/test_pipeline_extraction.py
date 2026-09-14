@@ -238,3 +238,32 @@ def test_extract_features_with_mocked_binwalk(tmp_path: Path) -> None:
     assert result.features["has_encrypted_sections"] is True
     assert result.features["fs_type"] == "squashfs"
     assert result.features["compression_type"] == "gzip"
+
+
+def test_extract_features_from_path_includes_structured_findings(
+    tmp_path: Path,
+) -> None:
+    """PipelineResult carrega achados estruturados, nao so contagens."""
+    firmware_path = tmp_path / "firmware.bin"
+    firmware_path.write_bytes(b"password=admin telnetd")
+
+    config = load_pipeline_config(tmp_path / "missing.yaml", overrides={})
+    result = extract_features_from_path(firmware_path, config, model=None)
+
+    assert isinstance(result.findings, list)
+    detectors = {f.detector for f in result.findings}
+    assert "hardcoded_passwords" in detectors
+    assert "telnetd" in detectors
+
+
+def test_extract_features_from_path_empty_file_has_no_findings(
+    tmp_path: Path,
+) -> None:
+    """Erro de leitura nao deve quebrar o campo findings (fica vazio)."""
+    firmware_path = tmp_path / "empty.bin"
+    firmware_path.write_bytes(b"")
+
+    config = load_pipeline_config(tmp_path / "missing.yaml", overrides={})
+    result = extract_features_from_path(firmware_path, config, model=None)
+
+    assert result.findings == []
