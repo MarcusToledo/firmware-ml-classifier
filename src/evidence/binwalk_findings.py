@@ -1,10 +1,11 @@
-"""Security findings derived from Binwalk signature descriptions.
+"""Achados de segurança derivados das descrições de assinatura do Binwalk.
 
-Consumes the ``list[str]`` of description lines Binwalk already produced
-(see ``pipeline/feature_extraction.py``'s ``_extract_binwalk_descriptions``)
-— it never runs Binwalk itself, only interprets its output for security
-evidence. Structural (non-security) Binwalk signals — filesystem type,
-compression type, filesystem count — stay in ``src/features/binwalk.py``.
+Recebe a ``list[str]`` de linhas de descrição que o Binwalk já produziu (ver
+``_extract_binwalk_descriptions`` em ``pipeline/feature_extraction.py``).
+Nunca roda o Binwalk em si, só interpreta a saída dele em busca de evidência
+de segurança. Sinais estruturais (não relacionados a segurança) do Binwalk,
+como tipo de filesystem, tipo de compressão e contagem de filesystems,
+ficam em ``src/features/binwalk.py``.
 """
 from __future__ import annotations
 
@@ -26,7 +27,7 @@ _ENCRYPTED_RE = re.compile(
 
 
 def find_crypto_signatures(descriptions: list[str]) -> list[SecurityFinding]:
-    """Find Binwalk descriptions mentioning cryptographic constructs."""
+    """Encontra descrições do Binwalk que mencionam construções criptográficas."""
     findings: list[SecurityFinding] = []
     for d in descriptions:
         m = _CRYPTO_RE.search(d)
@@ -45,12 +46,12 @@ def find_crypto_signatures(descriptions: list[str]) -> list[SecurityFinding]:
 
 
 def count_crypto_signatures(descriptions: list[str]) -> int:
-    """Count descriptions that mention cryptographic constructs."""
+    """Conta descrições que mencionam construções criptográficas."""
     return len(find_crypto_signatures(descriptions))
 
 
 def find_encrypted_sections(descriptions: list[str]) -> list[SecurityFinding]:
-    """Find Binwalk descriptions suggesting encrypted content."""
+    """Encontra descrições do Binwalk que sugerem conteúdo criptografado."""
     findings: list[SecurityFinding] = []
     for d in descriptions:
         m = _ENCRYPTED_RE.search(d)
@@ -69,5 +70,5 @@ def find_encrypted_sections(descriptions: list[str]) -> list[SecurityFinding]:
 
 
 def has_encrypted_sections(descriptions: list[str]) -> bool:
-    """Return True if any description suggests encrypted content."""
+    """Retorna True se alguma descrição sugerir conteúdo criptografado."""
     return bool(find_encrypted_sections(descriptions))

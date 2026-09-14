@@ -1,10 +1,11 @@
-"""Pure parsing helpers for Binwalk signature descriptions.
+"""Helpers puros para parsear descrições de assinatura do Binwalk.
 
-All functions receive a ``list[str]`` of description lines (as returned by
-``binwalk.scan``) and perform regex-based matching — no dependency on binwalk3
-itself. Security-oriented signals (crypto signatures, encrypted sections)
-live in ``src/evidence/binwalk_findings.py`` — this module keeps only
-structural (non-security) signals.
+Todas as funções recebem uma ``list[str]`` de linhas de descrição (como as
+retornadas por ``binwalk.scan``) e fazem matching baseado em regex, sem
+dependência do binwalk3 em si. Sinais orientados a segurança (assinaturas
+de cripto, seções criptografadas) ficam em
+``src/evidence/binwalk_findings.py``; este módulo mantém só os sinais
+estruturais (não relacionados a segurança).
 """
 from __future__ import annotations
 
@@ -23,12 +24,12 @@ _COMPRESSION_RE = re.compile(
 
 
 def count_filesystems(descriptions: list[str]) -> int:
-    """Count descriptions that mention a known filesystem type."""
+    """Conta descrições que mencionam um tipo de filesystem conhecido."""
     return sum(1 for d in descriptions if _FS_RE.search(d))
 
 
 def detect_fs_type(descriptions: list[str]) -> str | None:
-    """Return the most frequently mentioned filesystem, or None."""
+    """Retorna o filesystem mencionado com mais frequência, ou None."""
     matches: list[str] = []
     for d in descriptions:
         m = _FS_RE.search(d)
@@ -41,7 +42,7 @@ def detect_fs_type(descriptions: list[str]) -> str | None:
 
 
 def detect_compression_type(descriptions: list[str]) -> str | None:
-    """Return the first compression algorithm mentioned, or None."""
+    """Retorna o primeiro algoritmo de compressão mencionado, ou None."""
     for d in descriptions:
         m = _COMPRESSION_RE.search(d)
         if m:

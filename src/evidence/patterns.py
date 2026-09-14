@@ -1,13 +1,12 @@
-"""Security evidence detectors over already-extracted ASCII strings.
+"""Detectores de evidência de segurança sobre strings ASCII já extraídas.
 
-Every function here consumes a ``list[str]`` of strings (as returned by
-``src.features.strings.extract_ascii_strings``) — it never re-extracts
-strings from a firmware image itself, only interprets what
-``src/features/*`` already extracted. Each detector exposes two views of
-the same match: a ``find_*`` function returning structured
-``SecurityFinding`` objects (for audit and per-detector precision/recall
-evaluation), and a ``count_*``/``has_*`` function returning the flat
-count/flag used as a classifier feature.
+Cada função aqui recebe uma ``list[str]`` de strings (como as retornadas por
+``src.features.strings.extract_ascii_strings``). Nunca extrai strings novas
+do firmware, só interpreta o que ``src/features/*`` já extraiu. Cada detector
+expõe duas visões do mesmo match: uma função ``find_*`` retornando objetos
+``SecurityFinding`` estruturados (para auditoria e avaliação de
+precisão/revocação por detector), e uma função ``count_*``/``has_*``
+retornando a contagem/flag achatada usada como feature do classificador.
 """
 
 from __future__ import annotations
@@ -19,7 +18,7 @@ from src.evidence.findings import SecurityFinding
 _DETECTOR_VERSION = "1.0"
 
 # ---------------------------------------------------------------------------
-# Password patterns
+# Padrões de senha
 # ---------------------------------------------------------------------------
 
 _PASSWORD_KV_RE = re.compile(
@@ -56,12 +55,12 @@ _DEFAULT_PASSWORDS: frozenset[str] = frozenset(
 
 
 def find_hardcoded_passwords(strings: list[str]) -> list[SecurityFinding]:
-    """Find strings that contain hardcoded credentials.
+    """Encontra strings que contêm credenciais hardcoded.
 
-    Matches both key=value patterns (``password=admin``, high confidence)
-    and bare occurrences of well-known default passwords (medium
-    confidence). At most one finding per string, mirroring the original
-    count semantics.
+    Casa tanto padrões key=value (``password=admin``, confiança alta)
+    quanto ocorrências avulsas de senhas padrão conhecidas (confiança
+    média). No máximo um achado por string, preservando a semântica de
+    contagem original.
     """
     findings: list[SecurityFinding] = []
     for s in strings:
@@ -95,12 +94,12 @@ def find_hardcoded_passwords(strings: list[str]) -> list[SecurityFinding]:
 
 
 def count_hardcoded_passwords(strings: list[str]) -> int:
-    """Count strings that contain hardcoded credentials."""
+    """Conta strings que contêm credenciais hardcoded."""
     return len(find_hardcoded_passwords(strings))
 
 
 # ---------------------------------------------------------------------------
-# Credential pair patterns (user:pass where both are weak defaults)
+# Pares de credenciais (user:pass onde ambos os lados são fracos/padrão)
 # ---------------------------------------------------------------------------
 
 _CRED_PAIR_RE = re.compile(r"\b([A-Za-z0-9]{1,20}):([A-Za-z0-9]{1,20})\b")
@@ -133,12 +132,12 @@ _CRED_PAIR_WEAK: frozenset[str] = frozenset(
 
 
 def find_credential_pairs(strings: list[str]) -> list[SecurityFinding]:
-    """Find strings containing colon-separated weak credential pairs.
+    """Encontra strings com pares de credenciais fracas separados por dois-pontos.
 
-    Matches patterns like ``admin:admin`` or ``root:1234`` where both
-    sides are in the known weak/default set. At most one finding per
-    string (a string with multiple pairs still counts once), mirroring
-    the original count semantics.
+    Casa padrões como ``admin:admin`` ou ``root:1234`` onde os dois lados
+    estão no conjunto conhecido de valores fracos/padrão. No máximo um
+    achado por string (uma string com múltiplos pares ainda conta uma vez),
+    preservando a semântica de contagem original.
     """
     findings: list[SecurityFinding] = []
     for s in strings:
@@ -162,12 +161,12 @@ def find_credential_pairs(strings: list[str]) -> list[SecurityFinding]:
 
 
 def count_credential_pairs(strings: list[str]) -> int:
-    """Count strings containing colon-separated weak credential pairs."""
+    """Conta strings com pares de credenciais fracas separados por dois-pontos."""
     return len(find_credential_pairs(strings))
 
 
 # ---------------------------------------------------------------------------
-# IP address patterns
+# Padrões de endereço IP
 # ---------------------------------------------------------------------------
 
 _IPV4_RE = re.compile(r"\b(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\b")
@@ -175,7 +174,7 @@ _IP_EXCLUDES: frozenset[str] = frozenset({"0.0.0.0", "255.255.255.255"})
 
 
 def find_hardcoded_ips(strings: list[str]) -> list[SecurityFinding]:
-    """Find strings that contain valid non-excluded IPv4 addresses."""
+    """Encontra strings que contêm endereços IPv4 válidos e não excluídos."""
     findings: list[SecurityFinding] = []
     for s in strings:
         for m in _IPV4_RE.finditer(s):
@@ -201,16 +200,16 @@ def find_hardcoded_ips(strings: list[str]) -> list[SecurityFinding]:
 
 
 def count_hardcoded_ips(strings: list[str]) -> int:
-    """Count strings that contain valid non-excluded IPv4 addresses."""
+    """Conta strings que contêm endereços IPv4 válidos e não excluídos."""
     return len(find_hardcoded_ips(strings))
 
 
 def find_public_ips(strings: list[str]) -> list[SecurityFinding]:
-    """Find strings containing hardcoded public (non-RFC-1918) IPv4 addresses.
+    """Encontra strings com IPv4 público hardcoded (fora do RFC-1918).
 
-    Excludes loopback, link-local, RFC-1918 private ranges, multicast and
-    reserved/broadcast. Public IPs hardcoded in firmware are high-confidence
-    indicators of C2 or telemetry endpoints.
+    Exclui loopback, link-local, ranges privados do RFC-1918, multicast e
+    reservado/broadcast. IPs públicos hardcoded em firmware são indicadores
+    de alta confiança de endpoints de C2 ou telemetria.
     """
     findings: list[SecurityFinding] = []
     for s in strings:
@@ -249,12 +248,12 @@ def find_public_ips(strings: list[str]) -> list[SecurityFinding]:
 
 
 def count_public_ips(strings: list[str]) -> int:
-    """Count strings containing hardcoded public (non-RFC-1918) IPv4 addresses."""
+    """Conta strings com IPv4 público hardcoded (fora do RFC-1918)."""
     return len(find_public_ips(strings))
 
 
 # ---------------------------------------------------------------------------
-# Service / account patterns
+# Padrões de serviço / conta
 # ---------------------------------------------------------------------------
 
 _TELNETD_SUBSTR = "telnetd"
@@ -262,7 +261,7 @@ _DEBUG_ACCOUNT_RE = re.compile(r"\b(?:debug|guest|test)\b", re.IGNORECASE)
 
 
 def find_telnetd(strings: list[str]) -> list[SecurityFinding]:
-    """Find strings that contain the substring 'telnetd'."""
+    """Encontra strings que contêm a substring 'telnetd'."""
     return [
         SecurityFinding(
             type="exposed_service",
@@ -278,12 +277,12 @@ def find_telnetd(strings: list[str]) -> list[SecurityFinding]:
 
 
 def has_telnetd(strings: list[str]) -> bool:
-    """Return True if any string contains the substring 'telnetd'."""
+    """Retorna True se alguma string contém a substring 'telnetd'."""
     return bool(find_telnetd(strings))
 
 
 def find_debug_account(strings: list[str]) -> list[SecurityFinding]:
-    """Find strings that contain a debug/guest/test account keyword."""
+    """Encontra strings com palavra-chave de conta debug/guest/test."""
     findings: list[SecurityFinding] = []
     for s in strings:
         m = _DEBUG_ACCOUNT_RE.search(s)
@@ -302,28 +301,28 @@ def find_debug_account(strings: list[str]) -> list[SecurityFinding]:
 
 
 def has_debug_account(strings: list[str]) -> bool:
-    """Return True if any string contains a debug/guest/test account name."""
+    """Retorna True se alguma string contém nome de conta debug/guest/test."""
     return bool(find_debug_account(strings))
 
 
 # ---------------------------------------------------------------------------
-# Library version patterns
+# Padrões de versão de biblioteca
 # ---------------------------------------------------------------------------
 
 _LIBSSL_RE = re.compile(r"OpenSSL[\s/]+([\d]+\.[\d]+\.[\d]+[a-z]?)", re.IGNORECASE)
 _BUSYBOX_RE = re.compile(r"BusyBox[\s_]*v?([\d]+\.[\d]+\.[\d]+)", re.IGNORECASE)
 _DROPBEAR_RE = re.compile(r"Dropbear\s+(?:SSH\s+)?v?([\d]{4}\.[\d]+)", re.IGNORECASE)
 _VERSION_THRESHOLDS: dict[str, tuple[int, ...]] = {
-    "libssl": (1, 1, 1),  # < OpenSSL 1.1.1 → outdated
-    "busybox": (1, 33, 0),  # < BusyBox 1.33.0 → outdated
-    "dropbear": (2022, 82),  # < Dropbear 2022.82 → outdated
+    "libssl": (1, 1, 1),  # < OpenSSL 1.1.1 → desatualizado
+    "busybox": (1, 33, 0),  # < BusyBox 1.33.0 → desatualizado
+    "dropbear": (2022, 82),  # < Dropbear 2022.82 → desatualizado
 }
 
 
 def _parse_version(v: str) -> tuple[int, ...]:
-    """Parse a dotted version string into a tuple of ints.
+    """Converte uma string de versão com pontos em uma tupla de inteiros.
 
-    Examples::
+    Exemplos::
 
         _parse_version("1.1.1a") -> (1, 1, 1)
         _parse_version("2022.82") -> (2022, 82)
@@ -342,7 +341,7 @@ def _find_outdated_version(
     lib_name: str,
     detector: str,
 ) -> list[SecurityFinding]:
-    """Shared scan used by the three outdated-library detectors below."""
+    """Varredura compartilhada pelos três detectores de lib desatualizada abaixo."""
     threshold = _VERSION_THRESHOLDS[lib_name]
     findings: list[SecurityFinding] = []
     for s in strings:
@@ -367,39 +366,39 @@ def _find_outdated_version(
 
 
 def find_outdated_libssl(strings: list[str]) -> list[SecurityFinding]:
-    """Find strings with an OpenSSL version string below threshold."""
+    """Encontra strings com versão do OpenSSL abaixo do limiar."""
     return _find_outdated_version(strings, _LIBSSL_RE, "libssl", "outdated_libssl")
 
 
 def has_outdated_libssl(strings: list[str]) -> bool:
-    """Return True if an OpenSSL version string below threshold is found."""
+    """Retorna True se uma versão do OpenSSL abaixo do limiar for encontrada."""
     return bool(find_outdated_libssl(strings))
 
 
 def find_outdated_busybox(strings: list[str]) -> list[SecurityFinding]:
-    """Find strings with a BusyBox version string below threshold."""
+    """Encontra strings com versão do BusyBox abaixo do limiar."""
     return _find_outdated_version(strings, _BUSYBOX_RE, "busybox", "outdated_busybox")
 
 
 def has_outdated_busybox(strings: list[str]) -> bool:
-    """Return True if a BusyBox version string below threshold is found."""
+    """Retorna True se uma versão do BusyBox abaixo do limiar for encontrada."""
     return bool(find_outdated_busybox(strings))
 
 
 def find_outdated_dropbear(strings: list[str]) -> list[SecurityFinding]:
-    """Find strings with a Dropbear version string below threshold."""
+    """Encontra strings com versão do Dropbear abaixo do limiar."""
     return _find_outdated_version(
         strings, _DROPBEAR_RE, "dropbear", "outdated_dropbear"
     )
 
 
 def has_outdated_dropbear(strings: list[str]) -> bool:
-    """Return True if a Dropbear version string below threshold is found."""
+    """Retorna True se uma versão do Dropbear abaixo do limiar for encontrada."""
     return bool(find_outdated_dropbear(strings))
 
 
 # ---------------------------------------------------------------------------
-# URL and token patterns
+# Padrões de URL e token
 # ---------------------------------------------------------------------------
 
 _URL_RE = re.compile(r"https?://[^\s\"'<>]+", re.IGNORECASE)
@@ -409,7 +408,7 @@ _API_TOKEN_RE = re.compile(
 
 
 def find_urls(strings: list[str]) -> list[SecurityFinding]:
-    """Find HTTP/HTTPS URLs across all strings."""
+    """Encontra URLs HTTP/HTTPS em todas as strings."""
     findings: list[SecurityFinding] = []
     for s in strings:
         for m in _URL_RE.finditer(s):
@@ -427,12 +426,12 @@ def find_urls(strings: list[str]) -> list[SecurityFinding]:
 
 
 def count_urls(strings: list[str]) -> int:
-    """Count HTTP/HTTPS URLs found across all strings."""
+    """Conta URLs HTTP/HTTPS encontradas em todas as strings."""
     return len(find_urls(strings))
 
 
 def find_api_tokens(strings: list[str]) -> list[SecurityFinding]:
-    """Find long hex or base64-like tokens (32+ chars) across all strings."""
+    """Encontra tokens longos hex ou base64-like (32+ chars) nas strings."""
     findings: list[SecurityFinding] = []
     for s in strings:
         for m in _API_TOKEN_RE.finditer(s):
@@ -450,12 +449,12 @@ def find_api_tokens(strings: list[str]) -> list[SecurityFinding]:
 
 
 def count_api_tokens(strings: list[str]) -> int:
-    """Count long hex or base64-like tokens (32+ chars) across all strings."""
+    """Conta tokens longos hex ou base64-like (32+ chars) nas strings."""
     return len(find_api_tokens(strings))
 
 
 # ---------------------------------------------------------------------------
-# Aggregate scan: structured findings and flat counts
+# Varredura agregada: achados estruturados e contagens achatadas
 # ---------------------------------------------------------------------------
 
 _COUNT_DETECTORS: dict[str, str] = {
@@ -477,11 +476,10 @@ _BOOL_DETECTORS: dict[str, str] = {
 
 
 def scan_strings_findings(strings: list[str]) -> list[SecurityFinding]:
-    """Run every detector over ``strings`` and return all findings.
+    """Roda todos os detectores sobre ``strings`` e retorna todos os achados.
 
-    This is the auditable output: every match, with source/context/
-    confidence, for manual review and per-detector precision/recall
-    evaluation.
+    Esta é a saída auditável: cada match, com origem/contexto/confiança,
+    para revisão manual e avaliação de precisão/revocação por detector.
     """
     findings: list[SecurityFinding] = []
     findings.extend(find_hardcoded_passwords(strings))
@@ -499,7 +497,7 @@ def scan_strings_findings(strings: list[str]) -> list[SecurityFinding]:
 
 
 def findings_to_counts(findings: list[SecurityFinding]) -> dict[str, int | bool]:
-    """Reduce structured findings to the flat counts/flags used as features."""
+    """Reduz achados estruturados às contagens/flags achatadas usadas como feature."""
     counts: dict[str, int | bool] = {key: 0 for key in _COUNT_DETECTORS.values()}
     counts.update({key: False for key in _BOOL_DETECTORS.values()})
     for finding in findings:
@@ -512,11 +510,11 @@ def findings_to_counts(findings: list[SecurityFinding]) -> dict[str, int | bool]
 
 
 def scan_strings(strings: list[str]) -> dict[str, int | bool]:
-    """Run all pattern checks and return a flat feature dict.
+    """Roda todos os detectores e retorna um dicionário de features achatado.
 
-    Backward-compatible view over ``scan_strings_findings`` +
-    ``findings_to_counts`` — same keys/semantics as the pre-evidence-layer
-    implementation. Keys returned:
+    Visão compatível com versões anteriores sobre ``scan_strings_findings``
+    + ``findings_to_counts``, com as mesmas chaves e semântica da
+    implementação anterior à camada de evidências. Chaves retornadas:
         count_hardcoded_passwords, count_credential_pairs,
         count_hardcoded_ips, count_public_ips,
         has_telnetd, has_debug_account,
