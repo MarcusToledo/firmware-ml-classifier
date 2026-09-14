@@ -6,17 +6,21 @@ de Engenharia de Software focado em classificação automatizada de
 firmwares embarcados usando análise estática e aprendizado de máquina.
 
 ## Objetivos
-- Classificar firmware por fabricante (supervisionado).
-- Extrair features estatisticas de binarios (entropia, media de bytes, compress_ratio).
-- Extrair strings ASCII e embeddings Doc2Vec para features semânticas.
-- Treinar modelos Extra Trees (principal) e Random Forest (baseline).
+- Classificar firmwares por classe de vulnerabilidade conhecida: `sem_cve_conhecida`,
+  `cve_conhecida` ou `cve_critica`. A ausência de CVE conhecida não prova segurança.
+- Gerar rótulos apenas a partir do cache de CVE consultado por fabricante/modelo.
+- Extrair features estatísticas, strings ASCII, evidências de segurança e embeddings
+  Doc2Vec, sem incluir fabricante/modelo nem campos CVE no vetor do classificador.
+- Comparar Extra Trees (modelo principal), Random Forest (baseline ML) e o
+  baseline determinístico de regras de `src/scoring.py`.
 
 ## Pipeline experimental
-1. Coleta e organização de dataset por fabricante.
-2. Extração de features estatísticas e strings.
-3. Treino de embeddings Doc2Vec (DM/DBOW) por firmware.
-4. Treino e avaliação de modelos supervisionados.
-5. Geração de métricas e relatórios.
+1. Organizar o dataset e preservar fabricante/modelo como metadados de consulta.
+2. Extrair features estatísticas, strings, evidências estruturadas e Binwalk.
+3. Treinar embeddings Doc2Vec (DM/DBOW) por firmware.
+4. Consultar CVEs por fabricante/modelo e gerar rótulos em etapa separada.
+5. Treinar e avaliar os modelos supervisionados com rótulos CVE, sem vazamento.
+6. Gerar métricas e relatórios reprodutíveis.
 
 ## Como executar
 Instalar dependências (cria `.venv` e resolve a partir de `pyproject.toml`/`uv.lock`):
@@ -41,25 +45,23 @@ Extrair features via CLI instalada:
 
 > **`--label-from-path`**: para montar o dataset de treino, adicione essa flag aos comandos
 > acima (ex.: `... --output dataset/processed/features.parquet --label-from-path`).
-> O pipeline (`pipeline/feature_extraction.py`) já infere `brand`/`model`/`label` a partir do
-> path `dataset/raw/<brand>/<model>/...`, mas `scripts/extract_features.py` **zera esses campos
-> por padrão** (para não vazar rótulo em extrações de inferência/produção). Sem a flag,
-> `meta_brand`/`meta_model` saem `None` em 100% das linhas, o que quebra silenciosamente o
-> merge com o cache de CVE em `generate_labels.py` e impede qualquer firmware de ser
-> classificado como `critico` (o sinal de CVE tem peso 0.45, o maior, e é o único caminho de
-> escalonamento direto para `critico`).
+> O pipeline infere `brand`/`model` a partir do caminho
+> `dataset/raw/<brand>/<model>/...`, mas o CLI omite esses metadados por padrão.
+> A flag é necessária para consultar CVEs. Sem metadados ou sem entrada no cache,
+> `generate-labels` falha com contexto; não inventa um rótulo negativo.
 
-Gerar cache de CVEs por fabricante/modelo (opcional, mas necessário para labels `critico`):
+Gerar cache de CVEs por fabricante/modelo (obrigatório para rotulagem):
 - `uv run python scripts/fetch_cves.py --features dataset/processed/features.parquet --output dataset/cve_cache.json`
 - Usa a API pública da NVD v2.0; sem `NVD_API_KEY` no ambiente, o delay entre requisições é de
   6s (1s com a key). Pares já presentes no cache são pulados automaticamente (use `--force`
   para refazer). `--dry-run` lista os pares vendor/model sem fazer requisições.
 
-Gerar labels de segurança a partir das features (+ CVEs, se disponíveis):
-- `uv run python scripts/generate_labels.py --features dataset/processed/features.parquet --cves dataset/cve_cache.json --config configs/scoring.yaml --output dataset/labels.csv`
-- Classifica cada firmware em `seguro` / `vulneravel` / `critico` combinando sinais de stats,
-  strings suspeitas, binwalk e CVE (pesos em `configs/scoring.yaml`). `--dry-run` mostra a
-  distribuição de classes sem salvar.
+Gerar rótulos a partir do cache de CVEs:
+- `uv run python scripts/generate_labels.py --features dataset/processed/features.parquet --cves dataset/cve_cache.json --output dataset/labels.csv`
+- `--critical-cvss` ajusta o limiar crítico (padrão: 9.0); `--dry-run` mostra a
+  distribuição sem salvar. As features são lidas apenas para obter IDs e metadados.
+- O cache atual usa consulta por fabricante/modelo, sem filtrar a versão exata do
+  firmware. Essa limitação deve ser considerada ao interpretar os rótulos.
 
 Inspecionar tokens usados no Doc2Vec:
 - `uv run python scripts/inspect_tokens.py --config configs/feature_extraction.yaml --input dataset/raw/ --limit 50 --max-docs 20`
@@ -110,6 +112,17 @@ src/features/doc2vec:
 - `build_corpus`, `train_doc2vec`: treino de Doc2Vec.
 - `infer_embedding`: inferencia de embeddings.
 - `save_doc2vec`, `load_doc2vec`: persistencia de modelos.
+
+src/evidence:
+- `SecurityFinding`: achado auditável com origem, contexto, confiança e detector.
+- `scan_strings_findings`: achados em strings ASCII já extraídas.
+- `find_crypto_signatures`, `find_encrypted_sections`: achados de Binwalk.
+
+src/labeling/cve_labels:
+- `label_from_cve_stats`: converte estatísticas CVE externas em classe de treino.
+
+src/scoring:
+- `score_firmware`: baseline determinístico de comparação, sem campos CVE.
 
 src/feature_extraction:
 - `extract_features`: extracao completa (stats + embedding).
