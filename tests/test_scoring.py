@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.labeling.cve_labels import LABEL_CRITICAL_CVE, LABEL_NO_KNOWN_CVE
+from src.labeling.cve_labels import (
+    LABEL_CRITICAL_CVE,
+    LABEL_KNOWN_CVE,
+    LABEL_NO_KNOWN_CVE,
+)
 from src.scoring import (
     ScoringConfig,
     ThresholdConfig,
@@ -78,8 +82,8 @@ def test_deterministic_same_inputs_same_result() -> None:
     assert r1.numeric_score == r2.numeric_score
 
 
-def test_hard_rule_telnetd_overrides_to_vulneravel() -> None:
-    """has_telnetd=True forces minimum 'vulneravel' regardless of score."""
+def test_hard_rule_telnetd_overrides_to_known_cve() -> None:
+    """has_telnetd=True forces minimum LABEL_KNOWN_CVE regardless of score."""
     features = {
         "entropy": 4.0,
         "byte_mean": 127.5,
@@ -87,12 +91,12 @@ def test_hard_rule_telnetd_overrides_to_vulneravel() -> None:
         "has_telnetd": True,
     }
     result = score_firmware(features, DEFAULT_CONFIG)
-    assert result.level in ("cve_conhecida", "cve_critica")
+    assert result.level in (LABEL_KNOWN_CVE, LABEL_CRITICAL_CVE)
     assert result.hard_rule_applied == "has_telnetd"
 
 
 def test_hard_rule_debug_account() -> None:
-    """has_debug_account=True forces minimum 'vulneravel'."""
+    """has_debug_account=True forces minimum LABEL_KNOWN_CVE."""
     features = {
         "entropy": 4.0,
         "byte_mean": 127.5,
@@ -100,13 +104,13 @@ def test_hard_rule_debug_account() -> None:
         "has_debug_account": True,
     }
     result = score_firmware(features, DEFAULT_CONFIG)
-    assert result.level in ("cve_conhecida", "cve_critica")
+    assert result.level in (LABEL_KNOWN_CVE, LABEL_CRITICAL_CVE)
     assert result.hard_rule_applied == "has_debug_account"
 
 
 def test_hard_rule_hardcoded_passwords() -> None:
-    """count_hardcoded_passwords > 0 forces minimum 'vulneravel'."""
-    # Low stats score alone → "sem_cve_conhecida", but hard rule escalates
+    """count_hardcoded_passwords > 0 forces minimum LABEL_KNOWN_CVE."""
+    # Low stats score alone → LABEL_NO_KNOWN_CVE, but hard rule escalates
     features = {
         "entropy": 4.0,
         "byte_mean": 127.5,
@@ -114,31 +118,31 @@ def test_hard_rule_hardcoded_passwords() -> None:
         "count_hardcoded_passwords": 1,
     }
     result = score_firmware(features, DEFAULT_CONFIG)
-    assert result.level in ("cve_conhecida", "cve_critica")
+    assert result.level in (LABEL_KNOWN_CVE, LABEL_CRITICAL_CVE)
     # The strings signal score pulls the weighted average up, so the level
-    # may already be >= vulneravel from the score alone. Verify the label
-    # is correct regardless of whether the hard rule was the cause.
-    assert result.level != "sem_cve_conhecida"
+    # may already be >= LABEL_KNOWN_CVE from the score alone. Verify the
+    # label is correct regardless of whether the hard rule was the cause.
+    assert result.level != LABEL_NO_KNOWN_CVE
 
 
-def test_no_signals_returns_seguro() -> None:
-    """Firmware with no recognised features defaults to 'seguro'."""
+def test_no_signals_returns_no_known_cve() -> None:
+    """Firmware with no recognised features defaults to LABEL_NO_KNOWN_CVE."""
     features = {"unknown_feature": 42}
     result = score_firmware(features, DEFAULT_CONFIG)
-    assert result.level == "sem_cve_conhecida"
+    assert result.level == LABEL_NO_KNOWN_CVE
     assert result.numeric_score == 0.0
     assert result.hard_rule_applied is None
 
 
-def test_empty_features_returns_seguro() -> None:
-    """Empty feature dict defaults to 'seguro'."""
+def test_empty_features_returns_no_known_cve() -> None:
+    """Empty feature dict defaults to LABEL_NO_KNOWN_CVE."""
     result = score_firmware({}, DEFAULT_CONFIG)
-    assert result.level == "sem_cve_conhecida"
+    assert result.level == LABEL_NO_KNOWN_CVE
     assert result.numeric_score == 0.0
 
 
-def test_high_score_maps_to_critico() -> None:
-    """Features that produce a high score should map to 'critico'."""
+def test_high_score_maps_to_critical_cve() -> None:
+    """Features that produce a high score should map to LABEL_CRITICAL_CVE."""
     features = {
         "entropy": 7.99,
         "compress_ratio": 0.999,
@@ -148,11 +152,11 @@ def test_high_score_maps_to_critico() -> None:
     }
     result = score_firmware(features, DEFAULT_CONFIG)
     assert result.numeric_score >= 0.60
-    assert result.level == "cve_critica"
+    assert result.level == LABEL_CRITICAL_CVE
 
 
-def test_low_risk_maps_to_seguro() -> None:
-    """Low-risk features should map to 'seguro'."""
+def test_low_risk_maps_to_no_known_cve() -> None:
+    """Low-risk features should map to LABEL_NO_KNOWN_CVE."""
     features = {
         "entropy": 5.0,
         "byte_mean": 127.5,
@@ -160,7 +164,7 @@ def test_low_risk_maps_to_seguro() -> None:
     }
     result = score_firmware(features, DEFAULT_CONFIG)
     assert result.numeric_score < 0.20
-    assert result.level == "sem_cve_conhecida"
+    assert result.level == LABEL_NO_KNOWN_CVE
 
 
 def test_custom_thresholds() -> None:
@@ -171,7 +175,7 @@ def test_custom_thresholds() -> None:
     )
     result = score_firmware(features, strict_config)
     # With stricter thresholds, same features should be more severe
-    assert result.level in ("cve_conhecida", "cve_critica")
+    assert result.level in (LABEL_KNOWN_CVE, LABEL_CRITICAL_CVE)
 
 
 def test_signals_breakdown_present() -> None:
@@ -193,7 +197,7 @@ def test_hard_rule_does_not_downgrade() -> None:
         "has_telnetd": True,
     }
     result = score_firmware(features, DEFAULT_CONFIG)
-    assert result.level == "cve_critica"
+    assert result.level == LABEL_CRITICAL_CVE
 
 
 def test_binwalk_features_contribute() -> None:
