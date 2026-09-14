@@ -1,9 +1,7 @@
 from src.features.binwalk import (
-    count_crypto_signatures,
     count_filesystems,
     detect_compression_type,
     detect_fs_type,
-    has_encrypted_sections,
 )
 
 # -- count_filesystems -------------------------------------------------------
@@ -24,46 +22,6 @@ def test_count_filesystems_matches() -> None:
 
 def test_count_filesystems_case_insensitive() -> None:
     assert count_filesystems(["CRAMFS filesystem"]) == 1
-
-
-# -- count_crypto_signatures -------------------------------------------------
-
-
-def test_count_crypto_signatures_empty() -> None:
-    assert count_crypto_signatures([]) == 0
-
-
-def test_count_crypto_signatures_matches() -> None:
-    descriptions = [
-        "AES encrypted data",
-        "RSA public key",
-        "private key",
-        "Squashfs filesystem",
-    ]
-    assert count_crypto_signatures(descriptions) == 3
-
-
-def test_count_crypto_signatures_certificate() -> None:
-    assert count_crypto_signatures(["X.509 certificate"]) == 1
-
-
-# -- has_encrypted_sections --------------------------------------------------
-
-
-def test_has_encrypted_false_empty() -> None:
-    assert has_encrypted_sections([]) is False
-
-
-def test_has_encrypted_true() -> None:
-    assert has_encrypted_sections(["AES-128 encrypted block"]) is True
-
-
-def test_has_encrypted_cipher() -> None:
-    assert has_encrypted_sections(["cipher suite TLS"]) is True
-
-
-def test_has_encrypted_false_no_match() -> None:
-    assert has_encrypted_sections(["Squashfs filesystem"]) is False
 
 
 # -- detect_fs_type ----------------------------------------------------------

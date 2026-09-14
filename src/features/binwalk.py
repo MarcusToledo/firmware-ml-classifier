@@ -2,7 +2,9 @@
 
 All functions receive a ``list[str]`` of description lines (as returned by
 ``binwalk.scan``) and perform regex-based matching — no dependency on binwalk3
-itself.
+itself. Security-oriented signals (crypto signatures, encrypted sections)
+live in ``src/evidence/binwalk_findings.py`` — this module keeps only
+structural (non-security) signals.
 """
 from __future__ import annotations
 
@@ -11,16 +13,6 @@ from collections import Counter
 
 _FS_RE = re.compile(
     r"squashfs|cramfs|jffs2|romfs|ext[234]|ubifs|yaffs",
-    re.IGNORECASE,
-)
-
-_CRYPTO_RE = re.compile(
-    r"\bAES\b|\bDES\b|\bRSA\b|certificate|private\skey",
-    re.IGNORECASE,
-)
-
-_ENCRYPTED_RE = re.compile(
-    r"encrypt|\bAES\b|cipher",
     re.IGNORECASE,
 )
 
@@ -33,16 +25,6 @@ _COMPRESSION_RE = re.compile(
 def count_filesystems(descriptions: list[str]) -> int:
     """Count descriptions that mention a known filesystem type."""
     return sum(1 for d in descriptions if _FS_RE.search(d))
-
-
-def count_crypto_signatures(descriptions: list[str]) -> int:
-    """Count descriptions that mention cryptographic constructs."""
-    return sum(1 for d in descriptions if _CRYPTO_RE.search(d))
-
-
-def has_encrypted_sections(descriptions: list[str]) -> bool:
-    """Return True if any description suggests encrypted content."""
-    return any(_ENCRYPTED_RE.search(d) for d in descriptions)
 
 
 def detect_fs_type(descriptions: list[str]) -> str | None:
