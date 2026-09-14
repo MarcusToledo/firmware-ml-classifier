@@ -10,9 +10,12 @@
 - [x] Implementar rotulagem CVE, geração de labels e baseline sem sinal CVE.
 - [x] Adicionar teste de guarda para CVE e identidade fora das features.
 - [x] Atualizar `AGENTS.md`, `README.md` e `docs/SCORING.md`.
+- [x] Revisar os commits das tarefas 8–14 com o Claude: aprovados, com uma
+      correção em `tests/test_scoring.py` (nomes de teste e literais
+      "seguro"/"vulneravel"/"critico" ainda espalhados no código, em vez de
+      usar as constantes `LABEL_*` de `src/labeling/cve_labels.py`).
 
 ### Pending
-- [ ] Revisar os commits das tarefas 8–14 com o Claude.
 - [ ] Implementar associação de CVEs por versão exata e avaliar a qualidade dos rótulos.
 - [ ] Registrar resultados experimentais somente após execução e validação.
 
