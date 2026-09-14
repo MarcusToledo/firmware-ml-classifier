@@ -31,6 +31,31 @@ def test_extract_features_from_path_valid_file(tmp_path: Path) -> None:
     assert result.metadata["label"] is None
 
 
+def test_classifier_features_exclude_cve_and_identity_fields(tmp_path: Path) -> None:
+    firmware_path = tmp_path / "raw" / "dlink" / "dir300" / "firmware.bin"
+    firmware_path.parent.mkdir(parents=True)
+    firmware_path.write_bytes(b"firmware-data")
+    config = load_pipeline_config(tmp_path / "missing.yaml", overrides={})
+
+    result = extract_features_batch([firmware_path], config, max_workers=1)[0]
+
+    assert result.metadata["brand"] == "dlink"
+    assert result.metadata["model"] == "dir300"
+    forbidden = {
+        "cvss_max",
+        "cve_total",
+        "cve_count_critical",
+        "cve_count_high",
+        "cve_count_medium",
+        "cve_count_low",
+        "brand",
+        "model",
+        "meta_brand",
+        "meta_model",
+    }
+    assert forbidden.isdisjoint(result.features)
+
+
 def test_extract_features_from_path_empty_file(tmp_path: Path) -> None:
     firmware_path = tmp_path / "empty.bin"
     firmware_path.write_bytes(b"")
@@ -228,8 +253,9 @@ def test_extract_features_with_mocked_binwalk(tmp_path: Path) -> None:
 
     config = load_pipeline_config(tmp_path / "missing.yaml", overrides={})
 
-    with patch("shutil.which", return_value="/usr/bin/binwalk"), patch(
-        "subprocess.run", return_value=fake_completed
+    with (
+        patch("shutil.which", return_value="/usr/bin/binwalk"),
+        patch("subprocess.run", return_value=fake_completed),
     ):
         result = extract_features_from_path(firmware_path, config, model=None)
 
