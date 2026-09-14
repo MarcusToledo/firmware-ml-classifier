@@ -1,16 +1,14 @@
 scoring:
   thresholds:
-    low: 0.20    # < 0.20 → seguro
-    high: 0.60   # >= 0.60 → critico
+    low: 0.20
+    high: 0.60
 
   weights:
-    stats: 0.10    # peso baixo — ambíguo sem contexto
-    cve: 0.45
+    stats: 0.10
     strings: 0.30
     binwalk: 0.15
 
   hard_rules:
-    has_telnetd_min_level: "vulneravel"
-    has_debug_account_min_level: "vulneravel"
-    hardcoded_passwords_min_level: "vulneravel"
-    cvss_critical_threshold: 9.0
+    has_telnetd_min_level: "cve_conhecida"
+    has_debug_account_min_level: "cve_conhecida"
+    hardcoded_passwords_min_level: "cve_conhecida"
