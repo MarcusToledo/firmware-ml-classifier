@@ -7,8 +7,7 @@ agentic coding assistants operating in this repo.
 ## Project Scope (Immutable)
 - Static firmware analysis only (no dynamic execution).
 - Supervised classification of known-vulnerability classes via CVE only;
-  vendor/manufacturer is not the target. See
-  `docs/superpowers/specs/2026-09-14-classificacao-vulnerabilidade-cve-design.md`.
+  vendor/manufacturer is not the target.
 - Training labels come only from the CVE cache queried by vendor/model.
   Missing lookups are errors, not evidence that no CVE is known.
 - Vendor/model are lookup metadata, never classifier inputs. CVE-derived
