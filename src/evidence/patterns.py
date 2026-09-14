@@ -9,6 +9,7 @@ the same match: a ``find_*`` function returning structured
 evaluation), and a ``count_*``/``has_*`` function returning the flat
 count/flag used as a classifier feature.
 """
+
 from __future__ import annotations
 
 import re
@@ -387,7 +388,9 @@ def has_outdated_busybox(strings: list[str]) -> bool:
 
 def find_outdated_dropbear(strings: list[str]) -> list[SecurityFinding]:
     """Find strings with a Dropbear version string below threshold."""
-    return _find_outdated_version(strings, _DROPBEAR_RE, "dropbear", "outdated_dropbear")
+    return _find_outdated_version(
+        strings, _DROPBEAR_RE, "dropbear", "outdated_dropbear"
+    )
 
 
 def has_outdated_dropbear(strings: list[str]) -> bool:
