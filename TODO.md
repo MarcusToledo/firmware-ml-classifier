@@ -1,5 +1,21 @@
 # TODO
 
+## Request: Retomar o plano de classificação via CVE
+
+### Completed
+- [x] Conferir o handoff do ai-memory, os commits das tarefas 1–7 e o checkout.
+- [x] Validar a suíte anterior à tarefa 8 (214 testes passaram).
+- [x] Confirmar que `tests/test_cve_labels.py` falha na coleta sem `src.labeling`.
+- [x] Resolver o escopo: seguir classificação via CVE e atualizar `AGENTS.md`.
+- [x] Implementar rotulagem CVE, geração de labels e baseline sem sinal CVE.
+- [x] Adicionar teste de guarda para CVE e identidade fora das features.
+- [x] Atualizar `AGENTS.md`, `README.md` e `docs/SCORING.md`.
+
+### Pending
+- [ ] Revisar os commits das tarefas 8–14 com o Claude.
+- [ ] Implementar associação de CVEs por versão exata e avaliar a qualidade dos rótulos.
+- [ ] Registrar resultados experimentais somente após execução e validação.
+
 ## Request: Create/Improve AGENTS.md and establish TODO tracking
 
 ### Completed
@@ -150,6 +166,9 @@
 - [ ] Escrever capitulo de metodologia e resultados.
 
 ## Request: Sistema de scoring deterministico para labels de treino
+
+Registro histórico: o scoring deixou de gerar rótulos de treino. A rotulagem
+atual usa somente CVEs; `src/scoring.py` é baseline de comparação.
 
 ### Completed
 - [x] Criar `src/scoring.py` com weighted signals + hard rules (stats, cve, strings, binwalk).
