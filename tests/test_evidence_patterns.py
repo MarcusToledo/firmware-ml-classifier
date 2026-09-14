@@ -16,11 +16,14 @@ from src.evidence.patterns import (
     find_public_ips,
     find_telnetd,
     find_urls,
+    findings_to_counts,
     has_debug_account,
     has_outdated_busybox,
     has_outdated_dropbear,
     has_outdated_libssl,
     has_telnetd,
+    scan_strings,
+    scan_strings_findings,
 )
 
 # ---------------------------------------------------------------------------
@@ -434,3 +437,70 @@ def test_tokens_too_short() -> None:
 
 def test_tokens_no_match() -> None:
     assert count_api_tokens(["short string"]) == 0
+
+
+# ---------------------------------------------------------------------------
+# scan_strings_findings / findings_to_counts / scan_strings
+# ---------------------------------------------------------------------------
+
+
+def test_scan_strings_findings_returns_all_matches() -> None:
+    strings = ["password=admin", "192.168.1.1", "/usr/sbin/telnetd"]
+    findings = scan_strings_findings(strings)
+    detectors = {f.detector for f in findings}
+    assert "hardcoded_passwords" in detectors
+    assert "hardcoded_ips" in detectors
+    assert "telnetd" in detectors
+
+
+def test_findings_to_counts_matches_scan_strings() -> None:
+    strings = ["password=admin", "192.168.1.1", "/usr/sbin/telnetd", "OpenSSL 1.0.2k"]
+    via_findings = findings_to_counts(scan_strings_findings(strings))
+    assert via_findings == scan_strings(strings)
+
+
+def test_scan_strings_returns_all_keys() -> None:
+    result = scan_strings([])
+    expected_keys = {
+        "count_hardcoded_passwords",
+        "count_credential_pairs",
+        "count_hardcoded_ips",
+        "count_public_ips",
+        "has_telnetd",
+        "has_debug_account",
+        "has_outdated_libssl",
+        "has_outdated_busybox",
+        "has_outdated_dropbear",
+        "count_urls",
+        "count_api_tokens",
+    }
+    assert set(result.keys()) == expected_keys
+
+
+def test_scan_strings_empty_defaults() -> None:
+    result = scan_strings([])
+    assert result["count_hardcoded_passwords"] == 0
+    assert result["count_hardcoded_ips"] == 0
+    assert result["has_telnetd"] is False
+    assert result["has_debug_account"] is False
+    assert result["has_outdated_libssl"] is False
+    assert result["has_outdated_busybox"] is False
+    assert result["has_outdated_dropbear"] is False
+    assert result["count_urls"] == 0
+    assert result["count_api_tokens"] == 0
+
+
+def test_scan_strings_detects_features() -> None:
+    strings = [
+        "password=admin",
+        "192.168.1.1",
+        "/usr/sbin/telnetd",
+        "OpenSSL 1.0.2k",
+        "https://example.com",
+    ]
+    result = scan_strings(strings)
+    assert result["count_hardcoded_passwords"] >= 1
+    assert result["count_hardcoded_ips"] == 1
+    assert result["has_telnetd"] is True
+    assert result["has_outdated_libssl"] is True
+    assert result["count_urls"] == 1

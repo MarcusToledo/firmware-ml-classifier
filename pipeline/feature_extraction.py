@@ -15,6 +15,7 @@ from typing import Any, Union, cast
 import yaml
 from gensim.models import Doc2Vec
 
+from src.evidence.patterns import scan_strings
 from src.feature_extraction import FeatureConfig, combine_features, extract_features
 from src.features.binwalk import (
     count_crypto_signatures,
@@ -25,7 +26,6 @@ from src.features.binwalk import (
 )
 from src.features.doc2vec import Doc2VecConfig, load_doc2vec
 from src.features.statistics import entropy_variance_across_sections
-from src.features.string_patterns import scan_strings
 from src.io_utils import normalize_binary, read_binary
 
 FeatureValue = Union[float, int, bool, str, None]

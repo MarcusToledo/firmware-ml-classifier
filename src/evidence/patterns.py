@@ -449,3 +449,75 @@ def find_api_tokens(strings: list[str]) -> list[SecurityFinding]:
 def count_api_tokens(strings: list[str]) -> int:
     """Count long hex or base64-like tokens (32+ chars) across all strings."""
     return len(find_api_tokens(strings))
+
+
+# ---------------------------------------------------------------------------
+# Aggregate scan: structured findings and flat counts
+# ---------------------------------------------------------------------------
+
+_COUNT_DETECTORS: dict[str, str] = {
+    "hardcoded_passwords": "count_hardcoded_passwords",
+    "credential_pairs": "count_credential_pairs",
+    "hardcoded_ips": "count_hardcoded_ips",
+    "public_ips": "count_public_ips",
+    "urls": "count_urls",
+    "api_tokens": "count_api_tokens",
+}
+
+_BOOL_DETECTORS: dict[str, str] = {
+    "telnetd": "has_telnetd",
+    "debug_account": "has_debug_account",
+    "outdated_libssl": "has_outdated_libssl",
+    "outdated_busybox": "has_outdated_busybox",
+    "outdated_dropbear": "has_outdated_dropbear",
+}
+
+
+def scan_strings_findings(strings: list[str]) -> list[SecurityFinding]:
+    """Run every detector over ``strings`` and return all findings.
+
+    This is the auditable output: every match, with source/context/
+    confidence, for manual review and per-detector precision/recall
+    evaluation.
+    """
+    findings: list[SecurityFinding] = []
+    findings.extend(find_hardcoded_passwords(strings))
+    findings.extend(find_credential_pairs(strings))
+    findings.extend(find_hardcoded_ips(strings))
+    findings.extend(find_public_ips(strings))
+    findings.extend(find_telnetd(strings))
+    findings.extend(find_debug_account(strings))
+    findings.extend(find_outdated_libssl(strings))
+    findings.extend(find_outdated_busybox(strings))
+    findings.extend(find_outdated_dropbear(strings))
+    findings.extend(find_urls(strings))
+    findings.extend(find_api_tokens(strings))
+    return findings
+
+
+def findings_to_counts(findings: list[SecurityFinding]) -> dict[str, int | bool]:
+    """Reduce structured findings to the flat counts/flags used as features."""
+    counts: dict[str, int | bool] = {key: 0 for key in _COUNT_DETECTORS.values()}
+    counts.update({key: False for key in _BOOL_DETECTORS.values()})
+    for finding in findings:
+        if finding.detector in _COUNT_DETECTORS:
+            key = _COUNT_DETECTORS[finding.detector]
+            counts[key] = int(counts[key]) + 1
+        elif finding.detector in _BOOL_DETECTORS:
+            counts[_BOOL_DETECTORS[finding.detector]] = True
+    return counts
+
+
+def scan_strings(strings: list[str]) -> dict[str, int | bool]:
+    """Run all pattern checks and return a flat feature dict.
+
+    Backward-compatible view over ``scan_strings_findings`` +
+    ``findings_to_counts`` — same keys/semantics as the pre-evidence-layer
+    implementation. Keys returned:
+        count_hardcoded_passwords, count_credential_pairs,
+        count_hardcoded_ips, count_public_ips,
+        has_telnetd, has_debug_account,
+        has_outdated_libssl, has_outdated_busybox, has_outdated_dropbear,
+        count_urls, count_api_tokens
+    """
+    return findings_to_counts(scan_strings_findings(strings))
