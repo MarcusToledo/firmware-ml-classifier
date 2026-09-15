@@ -45,7 +45,7 @@ Extrair features via CLI instalada:
 
 > **`--findings-output`**: grava os achados de segurança estruturados (`SecurityFinding`)
 > em JSONL, um por linha, correlacionáveis ao `features.parquet` via `firmware_id` (ex.:
-> `... --findings-output dataset/processed/findings.jsonl`). Opcional — sem essa flag,
+> `... --findings-output dataset/processed/findings.jsonl`). Opcional, sem essa flag,
 > os achados são calculados mas descartados, só as contagens/flags (`count_*`/`has_*`)
 > vão para o `features.parquet`.
 

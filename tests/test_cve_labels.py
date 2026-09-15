@@ -40,7 +40,7 @@ def test_custom_critical_threshold() -> None:
 
 
 def test_label_depends_only_on_cve_fields() -> None:
-    """O rotulo nao pode depender de nenhum campo de stats/strings/binwalk —
+    """O rotulo nao pode depender de nenhum campo de stats/strings/binwalk,
     so cve_total/cvss_max entram na decisao (protecao contra vazamento)."""
     stats_with_extra_fields = {
         "cve_total": 0,

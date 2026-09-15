@@ -241,7 +241,7 @@ def extract_features_from_path(
     # montar o documento do doc2vec, e ela e vazia quando read_ok e False.
     features.update(scan_strings(feature_vector.strings))
 
-    # Structured security evidence — auditable achados (SecurityFinding),
+    # Achados de seguranca estruturados e auditaveis (SecurityFinding),
     # alem das contagens ja usadas como feature. Reusa feature_vector.strings
     # e descriptions ja extraidos, sem rodar deteccao duas vezes.
     findings: list[SecurityFinding] = []

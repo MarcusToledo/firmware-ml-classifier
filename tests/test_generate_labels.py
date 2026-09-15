@@ -113,7 +113,7 @@ def test_cli_aggregates_identical_firmware_across_aliases(
 ) -> None:
     """O mesmo binario (mesmo firmware_id) reaproveitado sob dois nomes de
     modelo deve receber o MESMO rotulo, usando a maior severidade entre os
-    alias — nao o rotulo do alias que por acaso tem/nao tem CVE pesquisada.
+    alias, nao o rotulo do alias que por acaso tem/nao tem CVE pesquisada.
     """
     features = tmp_path / "features.csv"
     cache = tmp_path / "cves.json"
