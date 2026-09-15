@@ -19,6 +19,20 @@
 - [ ] Implementar associação de CVEs por versão exata e avaliar a qualidade dos rótulos.
 - [ ] Registrar resultados experimentais somente após execução e validação.
 
+## Request: Rodar extract-features e validar output gerado
+
+### Completed
+- [x] Rodar `extract-features` com `--findings-output` contra os 840 firmwares reais em `dataset/raw/`.
+- [x] Validar schema do `features.parquet` gerado (133 colunas, sem vazamento de campo CVE, `meta_read_ok=True` em 840/840).
+- [x] Validar `findings.jsonl` (3049 achados, correlacionáveis ao `features.parquet` por `firmware_id`).
+- [x] Corrigir normalização de vendor `tp_link` para `tp-link` em `scripts/fetch_cves.py`: as 43 entradas `tp_link/*` já no cache retornavam 0 CVEs porque a busca na NVD usava o termo errado (`VENDOR_ALIASES` só tinha `tplink`, não `tp_link`).
+
+### Pending
+- [ ] Doc2Vec: `models/doc2vec.model` não existe (pasta `models/` nem existe). Rodar `train-doc2vec` antes da próxima extração. Hoje as 100 colunas `doc2vec_0`..`doc2vec_99` do `features.parquet` são todas zero (`meta_doc2vec_used=False` em 840/840).
+- [ ] Re-rodar `fetch_cves.py --force` para os 43 pares `tp_link/*` já em cache. Foram buscados com o termo antigo antes da correção do alias, precisam ser refeitos antes de gerar labels confiáveis para esses firmwares.
+- [ ] Detector `hardcoded_passwords` (`src/evidence/patterns.py`): 98,6% dos achados (1040/1055 no dataset real) são match de token avulso com alta taxa de falso positivo, ex. `" -- System halted"` (mensagem de kernel) contado como credencial por conter a palavra "system". Já sendo tratado em outra branch.
+- [ ] `dataset/raw/tplink/` (grafia com underscore, ex. `tl_er604w`) e `dataset/raw/tp_link/` (grafia com hífen, ex. `tl-er604w`) parecem ter modelos em comum sob nomes diferentes. Só o vendor foi normalizado nesta correção, o nome do modelo não. Avaliar se vale consolidar.
+
 ## Request: Create/Improve AGENTS.md and establish TODO tracking
 
 ### Completed
