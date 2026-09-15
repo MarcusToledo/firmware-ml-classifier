@@ -35,6 +35,7 @@ SAVE_INTERVAL = 10
 VENDOR_ALIASES: dict[str, str] = {
     "dlink": "d-link",
     "tplink": "tp-link",
+    "tp_link": "tp-link",
 }
 
 # Regex pattern for models that should have a hyphen before the numeric part.
