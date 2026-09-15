@@ -1,5 +1,24 @@
 # TODO
 
+## Request: Retomar análise interrompida do Claude
+
+### Completed
+- [x] Recuperar e aceitar o handoff mais recente do ai-memory.
+- [x] Confirmar que as hard rules de `src/scoring.py` afetam somente a
+      previsão do baseline determinístico.
+- [x] Confirmar que `scripts/generate_labels.py` gera o rótulo de treino
+      exclusivamente com `cve_total` e `cvss_max` via
+      `label_from_cve_stats()`.
+- [x] Identificar que a seção "Escala de severidade" do `docs/PIPELINE.md`
+      revertido misturava a explicação do baseline com a rotulagem CVE.
+
+### Pending
+- [ ] Manter explícita a separação entre baseline e ground truth caso
+      `docs/PIPELINE.md` seja recriado.
+- [ ] Decidir os nomes finais das três classes no texto do TCC.
+- [ ] Avaliar a consolidação dos modelos duplicados entre `tplink/` e
+      `tp_link/`.
+
 ## Request: Retomar o plano de classificação via CVE
 
 ### Completed
