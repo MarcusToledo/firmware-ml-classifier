@@ -5,7 +5,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import yaml
+import yaml  # type: ignore[import-untyped]
+
+from src.labeling.cve_labels import (
+    LABEL_CRITICAL_CVE,
+    LABEL_KNOWN_CVE,
+    LABEL_NO_KNOWN_CVE,
+)
 
 # ---------------------------------------------------------------------------
 # Binwalk scoring constants
@@ -37,17 +43,15 @@ class ThresholdConfig:
 @dataclass(frozen=True)
 class WeightConfig:
     stats: float = 0.10
-    cve: float = 0.45
     strings: float = 0.30
     binwalk: float = 0.15
 
 
 @dataclass(frozen=True)
 class HardRuleConfig:
-    has_telnetd_min_level: str = "vulneravel"
-    has_debug_account_min_level: str = "vulneravel"
-    hardcoded_passwords_min_level: str = "vulneravel"
-    cvss_critical_threshold: float = 9.0
+    has_telnetd_min_level: str = LABEL_KNOWN_CVE
+    has_debug_account_min_level: str = LABEL_KNOWN_CVE
+    hardcoded_passwords_min_level: str = LABEL_KNOWN_CVE
 
 
 @dataclass(frozen=True)
@@ -61,7 +65,11 @@ class ScoringConfig:
 # Result dataclasses
 # ---------------------------------------------------------------------------
 
-LEVEL_ORDER = {"seguro": 0, "vulneravel": 1, "critico": 2}
+LEVEL_ORDER = {
+    LABEL_NO_KNOWN_CVE: 0,
+    LABEL_KNOWN_CVE: 1,
+    LABEL_CRITICAL_CVE: 2,
+}
 LEVEL_FROM_INT = {v: k for k, v in LEVEL_ORDER.items()}
 
 
@@ -125,42 +133,6 @@ def _score_stats(features: dict[str, Any]) -> SignalResult:
 
     score = sum(parts) / len(parts) if parts else 0.0
     return SignalResult("stats", score, 1.0, True, "; ".join(details))
-
-
-def _score_cve(features: dict[str, Any]) -> SignalResult:
-    """Sub-score for CVE-related features."""
-    cvss_max = features.get("cvss_max")
-    crit = features.get("cve_count_critical")
-    high = features.get("cve_count_high")
-
-    if cvss_max is None and crit is None and high is None:
-        return SignalResult("cve", 0.0, 0.0, False, "no CVE features")
-
-    parts: list[float] = []
-    weights: list[float] = []
-    details: list[str] = []
-
-    if cvss_max is not None:
-        s = max(0.0, min(1.0, cvss_max / 10.0))
-        parts.append(s)
-        weights.append(3.0)  # dominant weight
-        details.append(f"cvss_max={cvss_max:.1f}→{s:.2f}")
-
-    if crit is not None:
-        s = _sigmoid(crit, 2.0, 1.5)
-        parts.append(s)
-        weights.append(1.5)
-        details.append(f"cve_critical={crit}→{s:.2f}")
-
-    if high is not None:
-        s = _sigmoid(high, 3.0, 1.0)
-        parts.append(s)
-        weights.append(1.0)
-        details.append(f"cve_high={high}→{s:.2f}")
-
-    total_w = sum(weights)
-    score = sum(p * w for p, w in zip(parts, weights)) / total_w if total_w else 0.0
-    return SignalResult("cve", score, 1.0, True, "; ".join(details))
 
 
 def _score_strings(features: dict[str, Any]) -> SignalResult:
@@ -243,9 +215,11 @@ def _score_binwalk(features: dict[str, Any]) -> SignalResult:
             entropy_var,
             fs_type,
             compression,
-            n_filesystems
-            if (n_filesystems is not None and n_filesystems > 0)
-            else None,
+            (
+                n_filesystems
+                if (n_filesystems is not None and n_filesystems > 0)
+                else None
+            ),
         ]
         if v is not None
     ]
@@ -301,7 +275,6 @@ def _score_binwalk(features: dict[str, Any]) -> SignalResult:
 
 _SIGNAL_FUNCS = {
     "stats": _score_stats,
-    "cve": _score_cve,
     "strings": _score_strings,
     "binwalk": _score_binwalk,
 }
@@ -311,15 +284,12 @@ def score_firmware(
     features: dict[str, Any],
     config: ScoringConfig,
 ) -> ScoringResult:
-    """Score a firmware based on its features and return a deterministic label.
+    """Produz uma previsão determinística para comparação com o classificador.
 
-    Absent signals are excluded and weights are redistributed among present
-    signals. If no signals are present, the firmware is labelled "seguro"
-    (safe fallback).
+    O resultado não é ground truth; nenhum campo CVE participa do cálculo.
     """
     weights_map = {
         "stats": config.weights.stats,
-        "cve": config.weights.cve,
         "strings": config.weights.strings,
         "binwalk": config.weights.binwalk,
     }
@@ -333,7 +303,7 @@ def score_firmware(
     total_weight = sum(s.weight for s in signals)
     if total_weight == 0.0:
         return ScoringResult(
-            level="seguro",
+            level=LABEL_NO_KNOWN_CVE,
             numeric_score=0.0,
             signals=signals,
             hard_rule_applied=None,
@@ -343,11 +313,11 @@ def score_firmware(
 
     # Map score to level via thresholds
     if numeric_score < config.thresholds.low:
-        level = "seguro"
+        level = LABEL_NO_KNOWN_CVE
     elif numeric_score < config.thresholds.high:
-        level = "vulneravel"
+        level = LABEL_KNOWN_CVE
     else:
-        level = "critico"
+        level = LABEL_CRITICAL_CVE
 
     # Apply hard rules (can only escalate, never downgrade)
     hard_rule_applied: str | None = None
@@ -370,12 +340,6 @@ def score_firmware(
         if LEVEL_ORDER.get(min_level, 0) > LEVEL_ORDER.get(level, 0):
             level = min_level
             hard_rule_applied = "hardcoded_passwords"
-
-    cvss_max = features.get("cvss_max")
-    if cvss_max is not None and cvss_max >= config.hard_rules.cvss_critical_threshold:
-        if LEVEL_ORDER.get("critico", 0) > LEVEL_ORDER.get(level, 0):
-            level = "critico"
-            hard_rule_applied = "cvss_critical"
 
     return ScoringResult(
         level=level,

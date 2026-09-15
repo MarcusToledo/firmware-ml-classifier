@@ -6,13 +6,22 @@ agentic coding assistants operating in this repo.
 
 ## Project Scope (Immutable)
 - Static firmware analysis only (no dynamic execution).
-- Supervised vendor/manufacturer classification only.
+- Supervised classification of known-vulnerability classes via CVE only;
+  vendor/manufacturer is not the target.
+- Training labels come only from the CVE cache queried by vendor/model.
+  Missing lookups are errors, not evidence that no CVE is known.
+- Vendor/model are lookup metadata, never classifier inputs. CVE-derived
+  fields (`cvss_max`, `cve_total`, `cve_count_*`) must also stay out of the
+  classifier feature vector to prevent label leakage.
 - Hybrid features:
   - Statistical: size, entropy, byte distribution, compressibility.
   - Semantic: ASCII strings + Doc2Vec embeddings (DM or DBOW).
+  - Structural/security evidence: Binwalk and detectors in `src/evidence/`.
 - Models:
   - Extra Trees as the main model.
-  - Random Forest as the baseline.
+  - Random Forest as the ML baseline.
+  - `src/scoring.py` is a deterministic rule-based comparison baseline,
+    never a source of training labels.
 - Avoid heavy deep learning due to small datasets.
 - All changes must be academically justified and reproducible.
 
@@ -119,7 +128,7 @@ agentic coding assistants operating in this repo.
 
 ## Scientific Integrity
 - Do not invent experimental results.
-- Do not expand scope beyond firmware classification.
+- Do not expand scope beyond known-vulnerability classification of firmware.
 - Prefer simple, explainable approaches over opaque automation.
 - Minimize external dependencies; avoid internet reliance.
 - Maintain traceability for all datasets and models.

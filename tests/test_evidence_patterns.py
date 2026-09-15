@@ -1,25 +1,36 @@
-from src.features.string_patterns import (
+from src.evidence.patterns import (
     count_api_tokens,
     count_credential_pairs,
     count_hardcoded_ips,
     count_hardcoded_passwords,
     count_public_ips,
     count_urls,
+    find_credential_pairs,
+    find_debug_account,
+    find_hardcoded_ips,
+    find_hardcoded_passwords,
+    find_outdated_libssl,
+    find_public_ips,
+    find_telnetd,
+    find_urls,
+    findings_to_counts,
     has_debug_account,
     has_outdated_busybox,
     has_outdated_dropbear,
     has_outdated_libssl,
     has_telnetd,
     scan_strings,
+    scan_strings_findings,
 )
 
 # ---------------------------------------------------------------------------
-# count_hardcoded_passwords
+# find_hardcoded_passwords / count_hardcoded_passwords
 # ---------------------------------------------------------------------------
 
 
 def test_passwords_empty() -> None:
     assert count_hardcoded_passwords([]) == 0
+    assert find_hardcoded_passwords([]) == []
 
 
 def test_passwords_kv_match() -> None:
@@ -51,13 +62,28 @@ def test_passwords_multiple_strings() -> None:
     assert count_hardcoded_passwords(strings) == 2
 
 
+def test_passwords_finding_has_high_confidence_on_kv_match() -> None:
+    findings = find_hardcoded_passwords(["password=secret123"])
+    assert len(findings) == 1
+    assert findings[0].confidence == "high"
+    assert findings[0].detector == "hardcoded_passwords"
+    assert findings[0].source == "password=secret123"
+
+
+def test_passwords_finding_has_medium_confidence_on_default_token() -> None:
+    findings = find_hardcoded_passwords(["admin"])
+    assert len(findings) == 1
+    assert findings[0].confidence == "medium"
+
+
 # ---------------------------------------------------------------------------
-# count_credential_pairs
+# find_credential_pairs / count_credential_pairs
 # ---------------------------------------------------------------------------
 
 
 def test_cred_pairs_empty() -> None:
     assert count_credential_pairs([]) == 0
+    assert find_credential_pairs([]) == []
 
 
 def test_cred_pairs_admin_admin() -> None:
@@ -69,12 +95,10 @@ def test_cred_pairs_root_1234() -> None:
 
 
 def test_cred_pairs_non_weak_ignored() -> None:
-    # neither side is in the weak set
     assert count_credential_pairs(["john:complexpassword"]) == 0
 
 
 def test_cred_pairs_long_hash_ignored() -> None:
-    # right side > 20 chars — excluded by {1,20} bound
     assert count_credential_pairs(["sha256:deadbeefdeadbeefdeadbeef"]) == 0
 
 
@@ -83,12 +107,18 @@ def test_cred_pairs_multiple_strings() -> None:
 
 
 def test_cred_pairs_multiple_in_one_string_counts_once() -> None:
-    # multiple weak pairs in a single string — counted once per string
     assert count_credential_pairs(["admin:admin root:root"]) == 1
 
 
+def test_cred_pairs_finding_has_high_confidence() -> None:
+    findings = find_credential_pairs(["admin:admin"])
+    assert len(findings) == 1
+    assert findings[0].confidence == "high"
+    assert findings[0].detector == "credential_pairs"
+
+
 # ---------------------------------------------------------------------------
-# count_hardcoded_ips
+# find_hardcoded_ips / count_hardcoded_ips
 # ---------------------------------------------------------------------------
 
 
@@ -128,8 +158,15 @@ def test_ips_no_match() -> None:
     assert count_hardcoded_ips(["version 1.2.3"]) == 0
 
 
+def test_ips_finding_has_low_confidence() -> None:
+    findings = find_hardcoded_ips(["192.168.1.1"])
+    assert len(findings) == 1
+    assert findings[0].confidence == "low"
+    assert findings[0].detector == "hardcoded_ips"
+
+
 # ---------------------------------------------------------------------------
-# count_public_ips
+# find_public_ips / count_public_ips
 # ---------------------------------------------------------------------------
 
 
@@ -158,7 +195,6 @@ def test_public_ips_ignores_rfc1918_172() -> None:
 
 
 def test_public_ips_172_32_is_public() -> None:
-    # 172.32.x.x is outside the RFC-1918 /12 range
     assert count_public_ips(["172.32.0.1"]) == 1
 
 
@@ -174,8 +210,15 @@ def test_public_ips_multiple_in_one_string() -> None:
     assert count_public_ips(["8.8.8.8 and 1.1.1.1"]) == 2
 
 
+def test_public_ips_finding_has_high_confidence() -> None:
+    findings = find_public_ips(["8.8.8.8"])
+    assert len(findings) == 1
+    assert findings[0].confidence == "high"
+    assert findings[0].detector == "public_ips"
+
+
 # ---------------------------------------------------------------------------
-# has_telnetd
+# find_telnetd / has_telnetd
 # ---------------------------------------------------------------------------
 
 
@@ -195,8 +238,15 @@ def test_telnetd_substring() -> None:
     assert has_telnetd(["start_telnetd"]) is True
 
 
+def test_telnetd_finding_has_high_confidence() -> None:
+    findings = find_telnetd(["telnetd"])
+    assert len(findings) == 1
+    assert findings[0].confidence == "high"
+    assert findings[0].detector == "telnetd"
+
+
 # ---------------------------------------------------------------------------
-# has_debug_account
+# find_debug_account / has_debug_account
 # ---------------------------------------------------------------------------
 
 
@@ -221,7 +271,6 @@ def test_debug_account_case_insensitive() -> None:
 
 
 def test_debug_account_no_partial_match() -> None:
-    # "testuser" contains "test" but not as a word boundary
     assert has_debug_account(["testuser"]) is False
 
 
@@ -229,8 +278,15 @@ def test_debug_account_no_match() -> None:
     assert has_debug_account(["admin root supervisor"]) is False
 
 
+def test_debug_account_finding_has_low_confidence() -> None:
+    findings = find_debug_account(["debug"])
+    assert len(findings) == 1
+    assert findings[0].confidence == "low"
+    assert findings[0].detector == "debug_account"
+
+
 # ---------------------------------------------------------------------------
-# has_outdated_libssl
+# find_outdated_libssl / has_outdated_libssl
 # ---------------------------------------------------------------------------
 
 
@@ -259,12 +315,18 @@ def test_libssl_no_match() -> None:
 
 
 def test_libssl_slash_separator() -> None:
-    # HTTP server banner: "Apache/2.2.31 OpenSSL/1.0.2k"
     assert has_outdated_libssl(["Apache/2.2.31 OpenSSL/1.0.2k"]) is True
 
 
+def test_libssl_finding_has_medium_confidence() -> None:
+    findings = find_outdated_libssl(["OpenSSL 1.0.2k"])
+    assert len(findings) == 1
+    assert findings[0].confidence == "medium"
+    assert findings[0].detector == "outdated_libssl"
+
+
 # ---------------------------------------------------------------------------
-# has_outdated_busybox
+# find_outdated_busybox / has_outdated_busybox
 # ---------------------------------------------------------------------------
 
 
@@ -297,7 +359,7 @@ def test_busybox_underscore_separator() -> None:
 
 
 # ---------------------------------------------------------------------------
-# has_outdated_dropbear
+# find_outdated_dropbear / has_outdated_dropbear
 # ---------------------------------------------------------------------------
 
 
@@ -322,7 +384,7 @@ def test_dropbear_no_match() -> None:
 
 
 # ---------------------------------------------------------------------------
-# count_urls
+# find_urls / count_urls
 # ---------------------------------------------------------------------------
 
 
@@ -346,8 +408,15 @@ def test_urls_no_match() -> None:
     assert count_urls(["ftp://example.com"]) == 0
 
 
+def test_urls_finding_has_low_confidence() -> None:
+    findings = find_urls(["http://example.com"])
+    assert len(findings) == 1
+    assert findings[0].confidence == "low"
+    assert findings[0].detector == "urls"
+
+
 # ---------------------------------------------------------------------------
-# count_api_tokens
+# find_api_tokens / count_api_tokens
 # ---------------------------------------------------------------------------
 
 
@@ -360,7 +429,6 @@ def test_tokens_hex_32_chars() -> None:
 
 
 def test_tokens_too_short() -> None:
-    # 31 hex chars — below threshold
     assert count_api_tokens(["a" * 31]) == 0
 
 
@@ -369,8 +437,23 @@ def test_tokens_no_match() -> None:
 
 
 # ---------------------------------------------------------------------------
-# scan_strings
+# scan_strings_findings / findings_to_counts / scan_strings
 # ---------------------------------------------------------------------------
+
+
+def test_scan_strings_findings_returns_all_matches() -> None:
+    strings = ["password=admin", "192.168.1.1", "/usr/sbin/telnetd"]
+    findings = scan_strings_findings(strings)
+    detectors = {f.detector for f in findings}
+    assert "hardcoded_passwords" in detectors
+    assert "hardcoded_ips" in detectors
+    assert "telnetd" in detectors
+
+
+def test_findings_to_counts_matches_scan_strings() -> None:
+    strings = ["password=admin", "192.168.1.1", "/usr/sbin/telnetd", "OpenSSL 1.0.2k"]
+    via_findings = findings_to_counts(scan_strings_findings(strings))
+    assert via_findings == scan_strings(strings)
 
 
 def test_scan_strings_returns_all_keys() -> None:
