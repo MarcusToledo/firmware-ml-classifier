@@ -141,6 +141,7 @@ def main() -> None:
             result.metadata["brand"] = None
             result.metadata["model"] = None
             result.metadata["label"] = None
+            result.metadata["version"] = None
     for result in results:
         metadata = result.metadata
         LOGGER.info(
