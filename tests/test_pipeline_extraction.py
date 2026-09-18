@@ -29,18 +29,22 @@ def test_extract_features_from_path_valid_file(tmp_path: Path) -> None:
     assert result.metadata["brand"] is None
     assert result.metadata["model"] is None
     assert result.metadata["label"] is None
+    assert result.metadata["version"] is None
 
 
 def test_classifier_features_exclude_cve_and_identity_fields(tmp_path: Path) -> None:
-    firmware_path = tmp_path / "raw" / "dlink" / "dir300" / "firmware.bin"
+    firmware_path = (
+        tmp_path / "raw" / "zyxel" / "NWA110AX_7.10(ABTG.4)C0" / "firmware.bin"
+    )
     firmware_path.parent.mkdir(parents=True)
     firmware_path.write_bytes(b"firmware-data")
     config = load_pipeline_config(tmp_path / "missing.yaml", overrides={})
 
     result = extract_features_batch([firmware_path], config, max_workers=1)[0]
 
-    assert result.metadata["brand"] == "dlink"
-    assert result.metadata["model"] == "dir300"
+    assert result.metadata["brand"] == "zyxel"
+    assert result.metadata["model"] == "nwa110ax"
+    assert result.metadata["version"] == "7.10(ABTG.4)C0"
     forbidden = {
         "cvss_max",
         "cve_total",
@@ -50,10 +54,29 @@ def test_classifier_features_exclude_cve_and_identity_fields(tmp_path: Path) -> 
         "cve_count_low",
         "brand",
         "model",
+        "version",
         "meta_brand",
         "meta_model",
+        "meta_version",
     }
     assert forbidden.isdisjoint(result.features)
+
+
+def test_error_result_preserves_version_from_path(tmp_path: Path) -> None:
+    """PipelineResult da via de erro (_build_error_result) deve preservar
+    meta_version, assim como ja preserva brand/model/label -- evita
+    regressao de schema incompleto. Um path inexistente forca read_binary
+    a levantar excecao, exercitando o branch de erro de _process_path."""
+    missing_path = tmp_path / "raw" / "dlink" / "dsr1000n_1.2" / "firmware.bin"
+    config = load_pipeline_config(tmp_path / "missing.yaml", overrides={})
+
+    result = extract_features_batch([missing_path], config, max_workers=1)[0]
+
+    assert result.metadata["read_ok"] is False
+    assert result.firmware_id is None
+    assert result.metadata["brand"] == "dlink"
+    assert result.metadata["model"] == "dsr1000n"
+    assert result.metadata["version"] == "1.2"
 
 
 def test_extract_features_from_path_empty_file(tmp_path: Path) -> None:

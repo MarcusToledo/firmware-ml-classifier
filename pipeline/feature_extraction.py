@@ -37,21 +37,27 @@ FeatureValue = Union[float, int, bool, str, None]
 
 LOGGER = logging.getLogger(__name__)
 
-_VERSION_SUFFIX_RE = re.compile(r"^([a-z]+\d+[a-z]*)_\d+\.", re.IGNORECASE)
+_VERSION_SUFFIX_RE = re.compile(r"^([a-z]+\d+[a-z]*)_(\d.*)$", re.IGNORECASE)
 
 
-def _strip_version_suffix(model: str) -> str:
-    """Strip firmware version suffix: 'NWA110AX_7.10(ABTG.4)C0' -> 'nwa110ax'."""
+def _split_model_version(model: str) -> tuple[str, str | None]:
+    """Split a raw path segment into (model, version).
+
+    'NWA110AX_7.10(ABTG.4)C0' -> ('nwa110ax', '7.10(ABTG.4)C0')
+    'dir-300' -> ('dir-300', None)
+    """
     m = _VERSION_SUFFIX_RE.match(model)
-    return m.group(1).lower() if m else model.lower()
+    if m:
+        return m.group(1).lower(), m.group(2)
+    return model.lower(), None
 
 
 def infer_brand_model_label_from_path(
     path: Path,
-) -> tuple[str | None, str | None, str | None]:
-    """Extrai brand, model e label de */raw/<brand>/<model>/*.
+) -> tuple[str | None, str | None, str | None, str | None]:
+    """Extrai brand, model, label e version de */raw/<brand>/<model>/*.
 
-    Retorna (None, None, None) quando o padrao nao casar.
+    Retorna (None, None, None, None) quando o padrao nao casar.
     """
     raw_index = None
     for idx, part in enumerate(path.parts):
@@ -59,15 +65,15 @@ def infer_brand_model_label_from_path(
             raw_index = idx
             break
     if raw_index is None:
-        return None, None, None
+        return None, None, None, None
     if len(path.parts) <= raw_index + 2:
-        return None, None, None
+        return None, None, None, None
     brand = path.parts[raw_index + 1].strip().lower()
-    model = _strip_version_suffix(path.parts[raw_index + 2].strip())
+    model, version = _split_model_version(path.parts[raw_index + 2].strip())
     if not brand or not model:
-        return None, None, None
+        return None, None, None, None
     label = f"{brand}_{model}"
-    return brand, model, label
+    return brand, model, label, version
 
 
 @dataclass(frozen=True)
@@ -196,11 +202,12 @@ def extract_features_from_path(
     brand: str | None = None,
     model_name: str | None = None,
     label: str | None = None,
+    version: str | None = None,
 ) -> PipelineResult:
     """Extrai features e metadados de um firmware.
 
     Metadados incluem read_ok, error, truncated, doc2vec_used, brand,
-    model e label. firmware_id e o SHA256 do conteudo lido.
+    model, label e version. firmware_id e o SHA256 do conteudo lido.
     """
     error: str | None = None
     data = read_binary(path, max_bytes=config.max_bytes)
@@ -262,6 +269,7 @@ def extract_features_from_path(
         "brand": brand,
         "model": model_name,
         "label": label,
+        "version": version,
     }
 
     return PipelineResult(
@@ -278,6 +286,7 @@ def _build_error_result(
     brand: str | None,
     model_name: str | None,
     label: str | None,
+    version: str | None,
     exc: Exception,
 ) -> PipelineResult:
     """Monta um PipelineResult de erro preservando o schema de metadata."""
@@ -297,6 +306,7 @@ def _build_error_result(
             "brand": brand,
             "model": model_name,
             "label": label,
+            "version": version,
         },
         findings=[],
     )
@@ -311,7 +321,7 @@ def _process_path(
 
     Compartilhada entre o modo sequencial e os workers do process pool.
     """
-    brand, model_name, label = infer_brand_model_label_from_path(path)
+    brand, model_name, label, version = infer_brand_model_label_from_path(path)
     try:
         return extract_features_from_path(
             path,
@@ -320,10 +330,11 @@ def _process_path(
             brand=brand,
             model_name=model_name,
             label=label,
+            version=version,
         )
     except Exception as exc:  # pragma: no cover - defensive for batch safety
         LOGGER.warning("Failed to extract features for %s: %s", path, exc)
-        return _build_error_result(path, config, brand, model_name, label, exc)
+        return _build_error_result(path, config, brand, model_name, label, version, exc)
 
 
 # Estado por processo worker, preenchido uma unica vez em _init_worker para
