@@ -65,6 +65,21 @@ def test_normalize_model_double_underscore() -> None:
     assert normalize_model("dgs_1210_48") == "DGS-1210-48"
 
 
+def test_normalize_model_underscore_separated_words() -> None:
+    """Modelos da pasta tplink/ e belkin/ usam underscore entre as partes. A NVD
+    escreve com hifen, entao a consulta nao pode mandar o underscore."""
+    assert normalize_model("td_w8950n") == "TD-W8950N"
+    assert normalize_model("tl_wr702n") == "TL-WR702N"
+    assert normalize_model("archer_c20i") == "ARCHER-C20I"
+    assert normalize_model("dx_wgrtr") == "DX-WGRTR"
+    assert normalize_model("f6d4230_4_bc") == "F6D4230-4-BC"
+
+
+def test_normalize_model_never_sends_underscore() -> None:
+    for model in ("tl_pa4010p_tkit", "tl_sg2109web", "dgs_1210_48", "f5d7230_4"):
+        assert "_" not in normalize_model(model)
+
+
 def test_normalize_model_plain() -> None:
     """Models without hyphens or underscores just uppercase."""
     assert normalize_model("awgr54") == "AWGR-54"

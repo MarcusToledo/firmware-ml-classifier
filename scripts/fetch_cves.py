@@ -47,12 +47,6 @@ _MODEL_HYPHEN_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Models with underscore-separated trailing number: "f5d7230_4" -> "F5D7230-4"
-_MODEL_UNDERSCORE_RE = re.compile(
-    r"^(.+)_(\d+)$",
-)
-
-
 # ---------------------------------------------------------------------------
 # Name normalization
 # ---------------------------------------------------------------------------
@@ -70,17 +64,14 @@ def normalize_model(model: str) -> str:
     """Normalize model string for NVD keyword search.
 
     - Missing hyphen: ``dir300`` -> ``DIR-300``
-    - Underscore suffix: ``f5d7230_4`` -> ``F5D7230-4``
+    - Underscores: ``f5d7230_4`` -> ``F5D7230-4``, ``td_w8950n`` ->
+      ``TD-W8950N`` (a NVD escreve com hifen, nunca com underscore)
     """
+    model = model.replace("_", "-")
+
     # Already has a hyphen (e.g. "dir-300") — just uppercase
     if "-" in model:
         return model.upper()
-
-    # Underscore suffix: "f5d7230_4" -> "F5D7230-4"
-    m = _MODEL_UNDERSCORE_RE.match(model)
-    if m:
-        base = normalize_model(m.group(1))  # recurse on base part
-        return f"{base}-{m.group(2)}"
 
     # Missing hyphen: "dir300" -> "DIR-300"
     m = _MODEL_HYPHEN_RE.match(model)
