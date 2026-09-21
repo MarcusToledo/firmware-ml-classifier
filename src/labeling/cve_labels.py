@@ -7,12 +7,24 @@ Ausência de CVE conhecida não significa que o firmware seja seguro.
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 from typing import Any
+
+from src.labeling.version_match import VersionRange, parse_version, version_in_range
 
 LABEL_NO_KNOWN_CVE = "sem_cve_conhecida"
 LABEL_KNOWN_CVE = "cve_conhecida"
 LABEL_CRITICAL_CVE = "cve_critica"
+LABEL_INDETERMINATE = "indeterminado"
+
+_NUMERIC_VERSION_RE = re.compile(r"^\d+(?:\.\d+)*$")
+_BOUND_KEYS = (
+    "versionStartIncluding",
+    "versionStartExcluding",
+    "versionEndIncluding",
+    "versionEndExcluding",
+)
 
 
 @dataclass(frozen=True)
@@ -57,3 +69,171 @@ def label_from_cve_stats(
     if cvss_max >= thresholds.critical_cvss:
         return LABEL_CRITICAL_CVE
     return LABEL_KNOWN_CVE
+
+
+def _canonical(value: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", value.lower())
+
+
+def _target_parts(entry: dict[str, Any]) -> tuple[str, str] | None:
+    name = entry.get("cpe_name")
+    if isinstance(name, str):
+        parts = name.split(":")
+        if len(parts) == 13:
+            return _canonical(parts[3]), _canonical(parts[4]).removesuffix("firmware")
+    vendor, model = entry.get("vendor"), entry.get("model")
+    if isinstance(vendor, str) and isinstance(model, str):
+        return _canonical(vendor), _canonical(model).removesuffix("firmware")
+    return None
+
+
+def _match_version(
+    version_raw: str,
+    version: tuple[int, ...],
+    match: dict[str, Any],
+    target: tuple[str, str] | None,
+    unknown_if_unrelated: bool = False,
+) -> bool | None:
+    criteria = match.get("criteria")
+    if criteria is not None:
+        parts = criteria.split(":") if isinstance(criteria, str) else []
+        if len(parts) != 13 or parts[:2] != ["cpe", "2.3"]:
+            return None
+        if target is None:
+            return None
+        actual = _canonical(parts[3]), _canonical(parts[4]).removesuffix("firmware")
+        if actual != target:
+            return None if unknown_if_unrelated else False
+        exact_version = parts[5]
+        if exact_version not in {"*", "-"}:
+            if exact_version.casefold() == version_raw.casefold():
+                pass
+            elif (
+                _NUMERIC_VERSION_RE.fullmatch(version_raw)
+                and _NUMERIC_VERSION_RE.fullmatch(exact_version)
+                and version_in_range(
+                    version,
+                    VersionRange(
+                        start_including=parse_version(exact_version),
+                        end_including=parse_version(exact_version),
+                    ),
+                )
+            ):
+                pass
+            else:
+                return False
+        elif exact_version == "-":
+            return None
+
+    bounds: dict[str, tuple[int, ...]] = {}
+    for key in _BOUND_KEYS:
+        if key not in match:
+            continue
+        value = match[key]
+        parsed = parse_version(value) if isinstance(value, str) else None
+        if parsed is None or _NUMERIC_VERSION_RE.fullmatch(value.strip()) is None:
+            return None
+        bounds[key] = parsed
+    if bounds and _NUMERIC_VERSION_RE.fullmatch(version_raw) is None:
+        return None
+    return version_in_range(
+        version,
+        VersionRange(
+            start_including=bounds.get("versionStartIncluding"),
+            start_excluding=bounds.get("versionStartExcluding"),
+            end_including=bounds.get("versionEndIncluding"),
+            end_excluding=bounds.get("versionEndExcluding"),
+        ),
+    )
+
+
+def _combine(results: list[bool | None], operator: str) -> bool | None:
+    if not results:
+        return None
+    if operator == "AND":
+        if False in results:
+            return False
+        return None if None in results else True
+    if True in results:
+        return True
+    return None if None in results else False
+
+
+def _evaluate_node(
+    node: dict[str, Any],
+    version_raw: str,
+    version: tuple[int, ...],
+    target: tuple[str, str] | None,
+    unknown_if_unrelated: bool = False,
+) -> bool | None:
+    operator = node.get("operator", "OR")
+    unknown_if_unrelated = unknown_if_unrelated or operator == "AND"
+    results: list[bool | None] = []
+    for match in node.get("cpeMatch", []):
+        if not match.get("vulnerable", False):
+            results.append(None)
+        else:
+            results.append(
+                _match_version(
+                    version_raw, version, match, target, unknown_if_unrelated
+                )
+            )
+    for child in node.get("children", []):
+        results.append(
+            _evaluate_node(child, version_raw, version, target, unknown_if_unrelated)
+        )
+    result = _combine(results, operator)
+    if node.get("negate") and result is not None:
+        return not result
+    return result
+
+
+def _evaluate_cve(
+    cve: dict[str, Any],
+    version_raw: str,
+    version: tuple[int, ...],
+    target: tuple[str, str] | None,
+) -> bool | None:
+    configurations = cve.get("configurations", [])
+    if not configurations:
+        return True
+    config_results = [
+        _combine(
+            [
+                _evaluate_node(
+                    node,
+                    version_raw,
+                    version,
+                    target,
+                    config.get("operator", "OR") == "AND",
+                )
+                for node in config.get("nodes", [])
+            ],
+            config.get("operator", "OR"),
+        )
+        for config in configurations
+    ]
+    return _combine(config_results, "OR")
+
+
+def applicable_cves_for_version(
+    version_raw: str | None,
+    cache_entry: dict[str, Any],
+) -> tuple[list[dict[str, Any]], bool]:
+    """Retorna CVEs aplicáveis e se toda aplicabilidade foi determinada."""
+    if not isinstance(version_raw, str) or not version_raw.strip():
+        return [], False
+    version_raw = version_raw.strip()
+    version = parse_version(version_raw)
+    if version is None:
+        return [], False
+
+    target = _target_parts(cache_entry)
+    applicable: list[dict[str, Any]] = []
+    for cve in cache_entry.get("cves", []):
+        verdict = _evaluate_cve(cve, version_raw, version, target)
+        if verdict is None:
+            return [], False
+        if verdict:
+            applicable.append(cve)
+    return applicable, True
