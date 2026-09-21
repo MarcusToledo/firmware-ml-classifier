@@ -15,6 +15,7 @@ from typing import Any, Union, cast
 import yaml
 from gensim.models import Doc2Vec
 
+from pipeline.firmware_version import infer_version_from_filename
 from src.evidence.binwalk_findings import (
     count_crypto_signatures,
     find_crypto_signatures,
@@ -72,6 +73,8 @@ def infer_brand_model_label_from_path(
     model, version = _split_model_version(path.parts[raw_index + 2].strip())
     if not brand or not model:
         return None, None, None, None
+    # A versao do diretorio tem prioridade; o nome do arquivo e o fallback.
+    version = version or infer_version_from_filename(brand, path.name)
     label = f"{brand}_{model}"
     return brand, model, label, version
 
