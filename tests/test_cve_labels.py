@@ -144,22 +144,115 @@ def test_unparseable_cpe_bound_is_indeterminate() -> None:
     assert applicable_cves_for_version("1.0", {"cves": [cve]}) == ([], False)
 
 
-def test_compound_cpe_condition_is_indeterminate_without_other_platform() -> None:
-    target = "cpe:2.3:o:dlink:dir-300_firmware:*:*:*:*:*:*:*:*"
-    platform = "cpe:2.3:h:dlink:dir-300:*:*:*:*:*:*:*:*"
+def _and_config(*matches: dict) -> dict:
+    return {"nodes": [{"operator": "AND", "cpeMatch": list(matches)}]}
+
+
+def test_target_hardware_platform_without_revision_is_satisfied() -> None:
+    """O cache e por vendor/model, entao o hardware do proprio modelo-alvo,
+    sem revisao (`-` ou `*`), e satisfeito por construcao."""
+    fw = "cpe:2.3:o:dlink:dir-300_firmware:*:*:*:*:*:*:*:*"
+    entry = {"vendor": "d-link", "model": "DIR-300"}
+    for revision in ("-", "*"):
+        cve = _cve([])
+        cve["configurations"] = [
+            _and_config(
+                {"vulnerable": True, "criteria": fw, "versionEndExcluding": "2.0"},
+                {
+                    "vulnerable": False,
+                    "criteria": f"cpe:2.3:h:dlink:dir-300:{revision}:*:*:*:*:*:*:*",
+                },
+            )
+        ]
+        entry["cves"] = [cve]
+        assert applicable_cves_for_version("1.0", entry) == ([cve], True)
+        assert applicable_cves_for_version("2.0", entry) == ([], True)
+
+
+def test_target_hardware_platform_with_revision_is_indeterminate() -> None:
+    """Sem a revisao do hardware nao da para afirmar que a CPE se aplica."""
+    fw = "cpe:2.3:o:dlink:dir-300_firmware:*:*:*:*:*:*:*:*"
     cve = _cve([])
     cve["configurations"] = [
+        _and_config(
+            {"vulnerable": True, "criteria": fw},
+            {
+                "vulnerable": False,
+                "criteria": "cpe:2.3:h:dlink:dir-300:b1:*:*:*:*:*:*:*",
+            },
+        )
+    ]
+    entry = {"vendor": "d-link", "model": "DIR-300", "cves": [cve]}
+    assert applicable_cves_for_version("1.0", entry) == ([], False)
+
+
+def test_non_vulnerable_platform_of_other_product_is_indeterminate() -> None:
+    fw = "cpe:2.3:o:dlink:dir-300_firmware:*:*:*:*:*:*:*:*"
+    cve = _cve([])
+    cve["configurations"] = [
+        _and_config(
+            {"vulnerable": True, "criteria": fw},
+            {
+                "vulnerable": False,
+                "criteria": "cpe:2.3:h:dlink:dir-600:-:*:*:*:*:*:*:*",
+            },
+        )
+    ]
+    entry = {"vendor": "d-link", "model": "DIR-300", "cves": [cve]}
+    assert applicable_cves_for_version("1.0", entry) == ([], False)
+
+
+def test_configuration_that_never_mentions_target_does_not_apply() -> None:
+    """Uma CVE listada para varios modelos traz uma config por modelo. As dos
+    outros modelos nao se aplicam; nao podem deixar o resultado indeterminado."""
+    other_fw = "cpe:2.3:o:dlink:dir-600_firmware:*:*:*:*:*:*:*:*"
+    other_hw = "cpe:2.3:h:dlink:dir-600:-:*:*:*:*:*:*:*"
+    target_fw = "cpe:2.3:o:dlink:dir-300_firmware:*:*:*:*:*:*:*:*"
+    cve = _cve([])
+    cve["configurations"] = [
+        _and_config(
+            {"vulnerable": True, "criteria": other_fw},
+            {"vulnerable": False, "criteria": other_hw},
+        ),
         {
             "nodes": [
                 {
-                    "operator": "AND",
                     "cpeMatch": [
-                        {"vulnerable": True, "criteria": target},
-                        {"vulnerable": False, "criteria": platform},
-                    ],
+                        {
+                            "vulnerable": True,
+                            "criteria": target_fw,
+                            "versionEndExcluding": "2.0",
+                        }
+                    ]
                 }
             ]
-        }
+        },
+    ]
+    entry = {"vendor": "d-link", "model": "DIR-300", "cves": [cve]}
+    assert applicable_cves_for_version("1.0", entry) == ([cve], True)
+    assert applicable_cves_for_version("2.0", entry) == ([], True)
+
+
+def test_cve_with_only_other_products_does_not_apply() -> None:
+    cve = _cve([])
+    cve["configurations"] = [
+        _and_config(
+            {
+                "vulnerable": True,
+                "criteria": "cpe:2.3:o:dlink:dir-600_firmware:*:*:*:*:*:*:*:*",
+            },
+        )
+    ]
+    entry = {"vendor": "d-link", "model": "DIR-300", "cves": [cve]}
+    assert applicable_cves_for_version("1.0", entry) == ([], True)
+
+
+def test_configuration_with_unparseable_criteria_stays_indeterminate() -> None:
+    """Sem conseguir ler a CPE nao ha como afirmar que a config e de outro
+    produto."""
+    cve = _cve([])
+    cve["configurations"] = [
+        _and_config({"vulnerable": True, "criteria": "cpe:2.3:o:broken"})
     ]
     entry = {"vendor": "d-link", "model": "DIR-300", "cves": [cve]}
     assert applicable_cves_for_version("1.0", entry) == ([], False)

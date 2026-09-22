@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import math
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
 
@@ -84,6 +85,67 @@ def _target_parts(entry: dict[str, Any]) -> tuple[str, str] | None:
     vendor, model = entry.get("vendor"), entry.get("model")
     if isinstance(vendor, str) and isinstance(model, str):
         return _canonical(vendor), _canonical(model).removesuffix("firmware")
+    return None
+
+
+def _product_of(criteria: object) -> tuple[str, str, str, str] | None:
+    """(tipo, vendor, produto, versao) de uma CPE 2.3, ou None se ilegivel."""
+    parts = criteria.split(":") if isinstance(criteria, str) else []
+    if len(parts) != 13 or parts[:2] != ["cpe", "2.3"]:
+        return None
+    return (
+        parts[2],
+        _canonical(parts[3]),
+        _canonical(parts[4]).removesuffix("firmware"),
+        parts[5],
+    )
+
+
+def _iter_matches(node: dict[str, Any]) -> Iterator[dict[str, Any]]:
+    yield from node.get("cpeMatch", [])
+    for child in node.get("children", []):
+        yield from _iter_matches(child)
+
+
+def _is_other_product(config: dict[str, Any], target: tuple[str, str] | None) -> bool:
+    """True se toda CPE da config e legivel e nenhuma cita o produto-alvo.
+
+    Uma CVE listada para varios modelos traz uma config por modelo; as dos
+    outros modelos nao se aplicam ao alvo. CPE ilegivel mantem a config em
+    avaliacao, porque nao da para afirmar que ela e de outro produto.
+    """
+    if target is None:
+        return False
+    criteria = [
+        match["criteria"]
+        for node in config.get("nodes", [])
+        for match in _iter_matches(node)
+        if match.get("criteria") is not None
+    ]
+    if not criteria:
+        return False
+    for item in criteria:
+        product = _product_of(item)
+        if product is None or product[1:3] == target:
+            return False
+    return True
+
+
+def _match_platform(
+    match: dict[str, Any], target: tuple[str, str] | None
+) -> bool | None:
+    """Condicao `vulnerable=false`: plataforma em que o firmware roda.
+
+    O cache e por vendor/model, entao o hardware do proprio modelo-alvo sem
+    revisao (`-` ou `*`) e satisfeito por construcao. Qualquer outra condicao
+    (outro produto, revisao especifica) nao da para afirmar.
+    """
+    product = _product_of(match.get("criteria"))
+    if product is None or target is None:
+        return None
+    kind, vendor, name, version = product
+    if kind == "h" and (vendor, name) == target and version in {"-", "*"}:
+        return True
     return None
 
 
@@ -171,7 +233,7 @@ def _evaluate_node(
     results: list[bool | None] = []
     for match in node.get("cpeMatch", []):
         if not match.get("vulnerable", False):
-            results.append(None)
+            results.append(_match_platform(match, target))
         else:
             results.append(
                 _match_version(
@@ -197,6 +259,9 @@ def _evaluate_cve(
     configurations = cve.get("configurations", [])
     if not configurations:
         return True
+    configurations = [c for c in configurations if not _is_other_product(c, target)]
+    if not configurations:
+        return False
     config_results = [
         _combine(
             [
