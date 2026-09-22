@@ -142,6 +142,22 @@ agentic coding assistants operating in this repo.
 - List completed and pending points on every update.
 - Use short, actionable checklist items.
 
+## Development Workflow
+- Spec-Kit is optional per branch. Use it when a change requires formal
+  requirements, planning, decomposition, and traceability. Initialize it
+  explicitly with the Specify CLI when needed. Initialization generates its
+  supporting files; branches that do not use this workflow do not require them.
+- When active, follow: specify -> clarify -> plan -> tasks -> implement ->
+  review -> converge -> commit. Any gap returns to the relevant task.
+- Current code and executed evidence take precedence over specifications,
+  plans, and historical notes.
+- Keep commits brief, conventional, and limited to one logical unit. Do not
+  commit without an explicit request.
+- `TODO.md` records high-level status. When Spec-Kit is active, keep detailed
+  technical tasks in the corresponding `tasks.md` without duplication.
+- Delegated read-only work does not modify files, datasets, or generated
+  artifacts. Only explicitly assigned implementation work may modify them.
+
 ## Cursor/Copilot Rules
 - No Cursor rules detected (`.cursor/rules/`, `.cursorrules`).
 - No Copilot rules detected (`.github/copilot-instructions.md`).
