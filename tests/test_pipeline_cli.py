@@ -83,10 +83,12 @@ def test_cli_basic_file(tmp_path: Path) -> None:
     assert "meta_model" in df.columns
     assert "meta_label" in df.columns
     assert "meta_version" in df.columns
+    assert "meta_version_source" in df.columns
     assert "meta_bytes_used" in df.columns
     assert "meta_max_bytes" in df.columns
     assert df["meta_label"].isna().to_numpy().all()
     assert df["meta_version"].isna().to_numpy().all()
+    assert df["meta_version_source"].isna().to_numpy().all()
 
 
 def test_cli_with_override(tmp_path: Path) -> None:
@@ -237,6 +239,7 @@ def test_cli_without_label_from_path_zeroes_version(tmp_path: Path) -> None:
     assert result.returncode == 0
     df = pd.read_parquet(output_path)
     assert pd.isna(df["meta_version"].iloc[0])
+    assert pd.isna(df["meta_version_source"].iloc[0])
 
 
 def test_cli_label_from_path_extracts_version(tmp_path: Path) -> None:
@@ -270,6 +273,7 @@ def test_cli_label_from_path_extracts_version(tmp_path: Path) -> None:
     assert df["meta_brand"].iloc[0] == "zyxel"
     assert df["meta_model"].iloc[0] == "nwa110ax"
     assert df["meta_version"].iloc[0] == "7.10(ABTG.4)C0"
+    assert df["meta_version_source"].iloc[0] == "directory"
 
 
 def test_cli_findings_output(tmp_path: Path) -> None:

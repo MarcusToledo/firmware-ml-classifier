@@ -10,7 +10,7 @@ from collections.abc import Iterable
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Union, cast
+from typing import Any, NamedTuple, Union, cast
 
 import yaml
 from gensim.models import Doc2Vec
@@ -35,6 +35,17 @@ from src.features.statistics import entropy_variance_across_sections
 from src.io_utils import normalize_binary, read_binary
 
 FeatureValue = Union[float, int, bool, str, None]
+VERSION_SOURCE_DIRECTORY = "directory"
+VERSION_SOURCE_FILENAME = "filename"
+
+
+class PathMetadata(NamedTuple):
+    brand: str | None
+    model: str | None
+    label: str | None
+    version: str | None
+    version_source: str | None
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -53,12 +64,10 @@ def _split_model_version(model: str) -> tuple[str, str | None]:
     return model.lower(), None
 
 
-def infer_brand_model_label_from_path(
-    path: Path,
-) -> tuple[str | None, str | None, str | None, str | None]:
-    """Extrai brand, model, label e version de */raw/<brand>/<model>/*.
+def infer_brand_model_label_from_path(path: Path) -> PathMetadata:
+    """Extrai brand, model, label, version e origem de */raw/<brand>/<model>/*.
 
-    Retorna (None, None, None, None) quando o padrao nao casar.
+    Retorna PathMetadata com todos os campos None quando o padrao nao casar.
     """
     raw_index = None
     for idx, part in enumerate(path.parts):
@@ -66,17 +75,22 @@ def infer_brand_model_label_from_path(
             raw_index = idx
             break
     if raw_index is None:
-        return None, None, None, None
+        return PathMetadata(None, None, None, None, None)
     if len(path.parts) <= raw_index + 2:
-        return None, None, None, None
+        return PathMetadata(None, None, None, None, None)
     brand = path.parts[raw_index + 1].strip().lower()
-    model, version = _split_model_version(path.parts[raw_index + 2].strip())
+    model, directory_version = _split_model_version(path.parts[raw_index + 2].strip())
     if not brand or not model:
-        return None, None, None, None
+        return PathMetadata(None, None, None, None, None)
     # A versao do diretorio tem prioridade; o nome do arquivo e o fallback.
-    version = version or infer_version_from_filename(brand, path.name)
+    if directory_version is not None:
+        version = directory_version
+        version_source = VERSION_SOURCE_DIRECTORY
+    else:
+        version = infer_version_from_filename(brand, path.name)
+        version_source = VERSION_SOURCE_FILENAME if version is not None else None
     label = f"{brand}_{model}"
-    return brand, model, label, version
+    return PathMetadata(brand, model, label, version, version_source)
 
 
 @dataclass(frozen=True)
@@ -206,12 +220,18 @@ def extract_features_from_path(
     model_name: str | None = None,
     label: str | None = None,
     version: str | None = None,
+    version_source: str | None = None,
 ) -> PipelineResult:
     """Extrai features e metadados de um firmware.
 
     Metadados incluem read_ok, error, truncated, doc2vec_used, brand,
-    model, label e version. firmware_id e o SHA256 do conteudo lido.
+    model, label, version e version_source. firmware_id e o SHA256 do
+    conteudo lido.
     """
+    if (version is None) != (version_source is None):
+        raise ValueError(
+            "version and version_source must be both set or both None for " f"{path}"
+        )
     error: str | None = None
     data = read_binary(path, max_bytes=config.max_bytes)
     data = normalize_binary(data)
@@ -273,6 +293,7 @@ def extract_features_from_path(
         "model": model_name,
         "label": label,
         "version": version,
+        "version_source": version_source,
     }
 
     return PipelineResult(
@@ -290,6 +311,7 @@ def _build_error_result(
     model_name: str | None,
     label: str | None,
     version: str | None,
+    version_source: str | None,
     exc: Exception,
 ) -> PipelineResult:
     """Monta um PipelineResult de erro preservando o schema de metadata."""
@@ -310,6 +332,7 @@ def _build_error_result(
             "model": model_name,
             "label": label,
             "version": version,
+            "version_source": version_source,
         },
         findings=[],
     )
@@ -324,20 +347,30 @@ def _process_path(
 
     Compartilhada entre o modo sequencial e os workers do process pool.
     """
-    brand, model_name, label, version = infer_brand_model_label_from_path(path)
+    path_metadata = infer_brand_model_label_from_path(path)
     try:
         return extract_features_from_path(
             path,
             config,
             model,
-            brand=brand,
-            model_name=model_name,
-            label=label,
-            version=version,
+            brand=path_metadata.brand,
+            model_name=path_metadata.model,
+            label=path_metadata.label,
+            version=path_metadata.version,
+            version_source=path_metadata.version_source,
         )
     except Exception as exc:  # pragma: no cover - defensive for batch safety
         LOGGER.warning("Failed to extract features for %s: %s", path, exc)
-        return _build_error_result(path, config, brand, model_name, label, version, exc)
+        return _build_error_result(
+            path,
+            config,
+            brand=path_metadata.brand,
+            model_name=path_metadata.model,
+            label=path_metadata.label,
+            version=path_metadata.version,
+            version_source=path_metadata.version_source,
+            exc=exc,
+        )
 
 
 # Estado por processo worker, preenchido uma unica vez em _init_worker para

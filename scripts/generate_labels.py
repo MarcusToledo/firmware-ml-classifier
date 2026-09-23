@@ -12,6 +12,11 @@ from typing import Any
 
 import pandas as pd
 
+from pipeline.feature_extraction import (
+    VERSION_SOURCE_DIRECTORY,
+    VERSION_SOURCE_FILENAME,
+    infer_brand_model_label_from_path,
+)
 from scripts.fetch_cves import _aggregate_scores
 from src.labeling.cve_labels import (
     LABEL_CRITICAL_CVE,
@@ -91,7 +96,10 @@ def _aggregate_firmware_label(
 
 
 def _result_to_record(
-    row: dict[str, Any], cve_stats: dict[str, Any], label: str
+    row: dict[str, Any],
+    cve_stats: dict[str, Any],
+    label: str,
+    version_source: str | None,
 ) -> dict[str, Any]:
     """Monta registro auditável sem features estatísticas ou semânticas."""
     return {
@@ -100,6 +108,7 @@ def _result_to_record(
         "vendor": row["meta_brand"],
         "model": row["meta_model"],
         "version": row["meta_version"],
+        "version_source": version_source,
         "security_level": label,
         "cve_total": cve_stats["cve_total"],
         "cvss_max": cve_stats.get("cvss_max", 0.0),
@@ -117,9 +126,16 @@ def _load_features(path: Path) -> pd.DataFrame:
         raise ValueError(f"Tabela de features vazia: {path}")
     if frame["firmware_id"].isna().any():
         raise ValueError(f"firmware_id ausente: {path}")
+    if frame["meta_path"].isna().any():
+        raise ValueError(f"meta_path ausente: {path}")
     if frame.duplicated(subset=["firmware_id", "meta_path"]).any():
         raise ValueError(f"linha duplicada (firmware_id + meta_path): {path}")
     return frame
+
+
+def _version_or_none(version: Any) -> str | None:
+    """Normaliza valores ausentes vindos de CSV ou Parquet."""
+    return None if pd.isna(version) else version
 
 
 def _label_rows(
@@ -131,12 +147,25 @@ def _label_rows(
         str,
         list[tuple[list[dict[str, Any]], list[dict[str, Any]]]],
     ] = {}
+    path_metadata = []
     for row in rows:
         try:
             entry = _lookup_cve_entry(row, cache)
         except ValueError as exc:
             raise ValueError(f"firmware_id={row['firmware_id']}: {exc}") from exc
-        result = applicable_cves_for_version(row.get("meta_version"), entry)
+
+        meta_path = row["meta_path"]
+        meta = infer_brand_model_label_from_path(Path(meta_path))
+        feature_version = _version_or_none(row.get("meta_version"))
+        if meta.version != feature_version:
+            raise ValueError(
+                f"firmware_id={row['firmware_id']}; meta_path={meta_path!r}: "
+                f"versao inferida={meta.version!r} difere de "
+                f"meta_version={feature_version!r}; reextraia as features "
+                "com --label-from-path"
+            )
+        path_metadata.append(meta)
+        result = applicable_cves_for_version(feature_version, entry)
         by_firmware.setdefault(row["firmware_id"], []).append(result)
 
     aggregated = {
@@ -144,9 +173,9 @@ def _label_rows(
         for firmware_id, results in by_firmware.items()
     }
     records = []
-    for row in rows:
+    for row, meta in zip(rows, path_metadata):
         label, stats = aggregated[row["firmware_id"]]
-        records.append(_result_to_record(row, stats, label))
+        records.append(_result_to_record(row, stats, label, meta.version_source))
     return records
 
 
@@ -182,6 +211,20 @@ def main() -> None:
                 LABEL_KNOWN_CVE,
                 LABEL_CRITICAL_CVE,
                 LABEL_INDETERMINATE,
+            )
+        },
+    )
+    version_source_distribution = Counter(
+        record["version_source"] for record in records
+    )
+    LOGGER.info(
+        "Origem da versão: %s",
+        {
+            source: version_source_distribution[source]
+            for source in (
+                VERSION_SOURCE_DIRECTORY,
+                VERSION_SOURCE_FILENAME,
+                None,
             )
         },
     )

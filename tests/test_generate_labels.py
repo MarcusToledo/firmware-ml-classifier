@@ -174,7 +174,7 @@ def test_cli_filters_version_before_aggregating_aliases(
     rows = [
         {
             "firmware_id": "shared",
-            "meta_path": "one.bin",
+            "meta_path": "/dataset/raw/dlink/dir300/fw_2.0.bin",
             "meta_brand": "dlink",
             "meta_model": "dir300",
             "meta_version": "2.0",
@@ -182,7 +182,7 @@ def test_cli_filters_version_before_aggregating_aliases(
         },
         {
             "firmware_id": "shared",
-            "meta_path": "two.bin",
+            "meta_path": "/dataset/raw/dlink/dir300b_1.0/fw.bin",
             "meta_brand": "dlink",
             "meta_model": "dir300b",
             "meta_version": "1.0",
@@ -227,6 +227,7 @@ def test_cli_filters_version_before_aggregating_aliases(
     assert labels["security_level"].tolist() == ["cve_conhecida", "cve_conhecida"]
     assert labels["cve_total"].tolist() == [1, 1]
     assert "entropy" not in labels.columns
+    assert labels["version_source"].tolist() == ["filename", "directory"]
 
 
 def test_cli_missing_version_writes_indeterminate(
@@ -238,7 +239,7 @@ def test_cli_missing_version_writes_indeterminate(
         [
             {
                 "firmware_id": "fw",
-                "meta_path": "fw.bin",
+                "meta_path": "/dataset/raw/dlink/dir300/fw.bin",
                 "meta_brand": "dlink",
                 "meta_model": "dir300",
                 "meta_version": None,
@@ -253,6 +254,110 @@ def test_cli_missing_version_writes_indeterminate(
         },
     )
     assert labels["security_level"].tolist() == [LABEL_INDETERMINATE]
+    assert labels["version_source"].isna().tolist() == [True]
+
+
+def test_cli_rejects_version_divergent_from_meta_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with pytest.raises(ValueError) as exc_info:
+        _run_cli(
+            tmp_path,
+            monkeypatch,
+            [
+                {
+                    "firmware_id": "fw-divergent",
+                    "meta_path": "/dataset/raw/dlink/dir300_2.0/fw.bin",
+                    "meta_brand": "dlink",
+                    "meta_model": "dir300",
+                    "meta_version": "1.0",
+                }
+            ],
+            {
+                "dlink/dir300": {
+                    "source": "keyword",
+                    "schema_version": 2,
+                    "cves": [],
+                }
+            },
+        )
+
+    message = str(exc_info.value)
+    assert "firmware_id=fw-divergent" in message
+    assert "meta_version='1.0'" in message
+    assert "versao inferida='2.0'" in message
+    assert "reextraia as features com --label-from-path" in message
+
+
+def test_cli_rejects_missing_version_when_meta_path_has_version(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with pytest.raises(ValueError) as exc_info:
+        _run_cli(
+            tmp_path,
+            monkeypatch,
+            [
+                {
+                    "firmware_id": "fw-missing-version",
+                    "meta_path": "/dataset/raw/dlink/dir300_2.0/fw.bin",
+                    "meta_brand": "dlink",
+                    "meta_model": "dir300",
+                    "meta_version": None,
+                }
+            ],
+            {
+                "dlink/dir300": {
+                    "source": "keyword",
+                    "schema_version": 2,
+                    "cves": [],
+                }
+            },
+        )
+
+    message = str(exc_info.value)
+    assert "firmware_id=fw-missing-version" in message
+    assert "versao inferida='2.0'" in message
+    assert "meta_version=None" in message
+
+
+def test_cli_reports_missing_identity_before_version_divergence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with pytest.raises(ValueError, match="meta_brand/meta_model ausentes"):
+        _run_cli(
+            tmp_path,
+            monkeypatch,
+            [
+                {
+                    "firmware_id": "fw-without-label",
+                    "meta_path": "/dataset/raw/dlink/dir300_2.0/fw.bin",
+                    "meta_brand": None,
+                    "meta_model": None,
+                    "meta_version": "1.0",
+                }
+            ],
+            {},
+        )
+
+
+def test_cli_rejects_missing_meta_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with pytest.raises(ValueError, match="meta_path ausente"):
+        _run_cli(
+            tmp_path,
+            monkeypatch,
+            [
+                {
+                    "firmware_id": "fw-missing-path",
+                    "meta_path": None,
+                    "meta_brand": "dlink",
+                    "meta_model": "dir300",
+                    "meta_version": None,
+                }
+            ],
+            {},
+        )
 
 
 def test_cli_rejects_duplicate_rows(
@@ -260,7 +365,7 @@ def test_cli_rejects_duplicate_rows(
 ) -> None:
     row = {
         "firmware_id": "fw",
-        "meta_path": "same.bin",
+        "meta_path": "/dataset/raw/dlink/dir300_1.0/fw.bin",
         "meta_brand": "dlink",
         "meta_model": "dir300",
         "meta_version": "1.0",
