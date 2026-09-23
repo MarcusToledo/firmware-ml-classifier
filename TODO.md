@@ -1,5 +1,22 @@
 # TODO
 
+## Request: Responder o review do Kody no PR #5
+
+### Completed
+- [x] Responder as threads do Kody e resolver as já atendidas.
+- [x] Marcar como pendentes a escolha dos modelos e a centralização das
+      regras de normalização de `scripts/fetch_cves.py`.
+
+### Pending
+- [ ] Rodar a detecção de strings e do Binwalk uma única vez em
+      `pipeline/feature_extraction.py`: derivar as contagens de
+      `scan_strings_findings` com `findings_to_counts` e de
+      `find_crypto_signatures`/`find_encrypted_sections`, em vez de chamar
+      os detectores de novo. Corrigir o comentário "sem rodar deteccao duas
+      vezes". PR separado; o resultado das features não muda.
+- [ ] Portar para `src/evidence/patterns.py` a correção de
+      `hardcoded_passwords` feita no #4 (`src/features/string_patterns.py`).
+
 ## Request: Analisar aplicabilidade de CVE por versão do firmware
 
 ### Completed
