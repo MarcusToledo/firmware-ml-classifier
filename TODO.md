@@ -23,15 +23,17 @@
       sobre 840 linhas e 699 `firmware_id`.
 - [x] Investigar o gap de sufixos de build, confirmar impacto zero no
       `labels_v2.csv` atual e recomendar a guarda por base numérica (opção B).
+- [x] Implementar a guarda da opção B para CPE exata com sufixo: com a
+      mesma base numérica e padding, build desconhecido ou qualificador extra
+      fica indeterminado; build conhecido diferente e base distinta não se
+      aplicam. Impacto zero no dataset atual.
 
 ### Pending
 - [ ] Registrar explicitamente origem e confiança de `meta_version` por imagem.
-- [ ] Implementar a guarda da opção B para sufixos de build antes da extração
-      relaxada: mesma base numérica retorna indeterminado; base distinta, não.
 - [ ] Implementar extração relaxada de versão pelo nome do arquivo como
       trabalho futuro (+37 `firmware_id` resolvidos).
-- [ ] Avaliar o campo `update` da CPE, hoje ignorado, para não aplicar CVE de
-      hotfix específico a qualquer build da mesma versão.
+- [ ] Avaliação do campo `update` concluída: falso positivo no TL-SG2008
+      confirmado; decidir se implementa a opção (b), com +1 `indeterminado`.
 - [ ] Excluir registros `indeterminado` do treino e reportar métricas e sua
       proporção por vendor.
 - [ ] Verificar se os 23 arquivos `*webflash*` são imagens DD-WRT antes de

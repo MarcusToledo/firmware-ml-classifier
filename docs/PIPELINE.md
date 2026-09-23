@@ -128,7 +128,15 @@ imagem. Fabricante, modelo e versão ficam fora do vetor de features.
   normalizados pela mesma convenção da extração: remove-se `v`/`V`
   inicial; ASUS troca `_` por `.`; Netgear remove o pacote após `_`, mas
   deixa o resultado indeterminado quando o firmware coincide com a base.
-  Sufixos de build (`b01`, `B58`, `beta`) não são cortados.
+  Sufixos de build (`Bxx`, beta ou variante regional como `_ww`) não são
+  cortados. Na versão CPE exata, o match por `casefold` continua aplicável.
+  Se a CPE normalizada tem sufixo e sua base numérica, com padding de
+  zeros, coincide com a versão do firmware, a guarda B devolve `None`
+  quando o firmware não tem sufixo (build desconhecido). Para firmware
+  com sufixo próprio, devolve `None` apenas quando a CPE é a versão
+  completa do firmware seguida de separador e qualificador extra; build
+  conhecido diferente devolve `False`. Base numérica distinta também
+  devolve `False`.
 - `scripts/generate_labels.py` une por ID as aplicáveis (`A`) e as
   indeterminadas (`U`) de todos os aliases do mesmo `firmware_id`.
   Calcula `inf = label(A)` e `sup = label(A ∪ U)`: usa `inf` quando os
@@ -234,18 +242,27 @@ antes/depois da regra C + B1 foi:
   [NISTIR 7696](https://csrc.nist.gov/pubs/ir/7696/final), strings
   literais diferentes são `DISJOINT`; o gap é uma inconsistência com a
   extensão numérica do projeto, não uma violação da especificação CPE.
-- Nas simulações por `firmware_id`, a opção A (manter) e a B (retornar
-  indeterminado apenas quando a base numérica da CPE com sufixo coincide,
-  com padding, com a versão do firmware) mantêm a distribuição
-  `423/50/101/125` para
+- A opção B está implementada no ramo de versão CPE exata. O dry-run não
+  mudou: por linha, a distribuição continua `468/69/167/136`; por
+  `firmware_id`, `423/50/101/125`, na ordem
   `sem_cve_conhecida`/`cve_conhecida`/`cve_critica`/`indeterminado`.
-  A opção C (sempre indeterminado) produz `421/50/101/127`: piora 2
-  `firmware_id` sem ganho. A opção B é pré-requisito obrigatório para a
-  extração relaxada.
-- O campo `update` da CPE é ignorado. Isso é otimista: uma CVE específica
-  de hotfix, como `dir-878_firmware:1.30b08:hotfix_04`, aplica-se hoje a
-  qualquer build da versão. O cache contém 17 ocorrências em 12 CPEs;
-  o impacto medido atual também é zero.
+  Essa guarda é pré-requisito para a extração relaxada de versão, que já
+  pode ser adotada nesse aspecto.
+- A guarda B não resolve CPE sem base numérica parseável. Por exemplo,
+  `firmware_4.05.03`, da Belkin, continua não aplicável.
+- A avaliação do campo `update` (parts[6]), hoje ignorado, encontrou 12
+  CPEs self-match com valor literal: 17 ocorrências em 11 modelos,
+  distribuídas entre hotfix (6), beta (5) e build com data (6). Há um
+  falso positivo confirmado no `labels_v2.csv`: o arquivo
+  `TL-SG2008v1_en_1.0.0_[20140626-rel38150]_up.bin`, build de 2014, está
+  rotulado `cve_conhecida` pelas CVE-2021-31658 e CVE-2021-31659, embora
+  a CPE seja `tl-sg2008_firmware:1.0.0:build_20180529_rel.40524`, build
+  de 2018. A opção (b) recomendada devolve `None` (indeterminado) quando
+  o `update` é literal e a versão casa. O impacto simulado move 1
+  `firmware_id` de `cve_conhecida` para `indeterminado`: por linha,
+  `468/69/167/136` passa a `468/68/167/137`; por `firmware_id`,
+  `423/50/101/125` passa a `423/49/101/126`. A mudança não interage com
+  a guarda B. A decisão de implementar a opção (b) permanece pendente.
 - O recall de `sem_cve_conhecida` é limitado pelo cache por modelo:
   49 entradas vazias têm um modelo-base ou irmão com CVEs. Por exemplo,
   `asus/rt-n12-d1` tem zero, enquanto `asus/rt-n12` tem 13.
