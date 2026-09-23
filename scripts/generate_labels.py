@@ -6,6 +6,7 @@ import argparse
 import json
 import logging
 from collections import Counter
+from itertools import chain
 from pathlib import Path
 from typing import Any
 
@@ -47,29 +48,46 @@ def _lookup_cve_entry(row: dict[str, Any], cache: dict[str, Any]) -> dict[str, A
 
 
 def _aggregate_firmware_label(
-    alias_results: list[tuple[list[dict[str, Any]], bool]],
+    alias_results: list[tuple[list[dict[str, Any]], list[dict[str, Any]]]],
     thresholds: CveLabelThresholds,
 ) -> tuple[str, dict[str, Any]]:
-    """Une CVEs aplicáveis por ID antes de decidir o rótulo uma única vez."""
-    merged: dict[str, dict[str, Any]] = {}
-    any_determinate = False
-    for applicable, determinate in alias_results:
-        if not determinate:
-            continue
-        any_determinate = True
+    """Une as evidencias de todos os aliases e decide o rotulo por limites.
+
+    O rotulo so e atribuido quando toda resolucao possivel das CVEs
+    indeterminadas leva a mesma classe. ``cve_total`` e ``cvss_max`` refletem
+    apenas as CVEs aplicaveis e, portanto, formam um limite inferior.
+    """
+    applicable_by_id: dict[str, dict[str, Any]] = {}
+    indeterminate_by_id: dict[str, dict[str, Any]] = {}
+    for applicable, indeterminate in alias_results:
         for cve in applicable:
             cve_id = cve.get("id")
             if not isinstance(cve_id, str) or not cve_id:
                 raise ValueError("CVE sem identificador válido no cache")
-            merged[cve_id] = cve
+            applicable_by_id[cve_id] = cve
+        for cve in indeterminate:
+            cve_id = cve.get("id")
+            if not isinstance(cve_id, str) or not cve_id:
+                raise ValueError("CVE sem identificador válido no cache")
+            indeterminate_by_id[cve_id] = cve
 
-    if not any_determinate:
-        return LABEL_INDETERMINATE, {"cve_total": 0, "cvss_max": 0.0}
+    for cve_id in applicable_by_id:
+        indeterminate_by_id.pop(cve_id, None)
 
     stats = _aggregate_scores(
-        [(cve["cvss_max"], cve["severity"]) for cve in merged.values()]
+        [(cve["cvss_max"], cve["severity"]) for cve in applicable_by_id.values()]
     )
-    return label_from_cve_stats(stats, thresholds), stats
+    upper_bound_stats = _aggregate_scores(
+        [
+            (cve["cvss_max"], cve["severity"])
+            for cve in chain(applicable_by_id.values(), indeterminate_by_id.values())
+        ]
+    )
+    lower_bound_label = label_from_cve_stats(stats, thresholds)
+    upper_bound_label = label_from_cve_stats(upper_bound_stats, thresholds)
+    if lower_bound_label == upper_bound_label:
+        return lower_bound_label, stats
+    return LABEL_INDETERMINATE, stats
 
 
 def _result_to_record(
@@ -109,7 +127,10 @@ def _label_rows(
     cache: dict[str, Any],
     thresholds: CveLabelThresholds,
 ) -> list[dict[str, Any]]:
-    by_firmware: dict[str, list[tuple[list[dict[str, Any]], bool]]] = {}
+    by_firmware: dict[
+        str,
+        list[tuple[list[dict[str, Any]], list[dict[str, Any]]]],
+    ] = {}
     for row in rows:
         try:
             entry = _lookup_cve_entry(row, cache)

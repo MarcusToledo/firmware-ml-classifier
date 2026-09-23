@@ -12,7 +12,12 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
 
-from src.labeling.version_match import VersionRange, parse_version, version_in_range
+from src.labeling.version_match import (
+    VersionRange,
+    parse_version,
+    version_in_range,
+    versions_equal,
+)
 
 LABEL_NO_KNOWN_CVE = "sem_cve_conhecida"
 LABEL_KNOWN_CVE = "cve_conhecida"
@@ -20,6 +25,7 @@ LABEL_CRITICAL_CVE = "cve_critica"
 LABEL_INDETERMINATE = "indeterminado"
 
 _NUMERIC_VERSION_RE = re.compile(r"^\d+(?:\.\d+)*$")
+_NETGEAR_PACKAGE_RE = re.compile(r"^(\d+(?:\.\d+){2,3})_\d+(?:\.\d+)*$")
 _BOUND_KEYS = (
     "versionStartIncluding",
     "versionStartExcluding",
@@ -149,6 +155,18 @@ def _match_platform(
     return None
 
 
+def _normalize_cpe_version(value: str, vendor: str | None) -> tuple[str, bool]:
+    """Normaliza uma versao CPE e indica pacote Netgear removido."""
+    normalized = re.sub(r"^[vV](?=\d)", "", value)
+    if vendor == "asus":
+        return normalized.replace("_", "."), False
+    if vendor == "netgear":
+        package_match = _NETGEAR_PACKAGE_RE.fullmatch(normalized)
+        if package_match is not None:
+            return package_match.group(1), True
+    return normalized, False
+
+
 def _match_version(
     version_raw: str,
     version: tuple[int, ...],
@@ -170,30 +188,48 @@ def _match_version(
         if exact_version not in {"*", "-"}:
             if exact_version.casefold() == version_raw.casefold():
                 pass
-            elif (
-                _NUMERIC_VERSION_RE.fullmatch(version_raw)
-                and _NUMERIC_VERSION_RE.fullmatch(exact_version)
-                and version_in_range(
-                    version,
-                    VersionRange(
-                        start_including=parse_version(exact_version),
-                        end_including=parse_version(exact_version),
-                    ),
-                )
-            ):
-                pass
             else:
-                return False
+                normalized, package_removed = _normalize_cpe_version(
+                    exact_version, target[0]
+                )
+                parsed = parse_version(normalized)
+                if (
+                    package_removed
+                    and parsed is not None
+                    and versions_equal(version, parsed)
+                ):
+                    return None
+                if (
+                    _NUMERIC_VERSION_RE.fullmatch(version_raw)
+                    and _NUMERIC_VERSION_RE.fullmatch(normalized)
+                    and parsed is not None
+                    and version_in_range(
+                        version,
+                        VersionRange(
+                            start_including=parsed,
+                            end_including=parsed,
+                        ),
+                    )
+                ):
+                    pass
+                else:
+                    return False
         elif exact_version == "-":
             return None
 
     bounds: dict[str, tuple[int, ...]] = {}
+    vendor = target[0] if target is not None else None
     for key in _BOUND_KEYS:
         if key not in match:
             continue
         value = match[key]
-        parsed = parse_version(value) if isinstance(value, str) else None
-        if parsed is None or _NUMERIC_VERSION_RE.fullmatch(value.strip()) is None:
+        if not isinstance(value, str):
+            return None
+        normalized, package_removed = _normalize_cpe_version(value, vendor)
+        parsed = parse_version(normalized)
+        if parsed is None or _NUMERIC_VERSION_RE.fullmatch(normalized.strip()) is None:
+            return None
+        if package_removed and versions_equal(version, parsed):
             return None
         bounds[key] = parsed
     if bounds and _NUMERIC_VERSION_RE.fullmatch(version_raw) is None:
@@ -284,21 +320,23 @@ def _evaluate_cve(
 def applicable_cves_for_version(
     version_raw: str | None,
     cache_entry: dict[str, Any],
-) -> tuple[list[dict[str, Any]], bool]:
-    """Retorna CVEs aplicáveis e se toda aplicabilidade foi determinada."""
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Retorna CVEs aplicaveis e indeterminadas, na ordem do cache."""
+    cves = list(cache_entry.get("cves", []))
     if not isinstance(version_raw, str) or not version_raw.strip():
-        return [], False
+        return [], cves
     version_raw = version_raw.strip()
     version = parse_version(version_raw)
     if version is None:
-        return [], False
+        return [], cves
 
     target = _target_parts(cache_entry)
     applicable: list[dict[str, Any]] = []
-    for cve in cache_entry.get("cves", []):
+    indeterminate: list[dict[str, Any]] = []
+    for cve in cves:
         verdict = _evaluate_cve(cve, version_raw, version, target)
         if verdict is None:
-            return [], False
-        if verdict:
+            indeterminate.append(cve)
+        elif verdict:
             applicable.append(cve)
-    return applicable, True
+    return applicable, indeterminate

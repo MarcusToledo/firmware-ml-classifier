@@ -33,6 +33,11 @@ def _compare(left: tuple[int, ...], right: tuple[int, ...]) -> int:
     return (padded_left > padded_right) - (padded_left < padded_right)
 
 
+def versions_equal(left: tuple[int, ...], right: tuple[int, ...]) -> bool:
+    """Compara versoes tratando segmentos finais ausentes como zero."""
+    return _compare(left, right) == 0
+
+
 def version_in_range(version: tuple[int, ...], bounds: VersionRange) -> bool:
     """Verifica os quatro limites, tratando segmentos finais ausentes como zero."""
     if bounds.start_including is not None:

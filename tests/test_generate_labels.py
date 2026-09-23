@@ -8,7 +8,13 @@ import pandas as pd
 import pytest
 
 from scripts.generate_labels import _aggregate_firmware_label, _lookup_cve_entry, main
-from src.labeling.cve_labels import LABEL_INDETERMINATE, CveLabelThresholds
+from src.labeling.cve_labels import (
+    LABEL_CRITICAL_CVE,
+    LABEL_INDETERMINATE,
+    LABEL_KNOWN_CVE,
+    LABEL_NO_KNOWN_CVE,
+    CveLabelThresholds,
+)
 
 
 def _cve(cve_id: str, score: float = 7.5) -> dict:
@@ -62,32 +68,104 @@ def test_lookup_missing_pair_fails_instead_of_becoming_negative() -> None:
         _lookup_cve_entry({"meta_brand": "unknown", "meta_model": "x1"}, {})
 
 
-def test_aggregate_all_indeterminate() -> None:
-    label, stats = _aggregate_firmware_label(
-        [([], False), ([], False)], CveLabelThresholds()
-    )
-    assert label == LABEL_INDETERMINATE
-    assert stats == {"cve_total": 0, "cvss_max": 0.0}
-
-
-def test_aggregate_uses_determinate_alias_and_deduplicates_cves() -> None:
+def test_aggregate_all_aliases_with_only_indeterminate_cves() -> None:
     label, stats = _aggregate_firmware_label(
         [
-            ([], False),
-            ([_cve("CVE-1"), _cve("CVE-2", 9.8)], True),
-            ([_cve("CVE-1")], True),
+            ([], [_cve("CVE-1")]),
+            ([], [_cve("CVE-2", 9.8)]),
         ],
         CveLabelThresholds(),
     )
-    assert label == "cve_critica"
-    assert stats["cve_total"] == 2
+    assert label == LABEL_INDETERMINATE
+    assert stats["cve_total"] == 0
+    assert stats["cvss_max"] == 0.0
+
+
+def test_aggregate_critical_applicable_with_indeterminate_cve() -> None:
+    label, stats = _aggregate_firmware_label(
+        [
+            (
+                [_cve("CVE-APPLICABLE", 9.8)],
+                [_cve("CVE-INDETERMINATE", 7.5)],
+            )
+        ],
+        CveLabelThresholds(),
+    )
+    assert label == LABEL_CRITICAL_CVE
+    assert stats["cve_total"] == 1
     assert stats["cvss_max"] == 9.8
 
 
-def test_aggregate_valid_negative_result() -> None:
-    label, stats = _aggregate_firmware_label([([], True)], CveLabelThresholds())
-    assert label == "sem_cve_conhecida"
+def test_aggregate_known_applicable_with_critical_indeterminate_cve() -> None:
+    label, stats = _aggregate_firmware_label(
+        [
+            (
+                [_cve("CVE-APPLICABLE")],
+                [_cve("CVE-INDETERMINATE", 9.8)],
+            )
+        ],
+        CveLabelThresholds(),
+    )
+    assert label == LABEL_INDETERMINATE
+    assert stats["cve_total"] == 1
+    assert stats["cvss_max"] == 7.5
+
+
+def test_aggregate_known_applicable_with_only_known_indeterminate_cves() -> None:
+    label, stats = _aggregate_firmware_label(
+        [
+            (
+                [_cve("CVE-APPLICABLE")],
+                [_cve("CVE-INDETERMINATE", 8.9)],
+            )
+        ],
+        CveLabelThresholds(),
+    )
+    assert label == LABEL_KNOWN_CVE
+    assert stats["cve_total"] == 1
+    assert stats["cvss_max"] == 7.5
+
+
+def test_aggregate_empty_evidence_is_valid_negative() -> None:
+    label, stats = _aggregate_firmware_label([([], [])], CveLabelThresholds())
+    assert label == LABEL_NO_KNOWN_CVE
     assert stats["cve_total"] == 0
+
+
+def test_aggregate_keeps_indeterminate_cve_when_an_alias_has_no_evidence() -> None:
+    label, stats = _aggregate_firmware_label(
+        [
+            ([], [_cve("CVE-INDETERMINATE", 9.8)]),
+            ([], []),
+        ],
+        CveLabelThresholds(),
+    )
+    assert label == LABEL_INDETERMINATE
+    assert stats["cve_total"] == 0
+
+
+def test_aggregate_applicable_cve_overrides_same_indeterminate_cve() -> None:
+    label, stats = _aggregate_firmware_label(
+        [
+            ([_cve("CVE-SAME")], []),
+            ([], [_cve("CVE-SAME", 9.8)]),
+        ],
+        CveLabelThresholds(),
+    )
+    assert label == LABEL_KNOWN_CVE
+    assert stats["cve_total"] == 1
+    assert stats["cvss_max"] == 7.5
+
+
+def test_aggregate_deduplicates_applicable_cve_between_aliases() -> None:
+    cve = _cve("CVE-SAME")
+    label, stats = _aggregate_firmware_label(
+        [([cve], []), ([cve], [])],
+        CveLabelThresholds(),
+    )
+
+    assert label == LABEL_KNOWN_CVE
+    assert stats["cve_total"] == 1
 
 
 def test_cli_filters_version_before_aggregating_aliases(
