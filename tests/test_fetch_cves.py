@@ -14,6 +14,8 @@ from scripts.fetch_cves import (
 # ---------------------------------------------------------------------------
 # normalize_vendor / normalize_model
 # ---------------------------------------------------------------------------
+# TODO: mover essas regras de normalização para um módulo/script separado, para
+# centralizá-las e não poluir os módulos. Estes testes acompanham essa mudança.
 
 
 def test_normalize_vendor_dlink() -> None:

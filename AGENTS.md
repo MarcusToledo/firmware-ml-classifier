@@ -17,7 +17,7 @@ agentic coding assistants operating in this repo.
   - Statistical: size, entropy, byte distribution, compressibility.
   - Semantic: ASCII strings + Doc2Vec embeddings (DM or DBOW).
   - Structural/security evidence: Binwalk and detectors in `src/evidence/`.
-- Models:
+- Models (still to be defined):
   - Extra Trees as the main model.
   - Random Forest as the ML baseline.
   - `src/scoring.py` is a deterministic rule-based comparison baseline,

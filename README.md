@@ -12,7 +12,8 @@ firmwares embarcados usando análise estática e aprendizado de máquina.
 - Extrair features estatísticas, strings ASCII, evidências de segurança e embeddings
   Doc2Vec, sem incluir fabricante/modelo nem campos CVE no vetor do classificador.
 - Comparar Extra Trees (modelo principal), Random Forest (baseline ML) e o
-  baseline determinístico de regras de `src/scoring.py`.
+  baseline determinístico de regras de `src/scoring.py`. A escolha dos modelos
+  ainda está a definir.
 
 ## Pipeline experimental
 1. Organizar o dataset e preservar fabricante/modelo como metadados de consulta.
