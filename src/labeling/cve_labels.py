@@ -174,6 +174,7 @@ def _match_version(
     target: tuple[str, str] | None,
     unknown_if_unrelated: bool = False,
 ) -> bool | None:
+    update_specific = False
     criteria = match.get("criteria")
     if criteria is not None:
         parts = criteria.split(":") if isinstance(criteria, str) else []
@@ -185,6 +186,9 @@ def _match_version(
         if actual != target:
             return None if unknown_if_unrelated else False
         exact_version = parts[5]
+        # O campo `update` (hotfix, beta, build datado) restringe a CVE a um
+        # build que o nome do arquivo nao informa; versao casando vira None.
+        update_specific = parts[6] not in {"*", "-"}
         if exact_version not in {"*", "-"}:
             if exact_version.casefold() == version_raw.casefold():
                 pass
@@ -255,7 +259,7 @@ def _match_version(
         bounds[key] = parsed
     if bounds and _NUMERIC_VERSION_RE.fullmatch(version_raw) is None:
         return None
-    return version_in_range(
+    matched = version_in_range(
         version,
         VersionRange(
             start_including=bounds.get("versionStartIncluding"),
@@ -264,6 +268,9 @@ def _match_version(
             end_excluding=bounds.get("versionEndExcluding"),
         ),
     )
+    if matched and update_specific:
+        return None
+    return matched
 
 
 def _combine(results: list[bool | None], operator: str) -> bool | None:

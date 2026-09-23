@@ -251,6 +251,35 @@ def test_exact_cpe_region_variant_is_indeterminate_for_matching_build() -> None:
     assert applicable_cves_for_version("1.06B05", entry) == ([], [cve])
 
 
+def test_exact_cpe_with_specific_update_is_indeterminate_when_version_matches() -> None:
+    """Caso real TL-SG2008: a CPE fixa o build 2018 e o arquivo e de 2014."""
+    update = "build_20180529_rel.40524"
+    criteria = f"cpe:2.3:o:tp-link:tl-sg2008_firmware:1.0.0:{update}:*:*:*:*:*:*"
+    cve = _cve([{"criteria": criteria}])
+    entry = {"vendor": "tp-link", "model": "tl-sg2008", "cves": [cve]}
+
+    assert applicable_cves_for_version("1.0.0", entry) == ([], [cve])
+    assert applicable_cves_for_version("1.0.1", entry) == ([], [])
+
+
+def test_range_with_specific_update_is_indeterminate_inside_range() -> None:
+    criteria = "cpe:2.3:o:dlink:dir-300_firmware:*:hotfix_04:*:*:*:*:*:*"
+    cve = _cve([{"criteria": criteria, "versionEndExcluding": "2.0"}])
+    entry = {"vendor": "d-link", "model": "DIR-300", "cves": [cve]}
+
+    assert applicable_cves_for_version("1.5", entry) == ([], [cve])
+    assert applicable_cves_for_version("2.0", entry) == ([], [])
+
+
+def test_not_applicable_update_marker_keeps_match() -> None:
+    """`-` e NA na CPE 2.3: nao restringe a um build especifico."""
+    criteria = "cpe:2.3:o:dlink:dir-300_firmware:1.2:-:*:*:*:*:*:*"
+    cve = _cve([{"criteria": criteria}])
+    entry = {"vendor": "d-link", "model": "DIR-300", "cves": [cve]}
+
+    assert applicable_cves_for_version("1.2", entry) == ([cve], [])
+
+
 def test_unparseable_cpe_bound_is_indeterminate() -> None:
     cve = _cve([{"versionEndExcluding": "ABTG"}])
     assert applicable_cves_for_version("1.0", {"cves": [cve]}) == ([], [cve])
