@@ -212,6 +212,27 @@ def _match_version(
                     )
                 ):
                     pass
+                elif (
+                    _NUMERIC_VERSION_RE.fullmatch(normalized) is None
+                    and parsed is not None
+                    and versions_equal(version, parsed)
+                ):
+                    # Sufixos (build Bxx, beta ou variante regional) mudam a
+                    # release, e a NVD os embute em version. Sem build no
+                    # firmware, nao da para excluir a CVE; com outro build
+                    # conhecido, o resultado deve ser False.
+                    if _NUMERIC_VERSION_RE.fullmatch(version_raw) is not None:
+                        return None
+                    normalized_casefold = normalized.casefold()
+                    version_casefold = version_raw.casefold()
+                    suffix_index = len(version_casefold)
+                    if (
+                        normalized_casefold.startswith(version_casefold)
+                        and len(normalized_casefold) > suffix_index
+                        and not normalized_casefold[suffix_index].isalnum()
+                    ):
+                        return None
+                    return False
                 else:
                     return False
         elif exact_version == "-":

@@ -151,10 +151,104 @@ def test_exact_cpe_version_matches_with_different_granularity() -> None:
     assert applicable_cves_for_version("1.2.0", entry) == ([cve], [])
 
 
-def test_exact_cpe_prerelease_does_not_match_release() -> None:
-    cve = _cve([{"criteria": "cpe:2.3:o:dlink:dir-300_firmware:1.2beta:*:*:*:*:*:*:*"}])
+def test_exact_cpe_prerelease_is_indeterminate_at_matching_base() -> None:
+    criteria = "cpe:2.3:o:dlink:dir-300_firmware:1.2beta:*:*:*:*:*:*:*"
+    cve = _cve([{"criteria": criteria}])
     entry = {"vendor": "d-link", "model": "DIR-300", "cves": [cve]}
-    assert applicable_cves_for_version("1.2", entry) == ([], [])
+    assert applicable_cves_for_version("1.2", entry) == ([], [cve])
+
+
+def test_exact_cpe_build_suffix_is_indeterminate_at_base() -> None:
+    criteria = "cpe:2.3:o:dlink:dir-300_firmware:2.14b01:*:*:*:*:*:*:*"
+    cve = _cve([{"criteria": criteria}])
+    entry = {"vendor": "d-link", "model": "DIR-300", "cves": [cve]}
+
+    assert applicable_cves_for_version("2.14", entry) == ([], [cve])
+
+
+def test_exact_cpe_build_suffix_is_indeterminate_at_padded_base() -> None:
+    criteria = "cpe:2.3:o:dlink:dir-300_firmware:2.14b01:*:*:*:*:*:*:*"
+    cve = _cve([{"criteria": criteria}])
+    entry = {"vendor": "d-link", "model": "DIR-300", "cves": [cve]}
+
+    assert applicable_cves_for_version("2.14.0", entry) == ([], [cve])
+
+
+def test_exact_cpe_build_suffix_does_not_match_extra_numeric_segment() -> None:
+    criteria = "cpe:2.3:o:dlink:dir-300_firmware:2.14b01:*:*:*:*:*:*:*"
+    cve = _cve([{"criteria": criteria}])
+    entry = {"vendor": "d-link", "model": "DIR-300", "cves": [cve]}
+
+    assert applicable_cves_for_version("2.14.1", entry) == ([], [])
+
+
+def test_exact_numeric_cpe_does_not_match_firmware_suffix() -> None:
+    criteria = "cpe:2.3:o:dlink:dir-300_firmware:1.2:*:*:*:*:*:*:*"
+    cve = _cve([{"criteria": criteria}])
+    entry = {"vendor": "d-link", "model": "DIR-300", "cves": [cve]}
+
+    assert applicable_cves_for_version("1.2rc1", entry) == ([], [])
+
+
+def test_exact_cpe_build_suffix_does_not_apply_to_different_base() -> None:
+    criteria = "cpe:2.3:o:dlink:dir-300_firmware:2.14b01:*:*:*:*:*:*:*"
+    cve = _cve([{"criteria": criteria}])
+    entry = {"vendor": "d-link", "model": "DIR-300", "cves": [cve]}
+
+    assert applicable_cves_for_version("2.15", entry) == ([], [])
+
+
+def test_exact_cpe_build_suffix_matches_case_insensitively() -> None:
+    criteria = "cpe:2.3:o:dlink:dir-300_firmware:2.14b01:*:*:*:*:*:*:*"
+    cve = _cve([{"criteria": criteria}])
+    entry = {"vendor": "d-link", "model": "DIR-300", "cves": [cve]}
+
+    assert applicable_cves_for_version("2.14B01", entry) == ([cve], [])
+
+
+def test_exact_cpe_build_suffix_does_not_match_different_known_build() -> None:
+    criteria = "cpe:2.3:o:dlink:dir-300_firmware:2.14b01:*:*:*:*:*:*:*"
+    cve = _cve([{"criteria": criteria}])
+    entry = {"vendor": "d-link", "model": "DIR-300", "cves": [cve]}
+
+    assert applicable_cves_for_version("2.14B02", entry) == ([], [])
+
+
+def test_exact_cpe_build_suffix_requires_separator_after_firmware_build() -> None:
+    criteria = "cpe:2.3:o:dlink:dir-300_firmware:2.14b01:*:*:*:*:*:*:*"
+    cve = _cve([{"criteria": criteria}])
+    entry = {"vendor": "d-link", "model": "DIR-300", "cves": [cve]}
+
+    assert applicable_cves_for_version("2.14B0", entry) == ([], [])
+
+
+def test_exact_cpe_without_parseable_base_keeps_known_limitation() -> None:
+    """Protege CPE sem base parseavel e registra a limitacao conhecida.
+
+    O prefixo `firmware_` impede comparar versoes; o resultado nao afirma que
+    a CVE nao se aplica.
+    """
+    criteria = "cpe:2.3:o:dlink:dir-300_firmware:firmware_4.05.03:*:*:*:*:*:*:*"
+    cve = _cve([{"criteria": criteria}])
+    entry = {"vendor": "d-link", "model": "DIR-300", "cves": [cve]}
+
+    assert applicable_cves_for_version("4.05.03", entry) == ([], [])
+
+
+def test_exact_cpe_build_and_region_suffix_is_indeterminate() -> None:
+    criteria = "cpe:2.3:o:dlink:dir-300_firmware:1.06b05_ww:*:*:*:*:*:*:*"
+    cve = _cve([{"criteria": criteria}])
+    entry = {"vendor": "d-link", "model": "DIR-300", "cves": [cve]}
+
+    assert applicable_cves_for_version("1.06", entry) == ([], [cve])
+
+
+def test_exact_cpe_region_variant_is_indeterminate_for_matching_build() -> None:
+    criteria = "cpe:2.3:o:dlink:dir-300_firmware:1.06b05_ww:*:*:*:*:*:*:*"
+    cve = _cve([{"criteria": criteria}])
+    entry = {"vendor": "d-link", "model": "DIR-300", "cves": [cve]}
+
+    assert applicable_cves_for_version("1.06B05", entry) == ([], [cve])
 
 
 def test_unparseable_cpe_bound_is_indeterminate() -> None:
