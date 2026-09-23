@@ -1,5 +1,56 @@
 # TODO
 
+## Request: Analisar aplicabilidade de CVE por versão do firmware
+
+### Completed
+- [x] Confirmar que a extração atual remove o sufixo de versão do modelo.
+- [x] Confirmar que o cache usa somente a chave fabricante/modelo.
+- [x] Confirmar que a coleta descarta CVE, CPE e intervalos afetados após
+      agregar contagens e CVSS.
+- [x] Registrar no `docs/PIPELINE.md` o risco de rotular como vulnerável uma
+      versão corrigida do mesmo modelo.
+- [x] Preservar `meta_version` inferida do path fora do vetor de features.
+- [x] Versionar as entradas do cache e guardar ID da CVE, critérios CPE,
+      configurações e limites de versão.
+- [x] Consultar CPE oficial antes da busca textual por fabricante/modelo.
+- [x] Comparar versões com limites inclusivos e exclusivos.
+- [x] Tratar como indeterminadas as CVEs sem comparação confiável de versão
+      ou condição CPE.
+- [x] Aplicar a regra C: unir aplicáveis e indeterminadas de todos os aliases
+      e decidir o rótulo pelos limites inferior e superior.
+- [x] Aplicar a normalização B1 a versões CPE exatas e limites.
+- [x] Validar a regra C + B1 com 355 testes passando e conferir o dry-run
+      sobre 840 linhas e 699 `firmware_id`.
+- [x] Investigar o gap de sufixos de build, confirmar impacto zero no
+      `labels_v2.csv` atual e recomendar a guarda por base numérica (opção B).
+
+### Pending
+- [ ] Registrar explicitamente origem e confiança de `meta_version` por imagem.
+- [ ] Implementar a guarda da opção B para sufixos de build antes da extração
+      relaxada: mesma base numérica retorna indeterminado; base distinta, não.
+- [ ] Implementar extração relaxada de versão pelo nome do arquivo como
+      trabalho futuro (+37 `firmware_id` resolvidos).
+- [ ] Avaliar o campo `update` da CPE, hoje ignorado, para não aplicar CVE de
+      hotfix específico a qualquer build da mesma versão.
+- [ ] Excluir registros `indeterminado` do treino e reportar métricas e sua
+      proporção por vendor.
+- [ ] Verificar se os 23 arquivos `*webflash*` são imagens DD-WRT antes de
+      atribuir versão.
+
+## Request: Registrar ajuste pendente em docs/PIPELINE.md
+
+### Completed
+- [x] Confirmar o worktree que contém o `docs/PIPELINE.md` recriado.
+- [x] Adicionar uma OBS sobre a separação entre ground truth CVE e baseline.
+- [x] Sinalizar que `LEVEL_ORDER` pertence a `src/scoring.py`.
+- [x] Explicar que o ground truth usa apenas CVE e que `LEVEL_ORDER` e hard
+      rules pertencem ao baseline.
+- [x] Corrigir a referência de `LEVEL_ORDER` em `docs/PIPELINE.md`.
+- [x] Revisar `docs/PIPELINE.md` antes de publicar ou commitar.
+
+### Pending
+- [ ] None.
+
 ## Request: Retomar análise interrompida do Claude
 
 ### Completed
@@ -35,8 +86,7 @@
       usar as constantes `LABEL_*` de `src/labeling/cve_labels.py`).
 
 ### Pending
-- [ ] Implementar associação de CVEs por versão exata e avaliar a qualidade dos rótulos.
-- [ ] Registrar resultados experimentais somente após execução e validação.
+- [ ] None.
 
 ## Request: Rodar extract-features e validar output gerado
 
@@ -175,8 +225,8 @@
 
 #### Treino e Avaliacao
 - [ ] Implementar `scripts/train.py` com 4 modelos: Random Forest, Extra Trees, XGBoost, MLP.
-- [ ] Implementar `RepeatedStratifiedKFold(n_splits=5, n_repeats=10)` como estrategia de validacao.
-- [ ] Implementar LOOCV como validacao secundaria.
+- [ ] Validar com `StratifiedGroupKFold` agrupado por modelo, após deduplicar
+      por `firmware_id`, no lugar de `RepeatedStratifiedKFold` e LOOCV.
 - [ ] Reportar macro F1-score, acuracia, confusion matrix normalizada e intervalo de confianca.
 - [ ] Implementar split train/val/test com seeds fixos.
 - [ ] Implementar geracao de relatorios em `reports/`.
@@ -215,9 +265,10 @@ atual usa somente CVEs; `src/scoring.py` é baseline de comparação.
 - [x] Mudar filtro de extensoes de allowlist para excludelist em `extract_features.py` (3 → 305 firmwares).
 - [x] Extrair firmware de ZIPs e remover ZIPs sem firmware do dataset.
 - [x] Re-extrair features para os 305 firmwares (6 vendors: dlink, netgear, openwrt, belkin, tplink, zyxel).
+- [x] Gerar `dataset/labels_v2.csv` com o cache e as features v2 validados.
 
 ### Pending
-- [ ] Re-gerar labels apos implementar CVEs e strings para distribuicao mais equilibrada.
+- [ ] None.
 
 ### Decisoes Arquiteturais Registradas
 - Priorizar tree-based models (RF, Extra Trees) sobre MLP para datasets pequenos.
