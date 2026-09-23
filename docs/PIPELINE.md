@@ -109,10 +109,19 @@ firmware de novo.
 ### 3. Rotulagem por CVE
 
 O rótulo de treino depende apenas de CVEs avaliadas para os metadados da
-imagem. Fabricante, modelo e versão ficam fora do vetor de features.
+imagem. O treino faz merge com `labels_v2.csv` por `firmware_id` e usa
+dele somente `security_level`. `vendor`, `model`, `version`,
+`version_source`, `cve_total` e `cvss_max` ficam fora do vetor, assim como
+todas as colunas `meta_*` do parquet. Essa separação evita vazamento:
+`version_source` nulo tende a coincidir com `indeterminado` e antecipa o
+rótulo.
 
 - `pipeline/feature_extraction.py` preserva a versão inferida do path em
-  `meta_version`, junto ao fabricante e modelo.
+  `meta_version`, junto ao fabricante e modelo. `meta_version_source`
+  registra `directory` quando a versão vem do sufixo do diretório do
+  modelo, `filename` quando vem do fallback pelo nome do arquivo, ou nulo
+  quando não há versão. O diretório tem prioridade. Os dois campos ficam
+  fora do vetor de features.
 - `scripts/fetch_cves.py` procura um CPE oficial correspondente ao par
   fabricante/modelo; se não o encontra, consulta a NVD por texto. O cache
   guarda cada CVE com ID, CVSS, critério CPE, limites de versão e a
@@ -137,14 +146,23 @@ imagem. Fabricante, modelo e versão ficam fora do vetor de features.
   completa do firmware seguida de separador e qualificador extra; build
   conhecido diferente devolve `False`. Base numérica distinta também
   devolve `False`.
-- `scripts/generate_labels.py` une por ID as aplicáveis (`A`) e as
-  indeterminadas (`U`) de todos os aliases do mesmo `firmware_id`.
-  Calcula `inf = label(A)` e `sup = label(A ∪ U)`: usa `inf` quando os
-  dois limites coincidem e `indeterminado` quando divergem. `cve_total` e
-  `cvss_max` sempre descrevem apenas `A`, portanto são limites inferiores.
-  Par fabricante/modelo ausente no cache gera erro. O arquivo
-  `labels.csv` mantém o estado `indeterminado`, que deve ser excluído pelo
-  futuro código de treino.
+- `scripts/generate_labels.py` grava `version_source` logo após `version`
+  no `labels_v2.csv`. Como o `features_v2.parquet` atual foi extraído
+  antes de `meta_version_source`, o script reinfere a origem a partir de
+  `meta_path`. A escolha é consciente: versão e origem seguem a mesma
+  regra, e a checagem contra `meta_version` falha se o parquet estiver
+  desatualizado. Portanto, qualquer mudança nas regras de extração de
+  versão exige reextrair as features antes de regerar os rótulos.
+  `meta_version_source` no parquet serve para auditar a tabela de
+  features.
+- O mesmo script une por ID as aplicáveis (`A`) e as indeterminadas (`U`)
+  de todos os aliases do mesmo `firmware_id`. Calcula `inf = label(A)` e
+  `sup = label(A ∪ U)`: usa `inf` quando os dois limites coincidem e
+  `indeterminado` quando divergem. `cve_total` e `cvss_max` sempre
+  descrevem apenas `A`, portanto são limites inferiores. Par
+  fabricante/modelo ausente no cache gera erro. O arquivo `labels.csv`
+  mantém o estado `indeterminado`, que deve ser excluído pelo futuro
+  código de treino.
 
 ### 4. Classificação e baseline
 
@@ -217,6 +235,9 @@ antes/depois da regra C + B1, da guarda B e da opção (b) do campo
 | `cve_critica` | 36 | 167 | 25 | 101 |
 | `indeterminado` | 329 | 137 | 322 (46,1%) | 126 (18,0%) |
 
+A origem da versão nas 840 linhas é: 0 `directory`, 614 `filename` e 226
+sem versão (`version_source` nulo).
+
 ### Limitações da rotulagem
 
 - O resíduo `indeterminado` depende de hipóteses que os metadados não
@@ -231,11 +252,13 @@ antes/depois da regra C + B1, da guarda B e da opção (b) do campo
   base numérica igual à versão extraída; a execução do código real
   confirmou impacto zero. O gap espelhado — firmware não numérico contra
   CPE exata numérica — também tem zero ocorrência hoje.
-- A extração relaxada torna o gap relevante: por exemplo,
-  `DIR-867_FW1.30B07.bin` corresponde a `1.30b07`, e
-  `DIR_1760_FW101B04.BIN`, a `1.01b04`. Na D-Link, `Bxx` identifica um
-  build/release que pode corrigir CVEs, enquanto `_WW` indica a variante
-  regional worldwide; truncar o build perde informação de segurança
+- Trabalho futuro: flexibilizar a extração de versão pelo nome do arquivo.
+  A análise encontrou mais 37 `firmware_id` que passariam a ter versão.
+  Os formatos a tratar incluem o D-Link compacto `FW101B04`, a versão
+  D-Link com build `1.04B58` e o ASUS compacto `30043763754`. Na D-Link,
+  `Bxx` identifica um build/release que pode corrigir CVEs, enquanto
+  `_WW` indica a variante regional worldwide; truncar o build perde
+  informação de segurança
   ([release notes da D-Link](https://support.dlink.com/resource/products/DNS-320L/REVA/DNS-320L_REVA_RELEASE_NOTES_v1.11B01.pdf)).
   A [NISTIR 7695](https://csrc.nist.gov/pubs/ir/7695/final) reserva o
   campo `update` para build/beta, embora a NVD costume embutir o sufixo
@@ -243,9 +266,8 @@ antes/depois da regra C + B1, da guarda B e da opção (b) do campo
   [NISTIR 7696](https://csrc.nist.gov/pubs/ir/7696/final), strings
   literais diferentes são `DISJOINT`; o gap é uma inconsistência com a
   extensão numérica do projeto, não uma violação da especificação CPE.
-- A opção B está implementada no ramo de versão CPE exata e não alterou
-  nenhum rótulo do dataset atual. Ela é pré-requisito para a extração
-  relaxada de versão, que já pode ser adotada nesse aspecto.
+  A guarda B para versões CPE exatas, pré-requisito dessa extração, já
+  está implementada e não alterou nenhum rótulo do dataset atual.
 - A guarda B não resolve CPE cuja versão não começa por número. Na
   Belkin, a NVD registrou a versão como `firmware_4.05.03` (o texto
   `firmware_` dentro do campo `version`, erro de cadastro). Como a
@@ -254,7 +276,8 @@ antes/depois da regra C + B1, da guarda B e da opção (b) do campo
   seja 4.05.03. O efeito hoje é nulo: o único firmware `f5d7231_4` do
   dataset é a versão 5.01.11, que não casaria com 4.05.03 de qualquer
   forma. Ainda assim, o comportamento trata incerteza como evidência
-  negativa. Casos parecidos no cache: `fw102b15`, `me_1.03`.
+  negativa. Casos parecidos no cache: `fw102b15`, `me_1.03`. Decidiu-se
+  não corrigir esse caso; a limitação fica documentada.
 - O campo `update` (parts[6]) agora é considerado (opção (b)): quando é
   literal (hotfix, beta, build com data) e a versão casa, o resultado é
   `None` (indeterminado), porque o nome do arquivo não informa o `update`.

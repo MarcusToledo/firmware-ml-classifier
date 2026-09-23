@@ -31,16 +31,17 @@
       versão casando fica indeterminado. Corrige o falso positivo do
       TL-SG2008; `labels_v2.csv` regenerado (423/49/101/126 por
       `firmware_id`), 369 testes passando.
+- [x] Registrar a origem de `meta_version` (`meta_version_source` no parquet e
+      `version_source` no `labels_v2.csv`).
+- [x] Extração relaxada de versão pelo nome do arquivo levada como trabalho
+      futuro no TCC (documentada em `docs/PIPELINE.md`).
+- [x] CPE da Belkin (`firmware_4.05.03`): decidido não corrigir; limitação
+      documentada.
 
 ### Pending
-- [ ] Registrar explicitamente origem e confiança de `meta_version` por imagem.
-- [ ] Implementar extração relaxada de versão pelo nome do arquivo como
-      trabalho futuro (+37 `firmware_id` resolvidos).
 - [ ] Trabalho futuro: avaliar evidência independente de versão para
       firmwares sem versão (+13 `firmware_id`); a regra de CVE sem
       `configurations` exige validação manual contra advisories.
-- [ ] Tratar CPE cuja versão não começa por número (ex.: Belkin
-      `firmware_4.05.03`), hoje não aplicável; impacto zero no dataset.
 - [ ] Excluir registros `indeterminado` do treino e reportar métricas e sua
       proporção por vendor.
 - [ ] Verificar se os 23 arquivos `*webflash*` são imagens DD-WRT antes de
@@ -233,7 +234,11 @@
 - [ ] Gerar features: `count_hardcoded_passwords`, `count_hardcoded_ips`, `has_telnetd`, `libssl_version_age`.
 
 #### Treino e Avaliacao
-- [ ] Implementar `scripts/train.py` com 4 modelos: Random Forest, Extra Trees, XGBoost, MLP.
+- [ ] Implementar `scripts/train.py` com 4 modelos: Random Forest, Extra Trees,
+      XGBoost e MLP. Fazer merge com `labels_v2.csv` por `firmware_id` e usar
+      dele somente `security_level`; excluir `vendor`, `model`, `version`,
+      `version_source`, `cve_total`, `cvss_max` e todas as colunas `meta_*`
+      do parquet.
 - [ ] Validar com `StratifiedGroupKFold` agrupado por modelo, após deduplicar
       por `firmware_id`, no lugar de `RepeatedStratifiedKFold` e LOOCV.
 - [ ] Reportar macro F1-score, acuracia, confusion matrix normalizada e intervalo de confianca.
