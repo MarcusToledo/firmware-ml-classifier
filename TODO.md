@@ -27,13 +27,20 @@
       mesma base numérica e padding, build desconhecido ou qualificador extra
       fica indeterminado; build conhecido diferente e base distinta não se
       aplicam. Impacto zero no dataset atual.
+- [x] Implementar a opção (b) do campo `update` da CPE: `update` literal com
+      versão casando fica indeterminado. Corrige o falso positivo do
+      TL-SG2008; `labels_v2.csv` regenerado (423/49/101/126 por
+      `firmware_id`), 369 testes passando.
 
 ### Pending
 - [ ] Registrar explicitamente origem e confiança de `meta_version` por imagem.
 - [ ] Implementar extração relaxada de versão pelo nome do arquivo como
       trabalho futuro (+37 `firmware_id` resolvidos).
-- [ ] Avaliação do campo `update` concluída: falso positivo no TL-SG2008
-      confirmado; decidir se implementa a opção (b), com +1 `indeterminado`.
+- [ ] Trabalho futuro: avaliar evidência independente de versão para
+      firmwares sem versão (+13 `firmware_id`); a regra de CVE sem
+      `configurations` exige validação manual contra advisories.
+- [ ] Tratar CPE cuja versão não começa por número (ex.: Belkin
+      `firmware_4.05.03`), hoje não aplicável; impacto zero no dataset.
 - [ ] Excluir registros `indeterminado` do treino e reportar métricas e sua
       proporção por vendor.
 - [ ] Verificar se os 23 arquivos `*webflash*` são imagens DD-WRT antes de

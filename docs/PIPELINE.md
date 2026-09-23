@@ -203,18 +203,19 @@ determinístico. Eles nunca alteram o rótulo de treino.
 | `cve_critica` | CVE com CVSS >= 9.0 (`CveLabelThresholds.critical_cvss`, ajustável via `--critical-cvss`). |
 | `indeterminado` | Incerteza de versão ou condição CPE faz os limites inferior e superior produzirem classes diferentes. Estado de qualidade, fora das classes de treino. |
 
-## Estado real do dataset (dry-run de 2026-09-22)
+## Estado real do dataset (`labels_v2.csv` de 2026-09-23)
 
-O dry-run usou `dataset/processed/features_v2.parquet` e
+O `labels_v2.csv` foi gerado de `dataset/processed/features_v2.parquet` e
 `dataset/cve_cache_v2.json`: 840 linhas e 699 `firmware_id`. A comparação
-antes/depois da regra C + B1 foi:
+antes/depois da regra C + B1, da guarda B e da opção (b) do campo
+`update` é:
 
 | Rótulo | Antes (linhas) | Depois (linhas) | Antes (`firmware_id`) | Depois (`firmware_id`) |
 |---|---:|---:|---:|---:|
 | `sem_cve_conhecida` | 354 | 468 | 295 | 423 |
-| `cve_conhecida` | 121 | 69 | 57 | 50 |
+| `cve_conhecida` | 121 | 68 | 57 | 49 |
 | `cve_critica` | 36 | 167 | 25 | 101 |
-| `indeterminado` | 329 | 136 | 322 (46,1%) | 125 (17,9%) |
+| `indeterminado` | 329 | 137 | 322 (46,1%) | 126 (18,0%) |
 
 ### Limitações da rotulagem
 
@@ -242,27 +243,28 @@ antes/depois da regra C + B1 foi:
   [NISTIR 7696](https://csrc.nist.gov/pubs/ir/7696/final), strings
   literais diferentes são `DISJOINT`; o gap é uma inconsistência com a
   extensão numérica do projeto, não uma violação da especificação CPE.
-- A opção B está implementada no ramo de versão CPE exata. O dry-run não
-  mudou: por linha, a distribuição continua `468/69/167/136`; por
-  `firmware_id`, `423/50/101/125`, na ordem
-  `sem_cve_conhecida`/`cve_conhecida`/`cve_critica`/`indeterminado`.
-  Essa guarda é pré-requisito para a extração relaxada de versão, que já
-  pode ser adotada nesse aspecto.
-- A guarda B não resolve CPE sem base numérica parseável. Por exemplo,
-  `firmware_4.05.03`, da Belkin, continua não aplicável.
-- A avaliação do campo `update` (parts[6]), hoje ignorado, encontrou 12
-  CPEs self-match com valor literal: 17 ocorrências em 11 modelos,
-  distribuídas entre hotfix (6), beta (5) e build com data (6). Há um
-  falso positivo confirmado no `labels_v2.csv`: o arquivo
-  `TL-SG2008v1_en_1.0.0_[20140626-rel38150]_up.bin`, build de 2014, está
-  rotulado `cve_conhecida` pelas CVE-2021-31658 e CVE-2021-31659, embora
-  a CPE seja `tl-sg2008_firmware:1.0.0:build_20180529_rel.40524`, build
-  de 2018. A opção (b) recomendada devolve `None` (indeterminado) quando
-  o `update` é literal e a versão casa. O impacto simulado move 1
-  `firmware_id` de `cve_conhecida` para `indeterminado`: por linha,
-  `468/69/167/136` passa a `468/68/167/137`; por `firmware_id`,
-  `423/50/101/125` passa a `423/49/101/126`. A mudança não interage com
-  a guarda B. A decisão de implementar a opção (b) permanece pendente.
+- A opção B está implementada no ramo de versão CPE exata e não alterou
+  nenhum rótulo do dataset atual. Ela é pré-requisito para a extração
+  relaxada de versão, que já pode ser adotada nesse aspecto.
+- A guarda B não resolve CPE cuja versão não começa por número. Na
+  Belkin, a NVD registrou a versão como `firmware_4.05.03` (o texto
+  `firmware_` dentro do campo `version`, erro de cadastro). Como a
+  extração da base numérica começa no primeiro caractere, não há base para
+  comparar e o resultado é "não aplicável", mesmo que a versão pretendida
+  seja 4.05.03. O efeito hoje é nulo: o único firmware `f5d7231_4` do
+  dataset é a versão 5.01.11, que não casaria com 4.05.03 de qualquer
+  forma. Ainda assim, o comportamento trata incerteza como evidência
+  negativa. Casos parecidos no cache: `fw102b15`, `me_1.03`.
+- O campo `update` (parts[6]) agora é considerado (opção (b)): quando é
+  literal (hotfix, beta, build com data) e a versão casa, o resultado é
+  `None` (indeterminado), porque o nome do arquivo não informa o `update`.
+  O cache tem 12 CPEs self-match com `update` literal: 17 ocorrências em
+  11 modelos (hotfix 6, beta 5, build com data 6). A mudança corrigiu um
+  falso positivo: `TL-SG2008v1_en_1.0.0_[20140626-rel38150]_up.bin`, build
+  de 2014, era `cve_conhecida` pelas CVE-2021-31658 e CVE-2021-31659, cuja
+  CPE é `tl-sg2008_firmware:1.0.0:build_20180529_rel.40524`, build de
+  2018; agora é `indeterminado`. `update` igual a `-` (NA) não restringe o
+  match.
 - O recall de `sem_cve_conhecida` é limitado pelo cache por modelo:
   49 entradas vazias têm um modelo-base ou irmão com CVEs. Por exemplo,
   `asus/rt-n12-d1` tem zero, enquanto `asus/rt-n12` tem 13.
@@ -272,6 +274,17 @@ antes/depois da regra C + B1 foi:
   aplicam a qualquer versão; isso permanece uma limitação.
 - Os 23 arquivos `*webflash*` provavelmente são DD-WRT (inferência).
   Não se deve atribuir versão a eles antes de verificar sua origem.
+- Trabalho futuro: firmwares sem versão viram `indeterminado` para todas
+  as CVEs, mesmo quando há evidência que não depende de versão. São dois
+  casos de natureza distinta. (i) CVE cujas configurações só citam outros
+  produtos: descartá-la é exato e não atribui CVE nenhuma ao firmware.
+  (ii) CVE sem `configurations` (ainda não analisada pela NVD): tratá-la
+  como aplicável liga ao firmware uma CVE achada só por busca textual, sem
+  prova de que afeta aquele modelo e versão. Aplicar as duas regras
+  resolveria 13 `firmware_id` (7 para `sem_cve_conhecida` e 6 para
+  `cve_conhecida`; só a regra (ii) daria 5). Validar (ii) exigiria uma
+  amostra auditada manualmente contra advisories do fabricante, fora do
+  escopo atual.
 
 ### Pendências conhecidas (ver `TODO.md`)
 
