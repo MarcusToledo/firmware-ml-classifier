@@ -50,6 +50,22 @@ def test_infer_path_version_suffix_with_simple_digits() -> None:
     assert metadata.version_source == "directory"
 
 
+def test_infer_path_directory_version_with_hyphenated_model() -> None:
+    path = Path("dataset/raw/asus/rt-ac68u_3.0.0.4/file.bin")
+    metadata = infer_brand_model_label_from_path(path)
+    assert metadata.model == "rt-ac68u"
+    assert metadata.version == "3.0.0.4"
+    assert metadata.version_source == "directory"
+
+
+def test_infer_path_hardware_revision_suffix_is_part_of_model() -> None:
+    """Belkin 'f5d7234_4' e o modelo F5D7234-4 (hardware v4), nao versao 4."""
+    path = Path("dataset/raw/belkin/f5d7234_4/f5d7234-4_ww_4.00.05.bin")
+    metadata = infer_brand_model_label_from_path(path)
+    assert metadata.model == "f5d7234_4"
+    assert metadata.version_source != "directory"
+
+
 def test_infer_path_falls_back_to_version_in_filename() -> None:
     """Diretorio sem versao: a versao vem do nome do arquivo."""
     path = Path("dataset/raw/asus/rt-ac68u/RT-AC68U_3.0.0.4_384_45717-gadd52a8.trx")

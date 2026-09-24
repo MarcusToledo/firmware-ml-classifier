@@ -49,13 +49,19 @@ class PathMetadata(NamedTuple):
 
 LOGGER = logging.getLogger(__name__)
 
-_VERSION_SUFFIX_RE = re.compile(r"^([a-z]+\d+[a-z]*)_(\d.*)$", re.IGNORECASE)
+# O modelo aceita hifen ('rt-ac68u_3.0.0.4'). A versao exige ponto decimal:
+# em 'f5d7234_4' (Belkin) o '_4' e revisao de hardware, parte do modelo.
+_VERSION_SUFFIX_RE = re.compile(
+    r"^([a-z][a-z0-9-]*\d[a-z0-9-]*)_(\d+\.\d.*)$", re.IGNORECASE
+)
 
 
 def _split_model_version(model: str) -> tuple[str, str | None]:
     """Split a raw path segment into (model, version).
 
     'NWA110AX_7.10(ABTG.4)C0' -> ('nwa110ax', '7.10(ABTG.4)C0')
+    'rt-ac68u_3.0.0.4' -> ('rt-ac68u', '3.0.0.4')
+    'f5d7234_4' -> ('f5d7234_4', None)
     'dir-300' -> ('dir-300', None)
     """
     m = _VERSION_SUFFIX_RE.match(model)
