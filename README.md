@@ -9,8 +9,9 @@ firmwares embarcados usando análise estática e aprendizado de máquina.
 - Classificar firmwares por classe de vulnerabilidade conhecida: `sem_cve_conhecida`,
   `cve_conhecida` ou `cve_critica`. A ausência de CVE conhecida não prova segurança.
 - Gerar rótulos apenas a partir do cache de CVE consultado por fabricante/modelo.
-- Extrair features estatísticas, strings ASCII, evidências de segurança e embeddings
-  Doc2Vec, sem incluir fabricante/modelo nem campos CVE no vetor do classificador.
+- Extrair features estatísticas, strings ASCII e evidências de segurança, sem incluir
+  fabricante/modelo nem campos CVE no vetor do classificador. O Doc2Vec existe no
+  código, mas fica fora do núcleo e da entrega mínima do TCC.
 - Comparar Extra Trees (modelo principal), Random Forest (baseline ML) e o
   baseline determinístico de regras de `src/scoring.py`. A escolha dos modelos
   ainda está a definir.
@@ -18,7 +19,7 @@ firmwares embarcados usando análise estática e aprendizado de máquina.
 ## Pipeline experimental
 1. Organizar o dataset e preservar fabricante/modelo como metadados de consulta.
 2. Extrair features estatísticas, strings, evidências estruturadas e Binwalk.
-3. Treinar embeddings Doc2Vec (DM/DBOW) por firmware.
+3. (Fora da entrega mínima) Treinar embeddings Doc2Vec (DM/DBOW) por firmware.
 4. Consultar CVEs por fabricante/modelo e gerar rótulos em etapa separada.
 5. Treinar e avaliar os modelos supervisionados com rótulos CVE, sem vazamento.
 6. Gerar métricas e relatórios reprodutíveis.
