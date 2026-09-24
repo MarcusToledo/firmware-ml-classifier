@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pandas as pd
 
 from scripts.fetch_cves import (
@@ -7,8 +9,10 @@ from scripts.fetch_cves import (
     _should_save,
     extract_cvss,
     extract_pairs,
+    fetch_cves_for_pair,
     normalize_model,
     normalize_vendor,
+    resolve_cpe_name,
 )
 
 # ---------------------------------------------------------------------------
@@ -59,6 +63,21 @@ def test_normalize_model_underscore_suffix() -> None:
 def test_normalize_model_double_underscore() -> None:
     """Models like 'dgs_1210_48' -> 'DGS-1210-48'."""
     assert normalize_model("dgs_1210_48") == "DGS-1210-48"
+
+
+def test_normalize_model_underscore_separated_words() -> None:
+    """Modelos da pasta tplink/ e belkin/ usam underscore entre as partes. A NVD
+    escreve com hifen, entao a consulta nao pode mandar o underscore."""
+    assert normalize_model("td_w8950n") == "TD-W8950N"
+    assert normalize_model("tl_wr702n") == "TL-WR702N"
+    assert normalize_model("archer_c20i") == "ARCHER-C20I"
+    assert normalize_model("dx_wgrtr") == "DX-WGRTR"
+    assert normalize_model("f6d4230_4_bc") == "F6D4230-4-BC"
+
+
+def test_normalize_model_never_sends_underscore() -> None:
+    for model in ("tl_pa4010p_tkit", "tl_sg2109web", "dgs_1210_48", "f5d7230_4"):
+        assert "_" not in normalize_model(model)
 
 
 def test_normalize_model_plain() -> None:
@@ -236,3 +255,85 @@ def test_should_save_between_intervals() -> None:
     assert _should_save(1, interval=10) is False
     assert _should_save(9, interval=10) is False
     assert _should_save(11, interval=10) is False
+
+
+def test_fetch_keyword_retains_cve_and_configurations() -> None:
+    cve = {
+        "id": "CVE-2020-1111",
+        "metrics": {
+            "cvssMetricV31": [
+                {"cvssData": {"baseScore": 9.8, "baseSeverity": "CRITICAL"}}
+            ]
+        },
+        "configurations": [
+            {
+                "nodes": [
+                    {
+                        "cpeMatch": [
+                            {
+                                "vulnerable": True,
+                                "criteria": (
+                                    "cpe:2.3:o:dlink:dir-300_firmware:"
+                                    "*:*:*:*:*:*:*:*"
+                                ),
+                                "versionEndExcluding": "2.0",
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+    }
+    with (
+        patch("scripts.fetch_cves.resolve_cpe_name", return_value=None),
+        patch(
+            "scripts.fetch_cves._fetch_page",
+            return_value={"totalResults": 1, "vulnerabilities": [{"cve": cve}]},
+        ),
+    ):
+        entry = fetch_cves_for_pair("dlink", "dir300", headers={}, delay=0)
+
+    assert entry["source"] == "keyword"
+    assert entry["schema_version"] == 2
+    assert entry["cves"][0]["id"] == "CVE-2020-1111"
+    assert entry["cves"][0]["cvss_max"] == 9.8
+    assert entry["cves"][0]["configurations"] == cve["configurations"]
+
+
+def test_resolve_cpe_selects_matching_firmware_and_wildcards_version() -> None:
+    products = [
+        {"cpe": {"cpeName": "cpe:2.3:o:dlink:other:1.0:*:*:*:*:*:*:*"}},
+        {"cpe": {"cpeName": "cpe:2.3:o:dlink:dir-300_firmware:1.2:*:*:*:*:*:*:*"}},
+    ]
+    with patch(
+        "scripts.fetch_cves._fetch_cpe_page", return_value={"products": products}
+    ):
+        name = resolve_cpe_name("dlink", "dir300", headers={})
+    assert name == "cpe:2.3:o:dlink:dir-300_firmware:*:*:*:*:*:*:*:*"
+
+
+def test_resolve_cpe_generalizes_specific_update_and_edition() -> None:
+    specific = "cpe:2.3:o:dlink:dir-300_firmware:1.2:rev1:home:*:*:*:*:*"
+    with patch(
+        "scripts.fetch_cves._fetch_cpe_page",
+        return_value={"products": [{"cpe": {"cpeName": specific}}]},
+    ):
+        name = resolve_cpe_name("dlink", "dir300", headers={})
+    assert name == "cpe:2.3:o:dlink:dir-300_firmware:*:*:*:*:*:*:*:*"
+
+
+def test_fetch_prefers_resolved_cpe_query() -> None:
+    with (
+        patch(
+            "scripts.fetch_cves.resolve_cpe_name",
+            return_value="cpe:2.3:o:dlink:dir-300_firmware:*:*:*:*:*:*:*:*",
+        ),
+        patch(
+            "scripts.fetch_cves._fetch_page",
+            return_value={"totalResults": 0, "vulnerabilities": []},
+        ) as fetch_page,
+    ):
+        entry = fetch_cves_for_pair("dlink", "dir300", headers={}, delay=0)
+    assert entry["source"] == "cpe"
+    assert entry["cves"] == []
+    assert "virtualMatchString=" in fetch_page.call_args.args[0]

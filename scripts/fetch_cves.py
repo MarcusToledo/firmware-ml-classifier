@@ -1,8 +1,8 @@
 """Fetch CVE data from NVD API v2.0 for firmware vendor/model pairs.
 
 Reads a features parquet to extract unique (meta_brand, meta_model) pairs,
-queries the NVD for known vulnerabilities, and saves aggregated CVE
-statistics to a JSON cache file.
+queries the NVD for known vulnerabilities, and saves CVE and CPE evidence
+to a JSON cache file.
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ import pandas as pd
 LOGGER = logging.getLogger(__name__)
 
 NVD_API_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
+NVD_CPE_API_URL = "https://services.nvd.nist.gov/rest/json/cpes/2.0"
 RESULTS_PER_PAGE = 2000
 DEFAULT_DELAY_NO_KEY = 6
 DEFAULT_DELAY_WITH_KEY = 1
@@ -46,12 +47,6 @@ _MODEL_HYPHEN_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Models with underscore-separated trailing number: "f5d7230_4" -> "F5D7230-4"
-_MODEL_UNDERSCORE_RE = re.compile(
-    r"^(.+)_(\d+)$",
-)
-
-
 # ---------------------------------------------------------------------------
 # Name normalization
 # ---------------------------------------------------------------------------
@@ -69,17 +64,14 @@ def normalize_model(model: str) -> str:
     """Normalize model string for NVD keyword search.
 
     - Missing hyphen: ``dir300`` -> ``DIR-300``
-    - Underscore suffix: ``f5d7230_4`` -> ``F5D7230-4``
+    - Underscores: ``f5d7230_4`` -> ``F5D7230-4``, ``td_w8950n`` ->
+      ``TD-W8950N`` (a NVD escreve com hifen, nunca com underscore)
     """
+    model = model.replace("_", "-")
+
     # Already has a hyphen (e.g. "dir-300") — just uppercase
     if "-" in model:
         return model.upper()
-
-    # Underscore suffix: "f5d7230_4" -> "F5D7230-4"
-    m = _MODEL_UNDERSCORE_RE.match(model)
-    if m:
-        base = normalize_model(m.group(1))  # recurse on base part
-        return f"{base}-{m.group(2)}"
 
     # Missing hyphen: "dir300" -> "DIR-300"
     m = _MODEL_HYPHEN_RE.match(model)
@@ -133,15 +125,13 @@ def _build_headers() -> dict[str, str]:
 
 
 def _fetch_page(
-    keyword: str,
+    query_params: str,
     start_index: int,
     headers: dict[str, str],
 ) -> dict[str, Any]:
     """Fetch a single page of CVE results from NVD."""
     params = (
-        f"keywordSearch={url_quote(keyword)}"
-        f"&resultsPerPage={RESULTS_PER_PAGE}"
-        f"&startIndex={start_index}"
+        f"{query_params}&resultsPerPage={RESULTS_PER_PAGE}&startIndex={start_index}"
     )
     url = f"{NVD_API_URL}?{params}"
     req = urllib.request.Request(url, headers=headers)
@@ -151,41 +141,95 @@ def _fetch_page(
         return result
 
 
+def _fetch_cpe_page(keyword: str, headers: dict[str, str]) -> dict[str, Any]:
+    """Consulta o dicionário oficial de nomes CPE da NVD."""
+    params = f"keywordSearch={url_quote(keyword)}&resultsPerPage={RESULTS_PER_PAGE}"
+    request = urllib.request.Request(f"{NVD_CPE_API_URL}?{params}", headers=headers)
+    with urllib.request.urlopen(request, timeout=30) as response:
+        result: dict[str, Any] = json.loads(response.read().decode())
+        return result
+
+
+def _canonical_cpe_token(value: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", value.lower())
+
+
+def resolve_cpe_name(vendor: str, model: str, headers: dict[str, str]) -> str | None:
+    """Seleciona CPE de firmware do par exato e generaliza sua versão."""
+    nvd_vendor = normalize_vendor(vendor)
+    nvd_model = normalize_model(model)
+    data = _fetch_cpe_page(f"{nvd_vendor} {nvd_model}", headers)
+    expected_vendor = _canonical_cpe_token(nvd_vendor)
+    expected_model = _canonical_cpe_token(nvd_model)
+    for product in data.get("products", []):
+        name = product.get("cpe", {}).get("cpeName")
+        if not isinstance(name, str):
+            continue
+        parts = name.split(":")
+        if len(parts) != 13 or parts[:3] != ["cpe", "2.3", "o"]:
+            continue
+        cpe_vendor = _canonical_cpe_token(parts[3])
+        cpe_model = _canonical_cpe_token(parts[4]).removesuffix("firmware")
+        if cpe_vendor == expected_vendor and cpe_model == expected_model:
+            parts[5:] = ["*"] * 8
+            return ":".join(parts)
+    return None
+
+
+def _fetch_all_pages(
+    query_params: str, headers: dict[str, str], delay: float
+) -> list[dict[str, Any]]:
+    """Busca páginas CVE completas e preserva dados brutos auditáveis."""
+    start_index = 0
+    cves: list[dict[str, Any]] = []
+    while True:
+        data = _fetch_page(query_params, start_index, headers)
+        total_results = data.get("totalResults", 0)
+        vulnerabilities = data.get("vulnerabilities", [])
+        for item in vulnerabilities:
+            cve = item.get("cve", {})
+            score, severity = extract_cvss(cve)
+            cves.append(
+                {
+                    "id": cve.get("id", ""),
+                    "cvss_max": score,
+                    "severity": severity_bucket(severity),
+                    "configurations": cve.get("configurations", []),
+                }
+            )
+        start_index += len(vulnerabilities)
+        if start_index >= total_results or not vulnerabilities:
+            break
+        time.sleep(delay)
+    return cves
+
+
 def fetch_cves_for_pair(
     vendor: str,
     model: str,
     headers: dict[str, str],
     delay: float,
 ) -> dict[str, Any]:
-    """Fetch all CVEs for a vendor/model pair and return aggregated stats.
-
-    Applies vendor/model normalization before querying NVD.
-    """
-    nvd_vendor = normalize_vendor(vendor)
-    nvd_model = normalize_model(model)
-    keyword = f"{nvd_vendor} {nvd_model}"
-    LOGGER.debug("  NVD query: %s", keyword)
-
-    start_index = 0
-    all_scores: list[tuple[float, str]] = []
-
-    while True:
-        data = _fetch_page(keyword, start_index, headers)
-        total_results = data.get("totalResults", 0)
-        vulnerabilities = data.get("vulnerabilities", [])
-
-        for item in vulnerabilities:
-            cve = item.get("cve", {})
-            score, sev = extract_cvss(cve)
-            all_scores.append((score, sev))
-
-        start_index += len(vulnerabilities)
-        if start_index >= total_results or not vulnerabilities:
-            break
-
+    """Busca CVEs por CPE oficial ou por texto e mantém evidência por CVE."""
+    cpe_name = resolve_cpe_name(vendor, model, headers)
+    if cpe_name is not None:
+        query_params = f"virtualMatchString={url_quote(cpe_name)}"
+        source = "cpe"
+    else:
+        keyword = f"{normalize_vendor(vendor)} {normalize_model(model)}"
+        query_params = f"keywordSearch={url_quote(keyword)}"
+        source = "keyword"
+    if delay > 0:
         time.sleep(delay)
-
-    return _aggregate_scores(all_scores)
+    cves = _fetch_all_pages(query_params, headers, delay)
+    return {
+        "schema_version": 2,
+        "source": source,
+        "vendor": normalize_vendor(vendor),
+        "model": normalize_model(model),
+        "cpe_name": cpe_name,
+        "cves": cves,
+    }
 
 
 def _aggregate_scores(scores: list[tuple[float, str]]) -> dict[str, Any]:
@@ -336,9 +380,15 @@ def main() -> None:
             key = f"{vendor}/{model}"
 
             if key in cache and not args.force:
+                if not isinstance(cache[key], dict) or not isinstance(
+                    cache[key].get("cves"), list
+                ):
+                    raise ValueError(f"Cache CVE em schema antigo para {key}")
+                if cache[key].get("schema_version") != 2:
+                    raise ValueError(f"Versão de schema inválida no cache para {key}")
                 LOGGER.info("[SKIP] %d/%d %s (cached)", i, len(pairs), key)
                 stats["cached"] += 1
-                stats["total_cves"] += cache[key].get("cve_total", 0)
+                stats["total_cves"] += len(cache[key]["cves"])
                 continue
 
             try:
@@ -346,13 +396,13 @@ def main() -> None:
                 result = fetch_cves_for_pair(vendor, model, headers, delay)
                 cache[key] = result
                 stats["fetched"] += 1
-                stats["total_cves"] += result["cve_total"]
+                stats["total_cves"] += len(result["cves"])
                 if _should_save(stats["fetched"]):
                     save_cache(cache, output_path)
                 LOGGER.info(
                     "  -> %d CVEs (max CVSS: %.1f)",
-                    result["cve_total"],
-                    result["cvss_max"],
+                    len(result["cves"]),
+                    max((cve["cvss_max"] for cve in result["cves"]), default=0.0),
                 )
             except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as exc:
                 LOGGER.error("[FAIL] %s: %s", key, exc)

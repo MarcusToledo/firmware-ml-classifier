@@ -7,213 +7,373 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from scripts.generate_labels import _lookup_cve_stats, _max_severity, main
+from scripts.generate_labels import _aggregate_firmware_label, _lookup_cve_entry, main
+from src.labeling.cve_labels import (
+    LABEL_CRITICAL_CVE,
+    LABEL_INDETERMINATE,
+    LABEL_KNOWN_CVE,
+    LABEL_NO_KNOWN_CVE,
+    CveLabelThresholds,
+)
 
 
-def test_lookup_uses_normalized_vendor_model_key() -> None:
-    cache = {"dlink/dir300": {"cve_total": 1, "cvss_max": 7.5}}
+def _cve(cve_id: str, score: float = 7.5) -> dict:
+    return {"id": cve_id, "cvss_max": score, "severity": "HIGH", "configurations": []}
+
+
+def _run_cli(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    rows: list[dict],
+    cache: dict,
+) -> pd.DataFrame:
+    features = tmp_path / "features.csv"
+    cache_path = tmp_path / "cves.json"
+    output = tmp_path / "labels.csv"
+    pd.DataFrame(rows).to_csv(features, index=False)
+    cache_path.write_text(json.dumps(cache), encoding="utf-8")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "generate-labels",
+            "--features",
+            str(features),
+            "--cves",
+            str(cache_path),
+            "--output",
+            str(output),
+        ],
+    )
+    main()
+    return pd.read_csv(output)
+
+
+def test_lookup_normalizes_identity_and_rejects_old_cache() -> None:
+    entry = {"source": "keyword", "cves": [_cve("CVE-1")], "schema_version": 2}
     row = {"meta_brand": " DLink ", "meta_model": " DIR300 "}
-    assert _lookup_cve_stats(row, cache) == cache["dlink/dir300"]
+    assert _lookup_cve_entry(row, {"dlink/dir300": entry}) == entry
+    with pytest.raises(ValueError, match="dlink/dir300"):
+        _lookup_cve_entry(row, {"dlink/dir300": {"cve_total": 1}})
+    with pytest.raises(ValueError, match="schema"):
+        _lookup_cve_entry(row, {"dlink/dir300": {**entry, "schema_version": 1}})
+    with pytest.raises(ValueError, match="schema"):
+        # Entrada com "cves" mas sem schema_version deve falhar igual a
+        # fetch_cves.py, nao ser aceita silenciosamente como schema 2.
+        _lookup_cve_entry(row, {"dlink/dir300": {"cves": []}})
 
 
-def test_missing_lookup_is_not_a_negative_label() -> None:
+def test_lookup_missing_pair_fails_instead_of_becoming_negative() -> None:
     with pytest.raises(ValueError, match="unknown/x1"):
-        _lookup_cve_stats({"meta_brand": "unknown", "meta_model": "x1"}, {})
+        _lookup_cve_entry({"meta_brand": "unknown", "meta_model": "x1"}, {})
 
 
-def test_missing_identity_is_rejected() -> None:
-    with pytest.raises(ValueError, match="meta_brand/meta_model"):
-        _lookup_cve_stats({"meta_brand": None, "meta_model": "x1"}, {})
+def test_aggregate_all_aliases_with_only_indeterminate_cves() -> None:
+    label, stats = _aggregate_firmware_label(
+        [
+            ([], [_cve("CVE-1")]),
+            ([], [_cve("CVE-2", 9.8)]),
+        ],
+        CveLabelThresholds(),
+    )
+    assert label == LABEL_INDETERMINATE
+    assert stats["cve_total"] == 0
+    assert stats["cvss_max"] == 0.0
 
 
-# ---------------------------------------------------------------------------
-# _max_severity
-# ---------------------------------------------------------------------------
+def test_aggregate_critical_applicable_with_indeterminate_cve() -> None:
+    label, stats = _aggregate_firmware_label(
+        [
+            (
+                [_cve("CVE-APPLICABLE", 9.8)],
+                [_cve("CVE-INDETERMINATE", 7.5)],
+            )
+        ],
+        CveLabelThresholds(),
+    )
+    assert label == LABEL_CRITICAL_CVE
+    assert stats["cve_total"] == 1
+    assert stats["cvss_max"] == 9.8
 
 
-def test_max_severity_picks_highest_cvss_and_total() -> None:
-    """Firmwares byte-identicos reaproveitados sob varios nomes de modelo
-    (rebadge) devem herdar a maior severidade encontrada entre os alias,
-    nao a do alias que por acaso foi consultado."""
-    stats_list = [
-        {"cve_total": 0, "cvss_max": 0.0},
-        {"cve_total": 19, "cvss_max": 9.8},
-        {"cve_total": 4, "cvss_max": 9.8},
-    ]
-    assert _max_severity(stats_list) == {"cve_total": 19, "cvss_max": 9.8}
+def test_aggregate_known_applicable_with_critical_indeterminate_cve() -> None:
+    label, stats = _aggregate_firmware_label(
+        [
+            (
+                [_cve("CVE-APPLICABLE")],
+                [_cve("CVE-INDETERMINATE", 9.8)],
+            )
+        ],
+        CveLabelThresholds(),
+    )
+    assert label == LABEL_INDETERMINATE
+    assert stats["cve_total"] == 1
+    assert stats["cvss_max"] == 7.5
 
 
-def test_max_severity_single_entry_is_unchanged() -> None:
-    assert _max_severity([{"cve_total": 3, "cvss_max": 6.5}]) == {
-        "cve_total": 3,
-        "cvss_max": 6.5,
-    }
+def test_aggregate_known_applicable_with_only_known_indeterminate_cves() -> None:
+    label, stats = _aggregate_firmware_label(
+        [
+            (
+                [_cve("CVE-APPLICABLE")],
+                [_cve("CVE-INDETERMINATE", 8.9)],
+            )
+        ],
+        CveLabelThresholds(),
+    )
+    assert label == LABEL_KNOWN_CVE
+    assert stats["cve_total"] == 1
+    assert stats["cvss_max"] == 7.5
 
 
-def test_max_severity_empty_list_defaults_to_zero() -> None:
-    assert _max_severity([]) == {"cve_total": 0, "cvss_max": 0.0}
+def test_aggregate_empty_evidence_is_valid_negative() -> None:
+    label, stats = _aggregate_firmware_label([([], [])], CveLabelThresholds())
+    assert label == LABEL_NO_KNOWN_CVE
+    assert stats["cve_total"] == 0
 
 
-def test_cli_writes_only_cve_based_labels(
+def test_aggregate_keeps_indeterminate_cve_when_an_alias_has_no_evidence() -> None:
+    label, stats = _aggregate_firmware_label(
+        [
+            ([], [_cve("CVE-INDETERMINATE", 9.8)]),
+            ([], []),
+        ],
+        CveLabelThresholds(),
+    )
+    assert label == LABEL_INDETERMINATE
+    assert stats["cve_total"] == 0
+
+
+def test_aggregate_applicable_cve_overrides_same_indeterminate_cve() -> None:
+    label, stats = _aggregate_firmware_label(
+        [
+            ([_cve("CVE-SAME")], []),
+            ([], [_cve("CVE-SAME", 9.8)]),
+        ],
+        CveLabelThresholds(),
+    )
+    assert label == LABEL_KNOWN_CVE
+    assert stats["cve_total"] == 1
+    assert stats["cvss_max"] == 7.5
+
+
+def test_aggregate_deduplicates_applicable_cve_between_aliases() -> None:
+    cve = _cve("CVE-SAME")
+    label, stats = _aggregate_firmware_label(
+        [([cve], []), ([cve], [])],
+        CveLabelThresholds(),
+    )
+
+    assert label == LABEL_KNOWN_CVE
+    assert stats["cve_total"] == 1
+
+
+def test_cli_filters_version_before_aggregating_aliases(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    features = tmp_path / "features.csv"
-    cache = tmp_path / "cves.json"
-    output = tmp_path / "labels.csv"
-    pd.DataFrame(
+    rows = [
+        {
+            "firmware_id": "shared",
+            "meta_path": "/dataset/raw/dlink/dir300/fw_2.0.bin",
+            "meta_brand": "dlink",
+            "meta_model": "dir300",
+            "meta_version": "2.0",
+            "entropy": 7.9,
+        },
+        {
+            "firmware_id": "shared",
+            "meta_path": "/dataset/raw/dlink/dir300b_1.0/fw.bin",
+            "meta_brand": "dlink",
+            "meta_model": "dir300b",
+            "meta_version": "1.0",
+            "entropy": 0.1,
+        },
+    ]
+    labels = _run_cli(
+        tmp_path,
+        monkeypatch,
+        rows,
+        {
+            "dlink/dir300": {
+                "source": "keyword",
+                "schema_version": 2,
+                "cves": [
+                    {
+                        **_cve("CVE-OLD", 9.8),
+                        "configurations": [
+                            {
+                                "nodes": [
+                                    {
+                                        "cpeMatch": [
+                                            {
+                                                "vulnerable": True,
+                                                "versionEndExcluding": "2.0",
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ],
+                    }
+                ],
+            },
+            "dlink/dir300b": {
+                "source": "keyword",
+                "schema_version": 2,
+                "cves": [_cve("CVE-CURRENT")],
+            },
+        },
+    )
+    assert labels["security_level"].tolist() == ["cve_conhecida", "cve_conhecida"]
+    assert labels["cve_total"].tolist() == [1, 1]
+    assert "entropy" not in labels.columns
+    assert labels["version_source"].tolist() == ["filename", "directory"]
+
+
+def test_cli_missing_version_writes_indeterminate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    labels = _run_cli(
+        tmp_path,
+        monkeypatch,
         [
             {
-                "firmware_id": "fw1",
-                "meta_path": "fw1.bin",
+                "firmware_id": "fw",
+                "meta_path": "/dataset/raw/dlink/dir300/fw.bin",
                 "meta_brand": "dlink",
                 "meta_model": "dir300",
-                "entropy": 7.9,
-            },
-            {
-                "firmware_id": "fw2",
-                "meta_path": "fw2.bin",
-                "meta_brand": "netgear",
-                "meta_model": "r7000",
-                "entropy": 0.1,
-            },
-        ]
-    ).to_csv(features, index=False)
-    cache.write_text(
-        json.dumps(
-            {
-                "dlink/dir300": {"cve_total": 0, "cvss_max": 0.0},
-                "netgear/r7000": {"cve_total": 1, "cvss_max": 9.8},
+                "meta_version": None,
             }
-        )
-    )
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        [
-            "generate-labels",
-            "--features",
-            str(features),
-            "--cves",
-            str(cache),
-            "--output",
-            str(output),
         ],
+        {
+            "dlink/dir300": {
+                "source": "keyword",
+                "schema_version": 2,
+                "cves": [_cve("CVE-1", 9.8)],
+            }
+        },
     )
-
-    main()
-
-    labels = pd.read_csv(output)
-    assert labels["security_level"].tolist() == ["sem_cve_conhecida", "cve_critica"]
-    assert "entropy" not in labels.columns
-    assert labels["cve_total"].tolist() == [0, 1]
+    assert labels["security_level"].tolist() == [LABEL_INDETERMINATE]
+    assert labels["version_source"].isna().tolist() == [True]
 
 
-def test_cli_aggregates_identical_firmware_across_aliases(
+def test_cli_rejects_version_divergent_from_meta_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """O mesmo binario (mesmo firmware_id) reaproveitado sob dois nomes de
-    modelo deve receber o MESMO rotulo, usando a maior severidade entre os
-    alias, nao o rotulo do alias que por acaso tem/nao tem CVE pesquisada.
-    """
-    features = tmp_path / "features.csv"
-    cache = tmp_path / "cves.json"
-    output = tmp_path / "labels.csv"
-    pd.DataFrame(
-        [
+    with pytest.raises(ValueError) as exc_info:
+        _run_cli(
+            tmp_path,
+            monkeypatch,
+            [
+                {
+                    "firmware_id": "fw-divergent",
+                    "meta_path": "/dataset/raw/dlink/dir300_2.0/fw.bin",
+                    "meta_brand": "dlink",
+                    "meta_model": "dir300",
+                    "meta_version": "1.0",
+                }
+            ],
             {
-                "firmware_id": "shared-fw",
-                "meta_path": "modelA.bin",
-                "meta_brand": "asus",
-                "meta_model": "modela",
+                "dlink/dir300": {
+                    "source": "keyword",
+                    "schema_version": 2,
+                    "cves": [],
+                }
             },
-            {
-                "firmware_id": "shared-fw",
-                "meta_path": "modelB.bin",
-                "meta_brand": "asus",
-                "meta_model": "modelb",
-            },
-        ]
-    ).to_csv(features, index=False)
-    cache.write_text(
-        json.dumps(
-            {
-                "asus/modela": {"cve_total": 0, "cvss_max": 0.0},
-                "asus/modelb": {"cve_total": 19, "cvss_max": 9.8},
-            }
         )
-    )
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        [
-            "generate-labels",
-            "--features",
-            str(features),
-            "--cves",
-            str(cache),
-            "--output",
-            str(output),
-        ],
-    )
 
-    main()
-
-    labels = pd.read_csv(output)
-    assert labels["security_level"].tolist() == ["cve_critica", "cve_critica"]
-    assert labels["cve_total"].tolist() == [19, 19]
-    assert labels["cvss_max"].tolist() == [9.8, 9.8]
+    message = str(exc_info.value)
+    assert "firmware_id=fw-divergent" in message
+    assert "meta_version='1.0'" in message
+    assert "versao inferida='2.0'" in message
+    assert "reextraia as features com --label-from-path" in message
 
 
-def test_cli_rejects_true_duplicate_rows(
+def test_cli_rejects_missing_version_when_meta_path_has_version(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Mesmo firmware_id E mesmo meta_path repetidos indicam bug no pipeline
-    de extracao (arquivo processado duas vezes), nao um alias legitimo."""
-    features = tmp_path / "features.csv"
-    cache = tmp_path / "cves.json"
-    pd.DataFrame(
-        [
+    with pytest.raises(ValueError) as exc_info:
+        _run_cli(
+            tmp_path,
+            monkeypatch,
+            [
+                {
+                    "firmware_id": "fw-missing-version",
+                    "meta_path": "/dataset/raw/dlink/dir300_2.0/fw.bin",
+                    "meta_brand": "dlink",
+                    "meta_model": "dir300",
+                    "meta_version": None,
+                }
+            ],
             {
-                "firmware_id": "fw",
-                "meta_path": "same.bin",
-                "meta_brand": "b",
-                "meta_model": "m",
+                "dlink/dir300": {
+                    "source": "keyword",
+                    "schema_version": 2,
+                    "cves": [],
+                }
             },
-            {
-                "firmware_id": "fw",
-                "meta_path": "same.bin",
-                "meta_brand": "b",
-                "meta_model": "m",
-            },
-        ]
-    ).to_csv(features, index=False)
-    cache.write_text(json.dumps({"b/m": {"cve_total": 0, "cvss_max": 0.0}}))
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["generate-labels", "--features", str(features), "--cves", str(cache)],
-    )
+        )
+
+    message = str(exc_info.value)
+    assert "firmware_id=fw-missing-version" in message
+    assert "versao inferida='2.0'" in message
+    assert "meta_version=None" in message
+
+
+def test_cli_reports_missing_identity_before_version_divergence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with pytest.raises(ValueError, match="meta_brand/meta_model ausentes"):
+        _run_cli(
+            tmp_path,
+            monkeypatch,
+            [
+                {
+                    "firmware_id": "fw-without-label",
+                    "meta_path": "/dataset/raw/dlink/dir300_2.0/fw.bin",
+                    "meta_brand": None,
+                    "meta_model": None,
+                    "meta_version": "1.0",
+                }
+            ],
+            {},
+        )
+
+
+def test_cli_rejects_missing_meta_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with pytest.raises(ValueError, match="meta_path ausente"):
+        _run_cli(
+            tmp_path,
+            monkeypatch,
+            [
+                {
+                    "firmware_id": "fw-missing-path",
+                    "meta_path": None,
+                    "meta_brand": "dlink",
+                    "meta_model": "dir300",
+                    "meta_version": None,
+                }
+            ],
+            {},
+        )
+
+
+def test_cli_rejects_duplicate_rows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    row = {
+        "firmware_id": "fw",
+        "meta_path": "/dataset/raw/dlink/dir300_1.0/fw.bin",
+        "meta_brand": "dlink",
+        "meta_model": "dir300",
+        "meta_version": "1.0",
+    }
     with pytest.raises(ValueError, match="duplicad"):
-        main()
-
-
-def test_cli_rejects_missing_cache(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    features = tmp_path / "features.csv"
-    pd.DataFrame(
-        [{"firmware_id": "fw", "meta_path": "fw", "meta_brand": "b", "meta_model": "m"}]
-    ).to_csv(features, index=False)
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        [
-            "generate-labels",
-            "--features",
-            str(features),
-            "--cves",
-            str(tmp_path / "absent.json"),
-        ],
-    )
-    with pytest.raises(FileNotFoundError, match="absent.json"):
-        main()
+        _run_cli(
+            tmp_path,
+            monkeypatch,
+            [row, row],
+            {"dlink/dir300": {"source": "keyword", "cves": []}},
+        )
