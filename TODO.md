@@ -66,10 +66,32 @@
       (`checklists/rastreabilidade.md`) em cada spec; relatórios em
       `.docs/brainstorming/validacao-rastreabilidade/`; 60 lacunas de teste
       registradas por FR.
+- [x] Task 4 (escopo restante), plano aprovado em 2026-09-24: fluxo por área
+      `specify → clarify → plan → checklist → tasks → analyze` (o
+      `/speckit.checklist` exige `plan.md`); specs novas
+      `008-preparacao-dataset`, `009-particao-agrupada`, `010-treino-modelos`
+      e `011-avaliacao-relatorios`; TickTick T08-T10 reaproveitam as tasks
+      genéricas e T11 recebe as correções de 001/002/003/006 (005 cita T04,
+      007 cita T06); correções entram como FRs nas specs donas (Status
+      `Misto`); formato `- **FR-NNN** [Planejado, TickTick T03]: ...`; branch
+      `docs/escopo-restante`, um commit por etapa e um PR.
+- [x] Task 4, etapa 2: texto da task 4 corrigido no TickTick (aprovado):
+      fluxo com plan antes de checklist, "Mapa de áreas", "Formato" e regra
+      "FR Proposto não recebe task"; aceite passa a exigir tasks só para FRs
+      Planejado.
+- [x] Task 4, etapa 3: T08, T09 e T10 renomeadas (Objetivo/Aceite,
+      prioridade 3, tags `tcc` e `firmware-ml-classifier`) e T11 criada
+      (`6ab58fac8f0871770908e3d2`). A API ignora `kind=CHECKLIST` sem itens:
+      o texto foi gravado em `desc` e copiado para `content` (aprovado).
+- [x] Task 4, etapa 4: mapa de escopo restante em
+      `.docs/brainstorming/escopo-restante.md` com 77 itens decididos pelo
+      pesquisador (conflitos, correções, Propostos e áreas 008-011). O item
+      "Alinhar `scripts/train.py` (XGBoost e MLP)" foi resolvido por CF-b.
+      Novas: spec 012 (features do filesystem) e TickTick T12
+      (`6ab5b93f8f086a6e165ecb2a`); T11 com 19 itens (001-004, 006) e T04
+      com 3 itens novos (005). Itens do roadmap superados marcados abaixo.
 
 ### Pending
-- [ ] Alinhar o item de `scripts/train.py` do roadmap (4 modelos, com XGBoost
-      e MLP) com o escopo do `AGENTS.md` (Extra Trees + Random Forest).
 - [ ] T07: limpar os campos de feature não utilizados (Doc2Vec desligado por
       padrão sem gravar `doc2vec_*`; decidir os 5 detectores constantes;
       codificar `fs_type` e `compression_type`).
@@ -91,7 +113,14 @@
       strings, já implementados; `libssl_version_age` segue pendente.
 - [ ] O baseline `score_firmware` não é chamado por nenhum script; falta
       rodá-lo sobre o dataset para comparar com os modelos.
-- [ ] Especificar T03, T04, T05, T06 e o treino de Extra Trees/Random Forest.
+- [ ] Emenda PATCH da constituição (CF-g): dependências só em
+      `pyproject.toml`; `AGENTS.md` sem `requirements.txt`.
+- [ ] Task 4, etapa 6b: spec nova 012 (features do filesystem, T12).
+- [ ] Task 4, etapa 5: FRs Planejado/Proposto nas specs donas 005, 006, 001,
+      002, 003, 004 e 007.
+- [ ] Task 4, etapa 6: specs novas 008-011 (specify → analyze).
+- [ ] Task 4, etapa 7: verificar rastreabilidade, abrir PR e confirmar o
+      aceite com o pesquisador.
 - [ ] Gerar o System Design a partir dos `plan.md` de todas as specs,
       separando componentes implementados e planejados.
 - [ ] 001/FR-007: Binwalk ausente (log debug) ou encerrado com código de erro
@@ -660,7 +689,7 @@
 - [x] Migrar chaves Zyxel no `cve_cache.json` para nomes normalizados.
 - [x] Criar `dataset/labels.csv` com colunas: firmware_id, vendor, model, cvss_max, cve_count, security_level.
 - [x] Definir scoring deterministico para mapeamento automatico score → nivel de seguranca.
-- [ ] Comecar com 3 classes (Seguro, Vulneravel, Critico); testar 5 classes se dataset > 150.
+- [x] (superado em 2026-09-24, escopo-restante CF-e/PR-06) Comecar com 3 classes (Seguro, Vulneravel, Critico); testar 5 classes se dataset > 150.
 - [ ] Revisao manual dos rotulos gerados automaticamente.
 
 #### Features — Binwalk
@@ -673,7 +702,8 @@
 - [ ] Gerar features: `count_hardcoded_passwords`, `count_hardcoded_ips`, `has_telnetd`, `libssl_version_age`.
 
 #### Treino e Avaliacao
-- [ ] Implementar `scripts/train.py` com 4 modelos: Random Forest, Extra Trees,
+- [x] (superado em 2026-09-24, escopo-restante CF-b: só ET e RF; XGBoost
+      Proposto após emenda) Implementar `scripts/train.py` com 4 modelos: Random Forest, Extra Trees,
       XGBoost e MLP. Fazer merge com `labels_v2.csv` por `firmware_id` e usar
       dele somente `security_level`; excluir `vendor`, `model`, `version`,
       `version_source`, `cve_total`, `cvss_max` e todas as colunas `meta_*`
@@ -681,11 +711,11 @@
 - [ ] Validar com `StratifiedGroupKFold` agrupado por modelo, após deduplicar
       por `firmware_id`, no lugar de `RepeatedStratifiedKFold` e LOOCV.
 - [ ] Reportar macro F1-score, acuracia, confusion matrix normalizada e intervalo de confianca.
-- [ ] Implementar split train/val/test com seeds fixos.
+- [x] (superado em 2026-09-24, escopo-restante CF-c: CV agrupada repetida) Implementar split train/val/test com seeds fixos.
 - [ ] Implementar geracao de relatorios em `reports/`.
 
 #### Pre-processamento
-- [ ] Aplicar `StandardScaler` ou `MinMaxScaler` nas features estatisticas (entropia, byte_mean, compress_ratio).
+- [x] (superado em 2026-09-24, escopo-restante CF-d: sem scaler) Aplicar `StandardScaler` ou `MinMaxScaler` nas features estatisticas (entropia, byte_mean, compress_ratio).
 - [ ] Pós-entrega mínima — Reduzir dimensionalidade do Doc2Vec: PCA para 10-20 componentes ou reduzir `vector_size` para 30.
 - [ ] Treinar baseline com apenas as features estatisticas para validar contribuicao.
 - [ ] Comparar baseline vs baseline + strings vs baseline + strings + Binwalk features; Doc2Vec só entra depois da entrega mínima.
@@ -699,7 +729,7 @@
 
 ### Fase 3 — Refinamento e Escrita (Mes 5-6)
 
-- [ ] Experimentar com 5 classes se dataset > 150 amostras.
+- [x] (superado em 2026-09-24, escopo-restante PR-06) Experimentar com 5 classes se dataset > 150 amostras.
 - [ ] Hyperparameter tuning com Optuna ou GridSearchCV.
 - [ ] Gerar graficos e tabelas finais para o TCC.
 - [ ] Escrever capitulo de metodologia e resultados.
@@ -729,7 +759,7 @@ atual usa somente CVEs; `src/scoring.py` é baseline de comparação.
 - ISA tem baixo valor como feature para roteadores (quase sempre MIPS/ARM).
 - Sequencia de ferramentas: Binwalk (Fase 1) → Regex strings (Fase 1) → pyelftools (Fase 2) → Ghidra (Fase 2).
 - Nao reportar apenas acuracia; usar macro F1-score como metrica principal.
-- Dataset atual: 305 firmwares de 6 vendors (dlink=103, netgear=80, openwrt=49, belkin=43, tplink=27, zyxel=3).
+- (histórico; atual: 840 arquivos, 699 `firmware_id`, medido em 2026-09-24; escopo-restante CF-f) Dataset atual: 305 firmwares de 6 vendors (dlink=103, netgear=80, openwrt=49, belkin=43, tplink=27, zyxel=3).
 - Firmwares identificados como "data" pelo `file` com entropia >7.5 + `n_filesystems=0` + `compression_type=None` são padrão típico de firmware encriptado com formato proprietário. O scoring já captura esse padrão via `entropy_variance_across_sections`.
 - OpenWrt retorna 0 CVEs na NVD (open-source, CVEs reportados contra chipsets/vendors originais) — substituir por Linksys.
 - Usar class_weight='balanced' em todos os modelos sklearn para compensar desbalanceamento.
