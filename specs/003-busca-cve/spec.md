@@ -174,7 +174,7 @@ falha HTTP num par e inspecionando o log e o cache.
 - Um par que falha por rede fica fora do cache e a execução termina com
   sucesso (código de saída 0); a falha aparece só no log e no resumo
   (`Failed`). A rotulagem acusa o par ausente como erro
-  (`005-rotulagem-cve`). Com `--force`, porém, a entrada anterior do par
+  (005/FR-003). Com `--force`, porém, a entrada anterior do par
   permanece no cache sem marca de que a nova consulta falhou.
 - Não há nova tentativa nem espera extra para limite de taxa da NVD
   (HTTP 403/503): o par vira falha. Exceções fora de erro HTTP, de conexão
@@ -190,7 +190,7 @@ falha HTTP num par e inspecionando o log e o cache.
   (hardware) cai na busca por texto.
 - A busca por texto (`source="keyword"`) casa o texto da CVE e pode trazer
   CVE de outro produto. A filtragem é da rotulagem, pelas
-  `configurations` (`005-rotulagem-cve`).
+  `configurations` (`005-rotulagem-cve`, 005/FR-006 e 005/FR-007).
 - `cvss_max` de cada CVE é o `baseScore` da primeira métrica da versão
   CVSS preferida, não o máximo entre as fontes (NVD e CNA). Métrica v2 sem
   `baseSeverity` recebe `MEDIUM`.
@@ -297,9 +297,9 @@ falha HTTP num par e inspecionando o log e o cache.
 - A NVD API 2.0 (endpoints de CVE e de CPE) está acessível. Esta é a única
   etapa do pipeline com rede; as seguintes leem só o cache local.
 - A tabela de features foi extraída com `--label-from-path`
-  (`001-extracao-features`, FR-010).
+  (001/FR-010).
 - O cache é o retrato da NVD usado no TCC. Reproduzir os rótulos significa
   reusar o arquivo, não consultar a NVD de novo.
-- A decisão de quais CVEs se aplicam a cada firmware, a agregação em
-  `cve_total`/`cvss_max` e o erro por par ausente no cache pertencem a
-  `005-rotulagem-cve`.
+- A decisão de quais CVEs se aplicam a cada firmware (005/FR-005 a
+  005/FR-011), a agregação em `cve_total`/`cvss_max` (005/FR-012) e o erro
+  por par ausente no cache (005/FR-003) pertencem a `005-rotulagem-cve`.

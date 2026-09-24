@@ -314,7 +314,7 @@ ASCII são extraídas, e extrair um arquivo vazio.
   `hardcoded_passwords`), escolhido pelo autor da regra. Não é
   probabilidade medida.
 - As colunas de evidência também são lidas pelo baseline de
-  `006-baseline-regras`, que não gera rótulo de treino (constituição,
-  princípio II).
+  `006-baseline-regras` (`006/FR-002`, `006/FR-005`), que não gera rótulo
+  de treino (`006/FR-007`; constituição, princípio II).
 - `dataset/processed/findings.jsonl` e `findings_v2.jsonl` têm os mesmos
   3049 achados e a mesma distribuição por detector (medido em 2026-09-24).

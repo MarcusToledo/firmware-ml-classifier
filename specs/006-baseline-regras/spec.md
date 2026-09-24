@@ -18,8 +18,8 @@
   execução do baseline sobre o dataset são decisões já registradas no
   `TODO.md`, não escolhas desta spec. Nenhuma pergunta feita.
 - Terminologia: "nível" é a classe prevista pelo baseline; "rótulo" é só o
-  ground truth por CVE de `005-rotulagem-cve`. Os dois usam os mesmos nomes
-  de classe, mas nunca se misturam.
+  ground truth por CVE de `005-rotulagem-cve` (005/FR-012 e 005/FR-013).
+  Os dois usam os mesmos nomes de classe, mas nunca se misturam.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -136,11 +136,11 @@ com só as features estatísticas.
 - Os nomes finais das três classes no texto do TCC estão pendentes
   (`TODO.md`). O baseline usa hoje os nomes `sem_cve_conhecida`,
   `cve_conhecida` e `cve_critica`, os mesmos de `security_level` em
-  `005-rotulagem-cve`. Os nomes são iguais, mas o sentido não: o baseline
-  não consulta CVE, e `sem_cve_conhecida` previsto por ele não prova
-  ausência de vulnerabilidade. O baseline nunca prevê `indeterminado`, que
-  na rotulagem é estado de qualidade; a comparação precisa excluir essas
-  linhas.
+  `005-rotulagem-cve` (005/FR-013). Os nomes são iguais, mas o sentido
+  não: o baseline não consulta CVE, e `sem_cve_conhecida` previsto por ele
+  não prova ausência de vulnerabilidade. O baseline nunca prevê
+  `indeterminado`, que na rotulagem é estado de qualidade (005/FR-012 e
+  005/FR-013); a comparação precisa excluir essas linhas.
 - `docs/SCORING.md` está desatualizado (cache sem filtro de versão,
   `cve_cache.json`/`labels.csv` v1); registrado no `TODO.md`. O documento
   também diz que os parâmetros estão em `configs/scoring.yaml`, mas só
@@ -229,7 +229,7 @@ com só as features estatísticas.
   das hard rules.
 - **FR-007** [Implementado]: O baseline NÃO DEVE gerar rótulo de
   treino: nenhuma etapa do pipeline grava sua previsão, e a rotulagem de
-  `005-rotulagem-cve` não o consulta.
+  `005-rotulagem-cve` não o consulta (005/FR-014).
 - **FR-008** [Implementado]: O sistema DEVE ler pesos (`stats` 0,10,
   `strings` 0,30, `binwalk` 0,15), limiares e níveis mínimos das hard rules
   da seção `scoring` de um YAML versionado (`configs/scoring.yaml`), nas
@@ -266,9 +266,10 @@ com só as features estatísticas.
 ## Assumptions
 
 - O baseline é referência de comparação, não ground truth (constituição,
-  princípio II). O rótulo de treino segue `005-rotulagem-cve`.
+  princípio II). O rótulo de treino segue `005-rotulagem-cve` (005/FR-012
+  e 005/FR-013).
 - As features de entrada seguem os nomes de `001-extracao-features`; as
   contagens e flags de strings e as features de assinatura do Binwalk vêm
-  de `002-evidencias-seguranca`.
+  de `002-evidencias-seguranca` (002/FR-014).
 - Não há resultado do baseline sobre o dataset: nenhum número de
   desempenho é afirmado aqui.

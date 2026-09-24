@@ -22,7 +22,8 @@ variante experimental fora do modelo reportado (constituição, princípio I).
 **Language/Version**: Python ≥ 3.9
 
 **Primary Dependencies**: gensim (`>=4.2` em `pyproject.toml`; 4.4.0 no
-`.venv`), numpy, PyYAML (via configuração de `001-extracao-features`)
+`.venv`), numpy, PyYAML (via configuração de `001-extracao-features`,
+`001/FR-002`)
 
 **Storage**: arquivo `models/doc2vec.model` (formato `save` do gensim);
 colunas `doc2vec_*` em `dataset/processed/*.parquet`, gravadas pela 001

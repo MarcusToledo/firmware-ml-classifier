@@ -14,7 +14,7 @@ ordem (spec, FR-015). A chave de junção com a tabela de features é
 |`vendor`|texto|cópia de `meta_brand`|
 |`model`|texto|cópia de `meta_model`|
 |`version`|texto ou nulo|cópia de `meta_version`, conferida contra a versão reinferida do path (FR-004)|
-|`version_source`|texto ou nulo|`directory` ou `filename`, reinferido de `meta_path` pela regra de `004-versao-firmware`; nulo quando `version` é nulo|
+|`version_source`|texto ou nulo|`directory` ou `filename`, reinferido de `meta_path` pela regra de `004-versao-firmware` (`004/FR-004`, `004/FR-005`); nulo quando `version` é nulo (`004/FR-013`)|
 |`security_level`|texto|`sem_cve_conhecida`, `cve_conhecida`, `cve_critica` ou `indeterminado` (FR-012, FR-013)|
 |`cve_total`|int ≥ 0|número de CVEs aplicáveis (A) do `firmware_id`, somadas entre aliases e sem repetir ID; limite inferior|
 |`cvss_max`|float em [0, 10]|maior CVSS entre as CVEs aplicáveis (A); 0.0 sem aplicáveis; limite inferior|
@@ -78,4 +78,4 @@ O `dataset/labels.csv` (v1) ainda existe e é o destino padrão de
   `--label-from-path`. Só `firmware_id`, `meta_path`, `meta_brand`,
   `meta_model` e `meta_version` são lidas.
 - Entrada: cache de CVE de `003-busca-cve` (`dataset/cve_cache_v2.json`,
-  `schema_version: 2`).
+  `schema_version: 2`; `003/FR-006`).

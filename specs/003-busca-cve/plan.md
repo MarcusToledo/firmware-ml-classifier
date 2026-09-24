@@ -124,7 +124,7 @@ Ficam no módulo desta spec, mas o requisito pertence a outra:
 
 - `_aggregate_scores` em `scripts/fetch_cves.py`: não é chamado pela busca;
   `scripts/generate_labels.py` o usa para `cve_total` e `cvss_max` dos
-  rótulos. Requisito em `005-rotulagem-cve`, com os testes
+  rótulos. Requisito em `005-rotulagem-cve` (005/FR-012), com os testes
   `test_fetch_cves.py::test_aggregate_empty`,
   `::test_aggregate_mixed_severities` e
   `::test_aggregate_none_severity_ignored`.

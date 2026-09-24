@@ -132,21 +132,33 @@ Partes de FR sem teste que as exercite:
 
 Ficam nos módulos desta spec, mas o requisito pertence a outra:
 
-- `infer_brand_model_label_from_path`, `_split_model_version` e
-  `VERSION_SOURCE_*` em `pipeline/feature_extraction.py`:
-  `004-versao-firmware`.
+- `infer_brand_model_label_from_path` em `pipeline/feature_extraction.py`:
+  004/FR-001, 004/FR-002, 004/FR-003, 004/FR-005, 004/FR-012 e
+  004/FR-013.
+- `_split_model_version` em `pipeline/feature_extraction.py`: 004/FR-004.
+- `VERSION_SOURCE_*` em `pipeline/feature_extraction.py`: 004/FR-005.
 - Regra "ambos ou nenhum" de `version`/`version_source` (`ValueError` em
-  `extract_features_from_path`): `004-versao-firmware`.
+  `extract_features_from_path`): 004/FR-013.
+- Identidade inferida para todo arquivo e preservada no erro
+  (`_process_path` e campos de identidade em `_build_error_result`, em
+  `pipeline/feature_extraction.py`): 004/FR-014.
 - Chamada a `scan_strings`, `scan_strings_findings`,
   `count_crypto_signatures`, `has_encrypted_sections`,
   `find_crypto_signatures`, `find_encrypted_sections` e o campo
   `PipelineResult.findings` em `pipeline/feature_extraction.py`:
-  `002-evidencias-seguranca`.
-- `--findings-output` em `scripts/extract_features.py`:
-  `002-evidencias-seguranca`.
-- `load_doc2vec_model` em `pipeline/feature_extraction.py` e colunas
-  `doc2vec_*` via `combine_features` em `src/feature_extraction.py`:
-  `007-embeddings-doc2vec`.
+  002/FR-001, 002/FR-014 e 002/FR-015.
+- `--findings-output` em `scripts/extract_features.py`: 002/FR-016.
+- `load_doc2vec_model`, `_init_worker` e a carga do modelo em
+  `extract_features_batch` (`pipeline/feature_extraction.py`): 007/FR-007.
+- Padrões `doc2vec.*` em `load_pipeline_config`
+  (`pipeline/feature_extraction.py`): 007/FR-004.
+- `doc2vec_used=False` em `_build_error_result`
+  (`pipeline/feature_extraction.py`): 007/FR-009.
+- `extract_features` em `src/feature_extraction.py`: 007/FR-002 e
+  007/FR-008.
+- Colunas `doc2vec_*` via `combine_features` em
+  `src/feature_extraction.py`: 007/FR-008.
+- `tokenize_document` em `src/features/strings.py`: 007/FR-002.
 
 ### Utilitários sem spec
 

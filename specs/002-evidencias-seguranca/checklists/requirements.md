@@ -36,11 +36,11 @@
   `source`, `context`, `confidence`, `detector`, `detector_version`), de
   detector, de coluna de evidência (`count_*`, `has_*`,
   `n_crypto_signatures`) e a opção `--findings-output`. Eles são o contrato
-  que a banca audita e que `001-extracao-features` e
-  `006-baseline-regras` consomem. As regras dos detectores (padrões,
-  listas de valores e limiares de versão) são o próprio requisito: sem
-  elas o FR não é testável. Não há módulos, funções nem testes no
-  `spec.md`; esses ficam no `plan.md`.
+  que a banca audita e que `001-extracao-features` (`001/FR-008`) e
+  `006-baseline-regras` (`006/FR-002`, `006/FR-005`) consomem. As regras
+  dos detectores (padrões, listas de valores e limiares de versão) são o
+  próprio requisito: sem elas o FR não é testável. Não há módulos, funções
+  nem testes no `spec.md`; esses ficam no `plan.md`.
 - "Written for non-technical stakeholders": os leitores são o pesquisador e
   a banca (constituição, Convenções de Especificação), então termos
   técnicos como IPv4, RFC 1918 e expressões de versão são mantidos.

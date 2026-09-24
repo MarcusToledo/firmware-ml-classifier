@@ -33,7 +33,7 @@ fica em cada entrada.
 - `cpe_name` é preenchido se e só se `source=cpe`.
 - Um par cuja consulta falhou não tem entrada (FR-008). Ausência de par é
   erro na rotulagem, não "sem CVE" (constituição, princípio II;
-  `005-rotulagem-cve`).
+  005/FR-003).
 - A mesma CVE pode aparecer em várias entradas; não há deduplicação entre
   pares.
 
@@ -71,6 +71,6 @@ antigo. Das 336 chaves, 26 não estão no v2; as 43 entradas `tp_link/*` têm
 
 ## Consumidor
 
-`005-rotulagem-cve` lê o cache pela chave do par, avalia as
-`configurations` de cada CVE contra a versão do firmware e agrega
-`cve_total`/`cvss_max`.
+`005-rotulagem-cve` lê o cache pela chave do par (005/FR-003), avalia as
+`configurations` de cada CVE contra a versão do firmware (005/FR-005 a
+005/FR-011) e agrega `cve_total`/`cvss_max` (005/FR-012).

@@ -60,7 +60,7 @@ O pesquisador obtém a versão do firmware e de onde ela veio: do sufixo do
 diretório do modelo ou do nome do arquivo, segundo a regra do fabricante.
 
 **Why this priority**: a aplicabilidade de uma CVE depende da versão
-(`005-rotulagem-cve`). A origem permite auditar quanto do rótulo depende de
+(`005-rotulagem-cve`, 005/FR-005 e 005/FR-008). A origem permite auditar quanto do rótulo depende de
 cada regra.
 
 **Independent Test**: inferir a versão de um diretório com sufixo, de um
@@ -92,7 +92,8 @@ rotulagem o trata como incerto.
 
 **Why this priority**: uma versão errada gera um rótulo falsamente
 determinado (constituição, princípios II e VII). Sem versão, o rótulo
-fica `indeterminado` ou é decidido pelos limites em `005-rotulagem-cve`.
+fica `indeterminado` ou é decidido pelos limites em `005-rotulagem-cve`
+(005/FR-005, 005/FR-012).
 
 **Independent Test**: inferir a versão de nomes ambíguos e de fabricante
 sem regra, e passar à extração um par versão/origem inconsistente.
@@ -295,7 +296,7 @@ diretório com versão, e extrair um path inexistente dentro do layout.
   atual de cada fabricante; um formato novo cai em versão nula até ganhar
   regra.
 - A rotulagem em `005-rotulagem-cve` reaplica esta inferência sobre
-  `meta_path` e exige que a versão coincida com `meta_version`. Mudar uma
+  `meta_path` e exige que a versão coincida com `meta_version` (005/FR-004). Mudar uma
   regra de versão exige reextrair as features antes de regerar os rótulos
   (`docs/PIPELINE.md`, §"3. Rotulagem por CVE").
 - O `features_v2.parquet` atual foi gerado antes de `meta_version_source`

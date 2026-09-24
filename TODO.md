@@ -54,6 +54,11 @@
 - [x] Subtask 2: spec piloto `specs/001-extracao-features/` (`spec.md`,
       clarify sem ambiguidades críticas, `plan.md`, `data-model.md`) na
       branch `docs/specs-retroativas`.
+- [x] Subtask 2: specs retroativas 002–007 (spec, clarify, plan, data-model
+      quando dono de artefato) na branch `docs/specs-retroativas`;
+      referências entre specs no formato `NNN/FR-###`.
+- [x] Clarify da 005: local canônico da tabela de rótulos decidido como
+      `dataset/processed/labels_v2.csv`.
 
 ### Pending
 - [ ] Alinhar o item de `scripts/train.py` do roadmap (4 modelos, com XGBoost
@@ -78,7 +83,6 @@
       strings, já implementados; `libssl_version_age` segue pendente.
 - [ ] O baseline `score_firmware` não é chamado por nenhum script; falta
       rodá-lo sobre o dataset para comparar com os modelos.
-- [ ] Escrever as specs retroativas 002–007 após revisão do piloto 001.
 - [ ] Validar as specs contra código e testes (matriz US → FR → módulo →
       teste) e registrar as lacunas de teste.
 - [ ] Especificar T03, T04, T05, T06 e o treino de Extra Trees/Random Forest.
@@ -110,6 +114,146 @@
       diz que o path inexistente faz `read_binary` levantar exceção e
       exercita o ramo de erro de `_process_path`, mas `read_binary` engole o
       `OSError` e o teste passa pelo caminho `empty firmware`.
+- [ ] Mover `labels_v2.csv` para `dataset/processed/labels_v2.csv`, trocar o
+      `--output` padrão de `scripts/generate_labels.py` (hoje o v1
+      `dataset/labels.csv`) e registrar `--critical-cvss` e as entradas
+      (constituição, princípio V; decisão do clarify da 005).
+- [ ] 002: `debug_account` casa qualquer palavra inteira debug/guest/test,
+      em `src/evidence/patterns.py::_DEBUG_ACCOUNT_RE`. Medido em 2026-09-24
+      no `findings_v2.jsonl`: 128 dos 199 achados são "test", de mensagens
+      de bootloader (ex.: "mtest - simple RAM test").
+- [ ] 002: `api_tokens` aceita qualquer sequência de 32+ caracteres de
+      `[A-Za-z0-9+/=_-]`, em `src/evidence/patterns.py::_API_TOKEN_RE`.
+      Medido em 2026-09-24: 1121 dos 1128 achados não são hexadecimais
+      (nomes de configuração, alfabetos, paths de build).
+- [ ] 002: os detectores de IP casam versões com 4 partes, em
+      `src/evidence/patterns.py::_IPV4_RE` (`find_public_ips`,
+      `find_hardcoded_ips`). Medido em 2026-09-24: os 39 `public_ips` vêm de
+      textos de versão ("7.0.1.0" 23x); a máscara 255.255.255.0 aparece 11x
+      como `hardcoded_ips`.
+- [ ] 002: "AES" casa as tabelas de código "AES S-Box", em
+      `src/evidence/binwalk_findings.py::_ENCRYPTED_RE`/`_CRYPTO_RE`.
+      Medido em 2026-09-24: 137 dos 171 achados de `encrypted_sections` são
+      essas tabelas, único motivo em 8 dos 17 paths com
+      `has_encrypted_sections=True`; a mesma descrição gera achado nos dois
+      detectores.
+- [ ] 002: Dropbear antigo no formato 0.NN (ex.: "Dropbear 0.52") não casa,
+      em `src/evidence/patterns.py::_DROPBEAR_RE` (exige ano `\d{4}\.\d+`).
+- [ ] 002: `detector_version` é a constante "1.0" por módulo e não muda com a
+      regra, em `src/evidence/patterns.py::_DETECTOR_VERSION` e
+      `src/evidence/binwalk_findings.py::_DETECTOR_VERSION` (princípio V):
+      portar a correção de `hardcoded_passwords` manteria a mesma versão.
+- [ ] 002: teste passa por construção, em
+      `tests/test_evidence_patterns.py::test_findings_to_counts_matches_scan_strings`:
+      `scan_strings` é a própria expressão comparada (`patterns.py` L524).
+- [ ] 003: `main()` sem teste (pulo de cache, schema, `--force`, falha de
+      rede, gravação, `--dry-run`, `--delay`, `NVD_API_KEY`), em
+      `scripts/fetch_cves.py::main`; `tests/test_fetch_cves.py` importa só
+      funções auxiliares.
+- [ ] 003: busca de CVE sem comando instalado, em `pyproject.toml`
+      `[project.scripts]` (L31-35 não têm `fetch-cves`).
+- [ ] 003: `--output` padrão aponta para o cache v1, em
+      `scripts/fetch_cves.py::main` (L321): sem `--force` aborta com
+      "Cache CVE em schema antigo"; com `--force` mistura esquemas (26
+      entradas v1 ficam). `README.md` L62/L68 usam os caminhos v1. Medido em
+      2026-09-24: `dataset/cve_cache.json` com 336 entradas v1.
+- [ ] 003: com `--force`, falha de rede mantém a entrada antiga sem marca e
+      a execução sai com código 0, em `scripts/fetch_cves.py::main` (o
+      `except` só loga).
+- [ ] 003: sem nova tentativa/backoff para 403/503 da NVD, e JSON inválido
+      ou `IncompleteRead` abortam a execução, em
+      `scripts/fetch_cves.py::main`/`_fetch_page`/`_fetch_cpe_page` (`except`
+      restrito a `URLError`/`HTTPError`/`TimeoutError`).
+- [ ] 003: parquet sem `--label-from-path` gera 0 pares e sai sem erro;
+      linhas com brand/model nulo são descartadas sem contagem no log, em
+      `scripts/fetch_cves.py::extract_pairs`.
+- [ ] 003: resolução de CPE lê só a primeira página (até 2000 produtos),
+      aceita só a parte `o` e pega o primeiro match, em
+      `scripts/fetch_cves.py::resolve_cpe_name`/`_fetch_cpe_page`; produto
+      só `h` cai na busca por texto.
+- [ ] 003: `cvss_max` por CVE é o baseScore da primeira métrica, não o
+      máximo entre fontes; v2 sem `baseSeverity` vira MEDIUM, em
+      `scripts/fetch_cves.py::extract_cvss`.
+- [ ] 003: entradas do cache não registram a data da consulta à NVD
+      (princípio V), em `scripts/fetch_cves.py::fetch_cves_for_pair`.
+- [ ] 003: docstring diz "lowercase bucket name", mas a função devolve
+      maiúsculas, em `scripts/fetch_cves.py::severity_bucket`.
+- [ ] 004: arquivo direto em `raw/<fabricante>/arquivo` vira modelo e label
+      `<fabricante>_<arquivo>` em vez de identidade nula (fallback
+      silencioso, princípio VI), em
+      `pipeline/feature_extraction.py::infer_brand_model_label_from_path`
+      (L85). Medido em 2026-09-24: 0 casos no `features_v2.parquet`.
+- [ ] 004: usa o primeiro segmento `raw` do path, sem distinção de
+      maiúsculas; um `raw` acima de `dataset/` desviaria a identidade sem
+      aviso, em
+      `pipeline/feature_extraction.py::infer_brand_model_label_from_path`
+      (L79-82). Latente: 840/840 `meta_path` reproduzidos.
+- [ ] 004: versão do diretório gravada crua (ex.: `7.10(ABTG.4)C0`), sem a
+      normalização das regras de nome de arquivo, e conflito com a versão
+      do nome não registrado, em
+      `pipeline/feature_extraction.py::_split_model_version` (L67-69).
+      Impacto atual nulo: 0 linhas `directory` (medido em 2026-09-24).
+- [ ] 005: `meta_version_source` do parquet não é lido nem conferido contra
+      o reinferido, em `scripts/generate_labels.py::ID_COLUMNS`; o
+      `features_v2.parquet` atual nem tem a coluna (medido em 2026-09-24).
+- [ ] 005: lacunas de teste da rotulagem (`--dry-run`, logs,
+      `--critical-cvss` via CLI, entrada parquet, tabela vazia, CPE versão
+      "-", `negate`, alvo por `cpe_name`, CVE sem ID), em
+      `tests/test_generate_labels.py`, `tests/test_cve_labels.py` e
+      `tests/test_version_match.py`.
+- [ ] 005: `docs/PIPELINE.md` §3 (L163-165) cita `labels.csv`; o artefato
+      atual é `labels_v2.csv`.
+- [ ] 006: NaN conta como sinal presente, em
+      `src/scoring.py::_score_stats`/`_score_strings`/`score_firmware`:
+      estatística NaN vira sub-score máximo e `has_*` NaN conta como
+      verdadeiro. Verificado em 2026-09-24: tudo NaN → `cve_critica`, score
+      0,6417. Latente (sem chamador; 840/840 `meta_read_ok=True`).
+- [ ] 006: hard rules puladas sem grupo presente ou com soma de pesos 0, em
+      `src/scoring.py::score_firmware` (retorno antecipado). Verificado:
+      `{"has_telnetd": True}` dá `sem_cve_conhecida`, regra None.
+- [ ] 006: configuração sem validação, em
+      `src/scoring.py::HardRuleConfig`/`load_scoring_config`: nível mínimo
+      fora das três classes é aceito e a regra nunca dispara; `low > high` e
+      pesos negativos passam; YAML vazio dá `AttributeError` genérico.
+- [ ] 006: teste passa pelo motivo errado, em
+      `tests/test_scoring.py::test_hard_rule_hardcoded_passwords`: o score já
+      é 0,375 sem a regra e `hard_rule_applied=None` (verificado em
+      2026-09-24); a regra `hardcoded_passwords` fica sem teste.
+- [ ] 006: `docs/SCORING.md` diz que os parâmetros estão em
+      `configs/scoring.yaml`, mas as constantes dos sub-scores são fixas em
+      `src/scoring.py`; a linha do Binwalk omite
+      `entropy_variance_across_sections` e `n_filesystems`.
+- [ ] 006: `src/scoring.py::score_firmware` registra só a última hard rule
+      que elevou o nível; `has_telnetd`/`has_debug_account` não entram no
+      sub-score de strings; `count_urls`/`count_api_tokens` não entram no
+      baseline (`_score_strings`).
+- [ ] 007: `meta_doc2vec_used=True` mesmo quando o documento não tem tokens
+      e o vetor sai zero, em
+      `pipeline/feature_extraction.py::extract_features_from_path` (L295) e
+      `src/feature_extraction.py::extract_features` (L72-76).
+- [ ] 007: dimensão do modelo carregado não é conferida contra
+      `doc2vec.vector_size`, em `src/feature_extraction.py::extract_features`
+      (L73-76): linhas podem ter números diferentes de colunas; a inferência
+      usa epochs/alpha da config de extração, não os do treino.
+- [ ] 007: corpus de treino repete aliases, em
+      `scripts/train_doc2vec.py::build_documents`. Medido em 2026-09-24: 774
+      candidatos, 633 `firmware_id` distintos, 215 linhas compartilham
+      `firmware_id` com a mesma tag.
+- [ ] 007: ordem do corpus depende do sistema de arquivos, em
+      `src/cli_utils.py::gather_paths` (L36, `rglob` sem sort). [INFERENCE:
+      o treino é sensível à ordem; não medido]
+- [ ] 007: o modelo não grava os limites do corpus (`max_bytes`,
+      `feature.*`) e não há artefato de embeddings alinhado a `firmware_id`
+      (`AGENTS.md`, princípio V), em `scripts/train_doc2vec.py::main` e
+      `src/features/doc2vec.py::save_doc2vec`. `PYTHONHASHSEED` já está na
+      T06.
+- [ ] 007: só `workers` é validado em
+      `src/features/doc2vec.py::train_doc2vec`; a extração lê
+      `doc2vec.workers` e o ignora
+      (`pipeline/feature_extraction.py::load_pipeline_config`).
+- [ ] 007: `scripts/train_doc2vec.py` e `scripts/inspect_tokens.py` sem
+      teste; nenhum teste de extração confere `doc2vec_*` nem
+      `meta_doc2vec_used=True`.
 
 ## Request: Responder o review do Kody no PR #5
 
@@ -233,10 +377,12 @@
 - [x] Validar schema do `features.parquet` gerado (133 colunas, sem vazamento de campo CVE, `meta_read_ok=True` em 840/840).
 - [x] Validar `findings.jsonl` (3049 achados, correlacionáveis ao `features.parquet` por `firmware_id`).
 - [x] Corrigir normalização de vendor `tp_link` para `tp-link` em `scripts/fetch_cves.py`: as 43 entradas `tp_link/*` já no cache retornavam 0 CVEs porque a busca na NVD usava o termo errado (`VENDOR_ALIASES` só tinha `tplink`, não `tp_link`).
+- [x] Re-busca dos 43 pares `tp_link/*`: obsoleto para o `cve_cache_v2.json`,
+      cujas 43 entradas já têm `vendor="tp-link"` (medido em 2026-09-24); o
+      problema vale só para o cache v1.
 
 ### Pending
 - [ ] Pós-entrega mínima — Doc2Vec: `models/doc2vec.model` não existe (pasta `models/` nem existe). Hoje as 100 colunas `doc2vec_0`..`doc2vec_99` do `features.parquet` são todas zero (`meta_doc2vec_used=False` em 840/840); ficam fora do vetor do modelo reportado (constituição, princípio I).
-- [ ] Re-rodar `fetch_cves.py --force` para os 43 pares `tp_link/*` já em cache. Foram buscados com o termo antigo antes da correção do alias, precisam ser refeitos antes de gerar labels confiáveis para esses firmwares.
 - [ ] Detector `hardcoded_passwords` (`src/evidence/patterns.py`): 98,6% dos achados (1040/1055 no dataset real) são match de token avulso com alta taxa de falso positivo, ex. `" -- System halted"` (mensagem de kernel) contado como credencial por conter a palavra "system". Já sendo tratado em outra branch.
 - [ ] `dataset/raw/tplink/` (grafia com underscore, ex. `tl_er604w`) e `dataset/raw/tp_link/` (grafia com hífen, ex. `tl-er604w`) parecem ter modelos em comum sob nomes diferentes. Só o vendor foi normalizado nesta correção, o nome do modelo não. Avaliar se vale consolidar.
 

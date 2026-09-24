@@ -36,7 +36,7 @@
   (`directory`, `filename`), nomes de coluna (`meta_version`,
   `meta_version_source`, `firmware_id`), artefatos (`features_v2.parquet`,
   `labels_v2.csv`) e a opção `--label-from-path`. São o contrato que a
-  banca audita e que `005-rotulagem-cve` consome. Não há módulos, funções
+  banca audita e que `005-rotulagem-cve` consome (005/FR-001, 005/FR-004). Não há módulos, funções
   nem testes no `spec.md`; esses ficam no `plan.md`.
 - "Requirements are testable and unambiguous": as regras por fabricante
   (FR-007 a FR-011) descrevem o formato aceito em texto, não a expressão

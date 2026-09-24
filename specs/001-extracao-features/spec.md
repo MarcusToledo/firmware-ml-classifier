@@ -186,7 +186,7 @@ outro sem Binwalk, e comparar as chaves.
   SHA256 dos bytes efetivamente lidos, isto é, dos primeiros `max_bytes`
   (5 MiB na configuração versionada), e não do arquivo inteiro.
   `firmware_id` DEVE ser nulo quando a leitura falha. É a identidade de
-  conteúdo usada para agrupar aliases em `005-rotulagem-cve`.
+  conteúdo usada para agrupar aliases em `005-rotulagem-cve` (005/FR-012).
 - **FR-005** [Implementado]: O sistema DEVE calcular as features
   estatísticas `entropy` (Shannon), `byte_mean`, `compress_ratio` (zlib) e
   `entropy_variance_across_sections`. Esta última usa blocos completos de
@@ -203,8 +203,8 @@ outro sem Binwalk, e comparar as chaves.
   0/nulo e as chaves DEVEM estar presentes.
 - **FR-008** [Implementado]: O vetor de features DEVE incluir as 11
   contagens/flags de strings e as 2 features de Binwalk definidas em
-  `002-evidencias-seguranca`, além das colunas `doc2vec_*` definidas em
-  `007-embeddings-doc2vec`.
+  `002-evidencias-seguranca` (002/FR-014), além das colunas `doc2vec_*`
+  definidas em `007-embeddings-doc2vec` (007/FR-008).
 - **FR-009** [Implementado]: O sistema DEVE gravar a saída em parquet
   (padrão) ou CSV, uma linha por arquivo, com `firmware_id`, as features e
   14 metadados com prefixo `meta_`: `read_ok`, `byte_len`, `bytes_used`,

@@ -186,11 +186,12 @@ distribuição e que nenhum arquivo é gravado.
   no `TODO.md`.
 - O `features_v2.parquet` atual não tem `meta_version_source` (conferido
   em 2026-09-24). Por isso a rotulagem reinfere `version_source` a partir
-  de `meta_path`, pela regra de `004-versao-firmware`, e só confere a
-  versão contra `meta_version`. `meta_version_source`, quando existe no
-  parquet, não é lido nem conferido. Qualquer mudança na regra de versão
-  exige reextrair as features antes de regerar os rótulos; senão a
-  checagem de coerência falha.
+  de `meta_path`, pela regra de `004-versao-firmware` (`004/FR-004`,
+  `004/FR-005`), e só confere a versão contra `meta_version`.
+  `meta_version_source`, quando existe no parquet, não é lido nem
+  conferido. Qualquer mudança na regra de versão exige reextrair as
+  features antes de regerar os rótulos; senão a checagem de coerência
+  falha.
 - `labels_v2.csv` mantém o estado `indeterminado` (137 de 840 linhas; 126
   de 699 `firmware_id`, medido em 2026-09-24). O treino futuro precisa
   excluí-lo e usar do arquivo só `security_level`, porque
@@ -218,10 +219,10 @@ distribuição e que nenhum arquivo é gravado.
   (ex.: `versionEndExcluding=2017-01-06`) e outro produto vulnerável numa
   configuração `AND`. Elas formam o resíduo de `indeterminado`.
 - O recall de `sem_cve_conhecida` depende do cache por modelo de
-  `003-busca-cve`: uma entrada vazia é evidência negativa válida, mesmo
-  quando um modelo irmão tem CVEs. Os 43 pares `tp_link/*` buscados antes
-  da correção do alias de fabricante precisam de nova busca antes de
-  rótulos confiáveis (`TODO.md`).
+  `003-busca-cve` (`003/FR-006`): uma entrada vazia é evidência negativa
+  válida, mesmo quando um modelo irmão tem CVEs. Os 43 pares `tp_link/*`
+  buscados antes da correção do alias de fabricante precisam de nova busca
+  antes de rótulos confiáveis (`TODO.md`).
 - A agregação usa `firmware_id`, que é o SHA256 só do prefixo lido
   (`001/FR-004`). Dois binários diferentes com o mesmo prefixo seriam
   tratados como aliases e receberiam o mesmo rótulo. Não há colisão no
@@ -250,11 +251,12 @@ distribuição e que nenhum arquivo é gravado.
   cache (consulta ausente não é evidência de que não há CVE), ou quando a
   entrada não tem lista `cves` ou não tem `schema_version` igual a 2.
 - **FR-004** [Implementado]: O sistema DEVE reinferir versão e origem da
-  versão a partir de `meta_path`, pela regra de `004-versao-firmware`, e
-  falhar quando a versão reinferida difere de `meta_version` (inclusive
-  nulo contra valor), citando `firmware_id`, `meta_path`, as duas versões
-  e a instrução de reextrair as features com `--label-from-path`. A coluna
-  `version_source` gravada DEVE ser a reinferida.
+  versão a partir de `meta_path`, pela regra de `004-versao-firmware`
+  (`004/FR-004`, `004/FR-005`), e falhar quando a versão reinferida difere
+  de `meta_version` (inclusive nulo contra valor), citando `firmware_id`,
+  `meta_path`, as duas versões e a instrução de reextrair as features com
+  `--label-from-path`. A coluna `version_source` gravada DEVE ser a
+  reinferida.
 - **FR-005** [Implementado]: Para cada linha, o sistema DEVE separar as
   CVEs da entrada do cache em aplicáveis e indeterminadas, na ordem do
   cache, descartando as não aplicáveis. Sem versão (nula, em branco ou sem
@@ -317,8 +319,8 @@ distribuição e que nenhum arquivo é gravado.
   [0, 10] ou não numérico, e com limiar fora de [0, 10]. `indeterminado`
   DEVE ser um quarto estado, distinto das três classes.
 - **FR-014** [Implementado]: O rótulo NÃO DEVE usar features, achados de
-  evidência nem o baseline de regras de `006-baseline-regras`: só as CVEs
-  do cache e a versão do firmware.
+  evidência nem o baseline de regras de `006-baseline-regras`
+  (`006/FR-007`): só as CVEs do cache e a versão do firmware.
 - **FR-015** [Implementado]: O sistema DEVE gravar em `--output` um CSV
   com uma linha por linha da tabela de entrada, na mesma ordem, e as
   colunas `firmware_id`, `meta_path`, `vendor`, `model`, `version`,
@@ -336,8 +338,8 @@ distribuição e que nenhum arquivo é gravado.
 ### Key Entities *(include if feature involves data)*
 
 - **Entrada do cache de CVE**: resultado da consulta por fabricante/modelo,
-  definido em `003-busca-cve`. Contém as CVEs com ID, CVSS, severidade e
-  `configurations`.
+  definido em `003-busca-cve` (`003/FR-005`, `003/FR-006`). Contém as CVEs
+  com ID, CVSS, severidade e `configurations`.
 - **CVE avaliada**: uma CVE da entrada classificada como aplicável,
   indeterminada ou não aplicável para a versão de um firmware.
 - **Alias**: linha da tabela de features que compartilha `firmware_id`
@@ -373,8 +375,10 @@ distribuição e que nenhum arquivo é gravado.
 - A tabela de features foi extraída com `--label-from-path`; sem isso
   `meta_brand`, `meta_model` e `meta_version` saem nulos (`001/FR-010`) e
   a rotulagem falha.
-- O cache segue o formato `schema_version: 2` de `003-busca-cve`, com
-  cada CVE trazendo `id`, `cvss_max`, `severity` e `configurations`.
-- A versão e sua origem seguem a regra de `004-versao-firmware`.
+- O cache segue o formato `schema_version: 2` de `003-busca-cve`
+  (`003/FR-006`), com cada CVE trazendo `id`, `cvss_max`, `severity` e
+  `configurations` (`003/FR-005`).
+- A versão e sua origem seguem a regra de `004-versao-firmware`
+  (`004/FR-004`, `004/FR-005`).
 - O treino, ainda não implementado, junta rótulos e features por
   `firmware_id` e usa só `security_level`.

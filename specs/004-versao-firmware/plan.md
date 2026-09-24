@@ -25,7 +25,7 @@ rotulagem está em `docs/PIPELINE.md`, §"3. Rotulagem por CVE".
 `pathlib`)
 
 **Storage**: N/A. Sem artefato próprio; os valores vão às colunas
-`meta_*` de `001-extracao-features`
+`meta_*` de `001-extracao-features` (001/FR-009)
 
 **Testing**: pytest
 

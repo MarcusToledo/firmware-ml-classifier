@@ -250,7 +250,7 @@ contagem e 5 tokens.
 ## Assumptions
 
 - O Doc2Vec é variante experimental. As colunas `doc2vec_*` estão no vetor
-  da `001-extracao-features`, mas só entram no modelo reportado se
+  da `001-extracao-features` (`001/FR-008`), mas só entram no modelo reportado se
   superarem na ablation uma representação simples (constituição, princípio
   I). O treino do classificador, onde essa exclusão será aplicada, ainda
   não existe.

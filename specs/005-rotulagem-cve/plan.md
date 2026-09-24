@@ -90,7 +90,7 @@ tests/
 entre specs está no inventário `.docs/brainstorming/inventario-modulos.md`;
 esta spec é dona só dos módulos acima. Dois símbolos de módulos de outras
 specs são chamados aqui: `pipeline/feature_extraction.py::infer_brand_model_label_from_path`
-(regra de versão de `004-versao-firmware`) e
+(regra de versão de `004-versao-firmware`, `004/FR-004` e `004/FR-005`) e
 `scripts/fetch_cves.py::_aggregate_scores` (contagem de `cve_total` e
 `cvss_max`, requisito desta spec; ver tabela abaixo).
 
