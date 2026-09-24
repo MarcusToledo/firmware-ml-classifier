@@ -59,6 +59,13 @@
       referências entre specs no formato `NNN/FR-###`.
 - [x] Clarify da 005: local canônico da tabela de rótulos decidido como
       `dataset/processed/labels_v2.csv`.
+- [x] Subtask 3: matriz US → FR → módulo → teste e `tasks.md` retroativo nas 7
+      specs; 108 de 108 cenários conferidos (99 originais e 9 acrescentados
+      pelo analyze da 006; 0 divergentes, 0 corrigidos no `spec.md`);
+      `/speckit.analyze` e `/speckit.checklist`
+      (`checklists/rastreabilidade.md`) em cada spec; relatórios em
+      `.docs/brainstorming/validacao-rastreabilidade/`; 60 lacunas de teste
+      registradas por FR.
 
 ### Pending
 - [ ] Alinhar o item de `scripts/train.py` do roadmap (4 modelos, com XGBoost
@@ -66,30 +73,29 @@
 - [ ] T07: limpar os campos de feature não utilizados (Doc2Vec desligado por
       padrão sem gravar `doc2vec_*`; decidir os 5 detectores constantes;
       codificar `fs_type` e `compression_type`).
-- [ ] Pós-entrega mínima — Doc2Vec (T06, Proposto): reiniciar `model.random` antes de cada `infer_vector`,
-      exigir `PYTHONHASHSEED`, treinar por fold e rever
-      `tests/test_doc2vec.py`, que segundo o oracle passa pelo motivo errado.
+- [ ] 007/princípio III, 007/princípio V: pós-entrega mínima — Doc2Vec (T06,
+      Proposto): reiniciar `model.random` antes de cada `infer_vector`, exigir
+      `PYTHONHASHSEED`, treinar por fold e rever `tests/test_doc2vec.py`, que
+      segundo o oracle passa pelo motivo errado.
 - [ ] Documento de strings: segundo medição do oracle (amostra de 40), as
       2000 primeiras strings (`max_strings`) cobrem ~3,7% dos bytes lidos e
       são cabeçalho mais ruído de payload comprimido; os detectores de
       `src/evidence/patterns.py` ficam quase cegos. Avaliar extração do
       filesystem desempacotado ou filtro de ruído.
-- [ ] Pós-entrega mínima — `scripts/train_doc2vec.py` filtra por extensão e
-      `scripts/extract_features.py` por exclusão: conjuntos de firmware
-      diferentes entre treino e extração do Doc2Vec.
+- [ ] 007/FR-001: pós-entrega mínima — `scripts/train_doc2vec.py` filtra por
+      extensão e `scripts/extract_features.py` por exclusão: conjuntos de
+      firmware diferentes entre treino e extração do Doc2Vec.
 - [ ] `docs/SCORING.md` desatualizado: diz que o cache não filtra versão e
       usa `cve_cache.json`/`labels.csv` (v1).
 - [ ] Roadmap: marcar como feitos a integração do Binwalk e os regex de
       strings, já implementados; `libssl_version_age` segue pendente.
 - [ ] O baseline `score_firmware` não é chamado por nenhum script; falta
       rodá-lo sobre o dataset para comparar com os modelos.
-- [ ] Validar as specs contra código e testes (matriz US → FR → módulo →
-      teste) e registrar as lacunas de teste.
 - [ ] Especificar T03, T04, T05, T06 e o treino de Extra Trees/Random Forest.
 - [ ] Gerar o System Design a partir dos `plan.md` de todas as specs,
       separando componentes implementados e planejados.
-- [ ] Binwalk ausente (log debug) ou encerrado com código de erro (sem log)
-      gera features estruturais vazias sem registro no artefato
+- [ ] 001/FR-007: Binwalk ausente (log debug) ou encerrado com código de erro
+      (sem log) gera features estruturais vazias sem registro no artefato
       (constituição, princípio VI), em
       `pipeline/feature_extraction.py::_extract_binwalk_descriptions`.
 - [ ] `max_bytes=5 MiB` corta 696/840 arquivos, e as features estatísticas
@@ -114,51 +120,49 @@
       diz que o path inexistente faz `read_binary` levantar exceção e
       exercita o ramo de erro de `_process_path`, mas `read_binary` engole o
       `OSError` e o teste passa pelo caminho `empty firmware`.
-- [ ] Mover `labels_v2.csv` para `dataset/processed/labels_v2.csv`, trocar o
-      `--output` padrão de `scripts/generate_labels.py` (hoje o v1
-      `dataset/labels.csv`) e registrar `--critical-cvss` e as entradas
-      (constituição, princípio V; decisão do clarify da 005).
-- [ ] 002: `debug_account` casa qualquer palavra inteira debug/guest/test,
-      em `src/evidence/patterns.py::_DEBUG_ACCOUNT_RE`. Medido em 2026-09-24
-      no `findings_v2.jsonl`: 128 dos 199 achados são "test", de mensagens
-      de bootloader (ex.: "mtest - simple RAM test").
-- [ ] 002: `api_tokens` aceita qualquer sequência de 32+ caracteres de
-      `[A-Za-z0-9+/=_-]`, em `src/evidence/patterns.py::_API_TOKEN_RE`.
-      Medido em 2026-09-24: 1121 dos 1128 achados não são hexadecimais
-      (nomes de configuração, alfabetos, paths de build).
-- [ ] 002: os detectores de IP casam versões com 4 partes, em
-      `src/evidence/patterns.py::_IPV4_RE` (`find_public_ips`,
+- [ ] 005/princípio V: mover `labels_v2.csv` para
+      `dataset/processed/labels_v2.csv`, trocar o `--output` padrão de
+      `scripts/generate_labels.py` (hoje o v1 `dataset/labels.csv`) e
+      registrar `--critical-cvss` e as entradas (constituição, princípio V;
+      decisão do clarify da 005).
+- [ ] 002/FR-008: `debug_account` casa qualquer palavra inteira
+      debug/guest/test, em `src/evidence/patterns.py::_DEBUG_ACCOUNT_RE`.
+      Medido em 2026-09-24 no `findings_v2.jsonl`: 128 dos 199 achados são
+      "test", de mensagens de bootloader (ex.: "mtest - simple RAM test").
+- [ ] 002/FR-011: `api_tokens` aceita qualquer sequência de 32+ caracteres de
+      `[A-Za-z0-9+/=_-]`, em `src/evidence/patterns.py::_API_TOKEN_RE`. Medido
+      em 2026-09-24: 1121 dos 1128 achados não são hexadecimais (nomes de
+      configuração, alfabetos, paths de build).
+- [ ] 002/FR-005, 002/FR-006: os detectores de IP casam versões com 4 partes,
+      em `src/evidence/patterns.py::_IPV4_RE` (`find_public_ips`,
       `find_hardcoded_ips`). Medido em 2026-09-24: os 39 `public_ips` vêm de
       textos de versão ("7.0.1.0" 23x); a máscara 255.255.255.0 aparece 11x
       como `hardcoded_ips`.
-- [ ] 002: "AES" casa as tabelas de código "AES S-Box", em
-      `src/evidence/binwalk_findings.py::_ENCRYPTED_RE`/`_CRYPTO_RE`.
-      Medido em 2026-09-24: 137 dos 171 achados de `encrypted_sections` são
-      essas tabelas, único motivo em 8 dos 17 paths com
+- [ ] 002/FR-012, 002/FR-013: "AES" casa as tabelas de código "AES S-Box", em
+      `src/evidence/binwalk_findings.py::_ENCRYPTED_RE`/`_CRYPTO_RE`. Medido
+      em 2026-09-24: 137 dos 171 achados de `encrypted_sections` são essas
+      tabelas, único motivo em 8 dos 17 paths com
       `has_encrypted_sections=True`; a mesma descrição gera achado nos dois
       detectores.
-- [ ] 002: Dropbear antigo no formato 0.NN (ex.: "Dropbear 0.52") não casa,
-      em `src/evidence/patterns.py::_DROPBEAR_RE` (exige ano `\d{4}\.\d+`).
-- [ ] 002: `detector_version` é a constante "1.0" por módulo e não muda com a
-      regra, em `src/evidence/patterns.py::_DETECTOR_VERSION` e
+- [ ] 002/FR-009: Dropbear antigo no formato 0.NN (ex.: "Dropbear 0.52") não
+      casa, em `src/evidence/patterns.py::_DROPBEAR_RE` (exige ano
+      `\d{4}\.\d+`).
+- [ ] 002/FR-002: `detector_version` é a constante "1.0" por módulo e não muda
+      com a regra, em `src/evidence/patterns.py::_DETECTOR_VERSION` e
       `src/evidence/binwalk_findings.py::_DETECTOR_VERSION` (princípio V):
       portar a correção de `hardcoded_passwords` manteria a mesma versão.
 - [ ] 002: teste passa por construção, em
       `tests/test_evidence_patterns.py::test_findings_to_counts_matches_scan_strings`:
       `scan_strings` é a própria expressão comparada (`patterns.py` L524).
-- [ ] 003: `main()` sem teste (pulo de cache, schema, `--force`, falha de
-      rede, gravação, `--dry-run`, `--delay`, `NVD_API_KEY`), em
-      `scripts/fetch_cves.py::main`; `tests/test_fetch_cves.py` importa só
-      funções auxiliares.
 - [ ] 003: busca de CVE sem comando instalado, em `pyproject.toml`
       `[project.scripts]` (L31-35 não têm `fetch-cves`).
-- [ ] 003: `--output` padrão aponta para o cache v1, em
-      `scripts/fetch_cves.py::main` (L321): sem `--force` aborta com
-      "Cache CVE em schema antigo"; com `--force` mistura esquemas (26
-      entradas v1 ficam). `README.md` L62/L68 usam os caminhos v1. Medido em
-      2026-09-24: `dataset/cve_cache.json` com 336 entradas v1.
-- [ ] 003: com `--force`, falha de rede mantém a entrada antiga sem marca e
-      a execução sai com código 0, em `scripts/fetch_cves.py::main` (o
+- [ ] 003/FR-006: `--output` padrão aponta para o cache v1, em
+      `scripts/fetch_cves.py::main` (L321): sem `--force` aborta com "Cache
+      CVE em schema antigo"; com `--force` mistura esquemas (26 entradas v1
+      ficam). `README.md` L62/L68 usam os caminhos v1. Medido em 2026-09-24:
+      `dataset/cve_cache.json` com 336 entradas v1.
+- [ ] 003/FR-008: com `--force`, falha de rede mantém a entrada antiga sem
+      marca e a execução sai com código 0, em `scripts/fetch_cves.py::main` (o
       `except` só loga).
 - [ ] 003: sem nova tentativa/backoff para 403/503 da NVD, e JSON inválido
       ou `IncompleteRead` abortam a execução, em
@@ -174,44 +178,39 @@
 - [ ] 003: `cvss_max` por CVE é o baseScore da primeira métrica, não o
       máximo entre fontes; v2 sem `baseSeverity` vira MEDIUM, em
       `scripts/fetch_cves.py::extract_cvss`.
-- [ ] 003: entradas do cache não registram a data da consulta à NVD
-      (princípio V), em `scripts/fetch_cves.py::fetch_cves_for_pair`.
+- [ ] 003/princípio V: entradas do cache não registram a data da consulta à
+      NVD (princípio V), em `scripts/fetch_cves.py::fetch_cves_for_pair`.
 - [ ] 003: docstring diz "lowercase bucket name", mas a função devolve
       maiúsculas, em `scripts/fetch_cves.py::severity_bucket`.
-- [ ] 004: arquivo direto em `raw/<fabricante>/arquivo` vira modelo e label
-      `<fabricante>_<arquivo>` em vez de identidade nula (fallback
-      silencioso, princípio VI), em
+- [ ] 004/princípio VI: arquivo direto em `raw/<fabricante>/arquivo` vira
+      modelo e label `<fabricante>_<arquivo>` em vez de identidade nula
+      (fallback silencioso, princípio VI), em
       `pipeline/feature_extraction.py::infer_brand_model_label_from_path`
       (L85). Medido em 2026-09-24: 0 casos no `features_v2.parquet`.
-- [ ] 004: usa o primeiro segmento `raw` do path, sem distinção de
+- [ ] 004/FR-001: usa o primeiro segmento `raw` do path, sem distinção de
       maiúsculas; um `raw` acima de `dataset/` desviaria a identidade sem
       aviso, em
       `pipeline/feature_extraction.py::infer_brand_model_label_from_path`
       (L79-82). Latente: 840/840 `meta_path` reproduzidos.
-- [ ] 004: versão do diretório gravada crua (ex.: `7.10(ABTG.4)C0`), sem a
-      normalização das regras de nome de arquivo, e conflito com a versão
-      do nome não registrado, em
-      `pipeline/feature_extraction.py::_split_model_version` (L67-69).
-      Impacto atual nulo: 0 linhas `directory` (medido em 2026-09-24).
+- [ ] 004/FR-005: versão do diretório gravada crua (ex.: `7.10(ABTG.4)C0`),
+      sem a normalização das regras de nome de arquivo, e conflito com a
+      versão do nome não registrado, em
+      `pipeline/feature_extraction.py::_split_model_version` (L67-69). Impacto
+      atual nulo: 0 linhas `directory` (medido em 2026-09-24).
 - [ ] 005: `meta_version_source` do parquet não é lido nem conferido contra
       o reinferido, em `scripts/generate_labels.py::ID_COLUMNS`; o
       `features_v2.parquet` atual nem tem a coluna (medido em 2026-09-24).
-- [ ] 005: lacunas de teste da rotulagem (`--dry-run`, logs,
-      `--critical-cvss` via CLI, entrada parquet, tabela vazia, CPE versão
-      "-", `negate`, alvo por `cpe_name`, CVE sem ID), em
-      `tests/test_generate_labels.py`, `tests/test_cve_labels.py` e
-      `tests/test_version_match.py`.
 - [ ] 005: `docs/PIPELINE.md` §3 (L163-165) cita `labels.csv`; o artefato
       atual é `labels_v2.csv`.
-- [ ] 006: NaN conta como sinal presente, em
+- [ ] 006/FR-003: NaN conta como sinal presente, em
       `src/scoring.py::_score_stats`/`_score_strings`/`score_firmware`:
       estatística NaN vira sub-score máximo e `has_*` NaN conta como
       verdadeiro. Verificado em 2026-09-24: tudo NaN → `cve_critica`, score
       0,6417. Latente (sem chamador; 840/840 `meta_read_ok=True`).
-- [ ] 006: hard rules puladas sem grupo presente ou com soma de pesos 0, em
-      `src/scoring.py::score_firmware` (retorno antecipado). Verificado:
+- [ ] 006/FR-005: hard rules puladas sem grupo presente ou com soma de pesos
+      0, em `src/scoring.py::score_firmware` (retorno antecipado). Verificado:
       `{"has_telnetd": True}` dá `sem_cve_conhecida`, regra None.
-- [ ] 006: configuração sem validação, em
+- [ ] 006/FR-008: configuração sem validação, em
       `src/scoring.py::HardRuleConfig`/`load_scoring_config`: nível mínimo
       fora das três classes é aceito e a regra nunca dispara; `low > high` e
       pesos negativos passam; YAML vazio dá `AttributeError` genérico.
@@ -227,33 +226,199 @@
       que elevou o nível; `has_telnetd`/`has_debug_account` não entram no
       sub-score de strings; `count_urls`/`count_api_tokens` não entram no
       baseline (`_score_strings`).
-- [ ] 007: `meta_doc2vec_used=True` mesmo quando o documento não tem tokens
-      e o vetor sai zero, em
+- [ ] 007/FR-009: `meta_doc2vec_used=True` mesmo quando o documento não tem
+      tokens e o vetor sai zero, em
       `pipeline/feature_extraction.py::extract_features_from_path` (L295) e
       `src/feature_extraction.py::extract_features` (L72-76).
-- [ ] 007: dimensão do modelo carregado não é conferida contra
+- [ ] 007/FR-008: dimensão do modelo carregado não é conferida contra
       `doc2vec.vector_size`, em `src/feature_extraction.py::extract_features`
       (L73-76): linhas podem ter números diferentes de colunas; a inferência
       usa epochs/alpha da config de extração, não os do treino.
-- [ ] 007: corpus de treino repete aliases, em
+- [ ] 007/FR-003: corpus de treino repete aliases, em
       `scripts/train_doc2vec.py::build_documents`. Medido em 2026-09-24: 774
       candidatos, 633 `firmware_id` distintos, 215 linhas compartilham
       `firmware_id` com a mesma tag.
-- [ ] 007: ordem do corpus depende do sistema de arquivos, em
-      `src/cli_utils.py::gather_paths` (L36, `rglob` sem sort). [INFERENCE:
-      o treino é sensível à ordem; não medido]
-- [ ] 007: o modelo não grava os limites do corpus (`max_bytes`,
+- [ ] 007/FR-001: ordem do corpus depende do sistema de arquivos, em
+      `src/cli_utils.py::gather_paths` (L36, `rglob` sem sort). [INFERENCE: o
+      treino é sensível à ordem; não medido]
+- [ ] 007/FR-006: o modelo não grava os limites do corpus (`max_bytes`,
       `feature.*`) e não há artefato de embeddings alinhado a `firmware_id`
       (`AGENTS.md`, princípio V), em `scripts/train_doc2vec.py::main` e
       `src/features/doc2vec.py::save_doc2vec`. `PYTHONHASHSEED` já está na
       T06.
-- [ ] 007: só `workers` é validado em
+- [ ] 007/FR-005: só `workers` é validado em
       `src/features/doc2vec.py::train_doc2vec`; a extração lê
       `doc2vec.workers` e o ignora
       (`pipeline/feature_extraction.py::load_pipeline_config`).
-- [ ] 007: `scripts/train_doc2vec.py` e `scripts/inspect_tokens.py` sem
-      teste; nenhum teste de extração confere `doc2vec_*` nem
-      `meta_doc2vec_used=True`.
+- [ ] Lacuna de teste 001/FR-001: entrada `.txt`, filtro das extensões
+      excluídas e arquivos ocultos sem teste; teste sugerido em
+      `tests/test_pipeline_cli.py`.
+- [ ] Lacuna de teste 001/FR-003: leitura com `max_bytes>0` e mensagens exatas
+      de erro nos metadados sem teste; teste sugerido em
+      `tests/test_pipeline_extraction.py`.
+- [ ] Lacuna de teste 001/FR-004: SHA256 exato dos bytes limitados por
+      `max_bytes` sem teste; teste sugerido em
+      `tests/test_pipeline_extraction.py`.
+- [ ] Lacuna de teste 001/FR-006: propagação de truncamento para
+      `meta_truncated` sem teste; teste sugerido em
+      `tests/test_pipeline_extraction.py`.
+- [ ] Lacuna de teste 001/FR-007: fallback do Binwalk ausente, em timeout e
+      com retorno de erro sem teste; teste sugerido em
+      `tests/test_pipeline_extraction.py`.
+- [ ] Lacuna de teste 001/FR-008: conjunto integrado das 11 features de
+      strings, 2 de Binwalk e `doc2vec_*` sem teste completo; teste sugerido
+      em `tests/test_pipeline_extraction.py`.
+- [ ] Lacuna de teste 001/FR-009: cardinalidade e esquema completo dos 14
+      metadados em parquet e CSV sem teste; teste sugerido em
+      `tests/test_pipeline_cli.py`.
+- [ ] Lacuna de teste 001/FR-010: nulidade simultânea dos cinco metadados sem
+      `--label-from-path` sem teste; teste sugerido em
+      `tests/test_pipeline_cli.py`.
+- [ ] Lacuna de teste 001/FR-012: opção `--workers` da CLI sem teste; teste
+      sugerido em `tests/test_pipeline_cli.py`.
+- [ ] Lacuna de teste 001/FR-013: cinco campos de log emitidos por arquivo sem
+      teste conjunto; teste sugerido em `tests/test_pipeline_cli.py`.
+- [ ] Lacuna de teste 001/princípio V: determinismo da saída em processos
+      separados sem teste; teste sugerido em
+      `tests/test_pipeline_extraction.py`.
+- [ ] Lacuna de teste 002/FR-001: ausência de consulta a CVE, NVD ou
+      identidade e reuso das descrições do Binwalk sem nova varredura; teste
+      sugerido em `tests/test_pipeline_extraction.py`.
+- [ ] Lacuna de teste 002/FR-002: `type` e `detector_version="1.0"` nos
+      achados gerados por cada `detector`; teste sugerido em
+      `tests/test_evidence_patterns.py`.
+- [ ] Lacuna de teste 002/FR-006: exclusão de `0.0.0.0`, `255.255.255.255`,
+      `127.0.0.0/8` e de primeiro octeto maior ou igual a 240 em `public_ips`;
+      teste sugerido em `tests/test_evidence_patterns.py`.
+- [ ] Lacuna de teste 002/FR-007: distinção de maiúsculas na substring
+      `telnetd`; teste sugerido em `tests/test_evidence_patterns.py`.
+- [ ] Lacuna de teste 002/FR-009: `confidence`, `detector` e `type` dos
+      achados de BusyBox e Dropbear, e `type` do achado de OpenSSL; teste
+      sugerido em `tests/test_evidence_patterns.py`.
+- [ ] Lacuna de teste 002/FR-011: token não hexadecimal, bordas sem letra ou
+      dígito, `confidence` e `context` limitado aos 12 primeiros caracteres;
+      teste sugerido em `tests/test_evidence_patterns.py`.
+- [ ] Lacuna de teste 002/FR-014: igualdade entre o número de achados e as
+      contagens com mais de um achado, sem comparação tautológica; teste
+      sugerido em `tests/test_evidence_patterns.py`.
+- [ ] Lacuna de teste 002/FR-015: ordem completa dos 13 detectores na lista de
+      achados; teste sugerido em `tests/test_evidence_patterns.py`.
+- [ ] Lacuna de teste 002/FR-016: oito campos em cada linha, UTF-8 sem escape,
+      criação do diretório pai e log do total no JSONL; teste sugerido em
+      `tests/test_pipeline_cli.py`.
+- [ ] Lacuna de teste 003/FR-001: leitura seletiva de `meta_brand` e
+      `meta_model` do parquet via `--features` não tem teste permanente; teste
+      sugerido em `tests/test_fetch_cves.py`.
+- [ ] Lacuna de teste 003/FR-003: filtro de CPE de parte `o` e limite à
+      primeira página do dicionário não têm teste permanente; teste sugerido
+      em `tests/test_fetch_cves.py`.
+- [ ] Lacuna de teste 003/FR-004: paginação de CVEs com mais de uma página não
+      tem teste permanente; teste sugerido em `tests/test_fetch_cves.py`.
+- [ ] Lacuna de teste 003/FR-005: fallback MEDIUM para CVSS v2 sem
+      `baseSeverity` não tem teste permanente; teste sugerido em
+      `tests/test_fetch_cves.py`.
+- [ ] Lacuna de teste 003/FR-006: chave do par, forma NVD, persistência e
+      preservação de outras entradas pelo CLI não têm teste permanente; teste
+      sugerido em `tests/test_fetch_cves.py`.
+- [ ] Lacuna de teste 003/FR-007: pulo de cache, validação de schema e
+      substituição com `--force` não têm teste permanente; teste sugerido em
+      `tests/test_fetch_cves.py`.
+- [ ] Lacuna de teste 003/FR-008: falha de rede, log, ausência de entrada nova
+      e continuação no CLI não têm teste permanente; teste sugerido em
+      `tests/test_fetch_cves.py`.
+- [ ] Lacuna de teste 003/FR-009: chamadas de gravação periódica e final pelo
+      CLI não têm teste permanente; teste sugerido em
+      `tests/test_fetch_cves.py`.
+- [ ] Lacuna de teste 003/FR-010: `--delay`, padrões por chave de API, esperas
+      e cabeçalho `apiKey` não têm teste permanente; teste sugerido em
+      `tests/test_fetch_cves.py`.
+- [ ] Lacuna de teste 003/FR-011: `--dry-run` sem leitura ou escrita do cache
+      nem acesso à rede não tem teste permanente; teste sugerido em
+      `tests/test_fetch_cves.py`.
+- [ ] Lacuna de teste 003/FR-012: logs de carregamento, progresso, falha,
+      sucesso e resumo não têm teste permanente; teste sugerido em
+      `tests/test_fetch_cves.py`.
+- [ ] Lacuna de teste 004/FR-002: paths com menos de dois segmentos depois de
+      `raw` e segmentos de fabricante ou modelo vazios não têm cobertura
+      completa; teste sugerido em `tests/test_feature_extraction.py`.
+- [ ] Lacuna de teste 004/FR-006: a seleção da regra com fabricante em
+      maiúsculas ou cercado por espaços não tem teste; teste sugerido em
+      `tests/test_firmware_version.py`.
+- [ ] Lacuna de teste 004/FR-014: o ramo que preserva a identidade quando a
+      extração levanta exceção e chama `_build_error_result` não tem teste (o
+      teste atual cobre falha de leitura pelo caminho `empty firmware`); teste
+      sugerido em `tests/test_pipeline_extraction.py`.
+- [ ] Lacuna de teste 005/FR-001: entrada parquet sem cobertura na CLI; teste
+      sugerido em `tests/test_generate_labels.py`.
+- [ ] Lacuna de teste 005/FR-002: tabela vazia, `firmware_id` nulo e cache
+      JSON que não é objeto sem cobertura; teste sugerido em
+      `tests/test_generate_labels.py`.
+- [ ] Lacuna de teste 005/FR-006: `negate` e produto-alvo derivado de
+      `cpe_name` sem cobertura; teste sugerido em `tests/test_cve_labels.py`.
+- [ ] Lacuna de teste 005/FR-010: versão CPE exata `-` como indeterminada sem
+      cobertura; teste sugerido em `tests/test_cve_labels.py`.
+- [ ] Lacuna de teste 005/FR-012: erro para CVE sem ID válido sem cobertura;
+      teste sugerido em `tests/test_generate_labels.py`.
+- [ ] Lacuna de teste 005/FR-013: `--critical-cvss` pela CLI sem cobertura
+      permanente; teste sugerido em `tests/test_generate_labels.py`.
+- [ ] Lacuna de teste 005/FR-015: ordem das 9 colunas, criação do diretório e
+      ausência de saída após erro sem cobertura; teste sugerido em
+      `tests/test_generate_labels.py`.
+- [ ] Lacuna de teste 005/FR-016: `--dry-run` sem cobertura permanente; teste
+      sugerido em `tests/test_generate_labels.py`.
+- [ ] Lacuna de teste 005/FR-017: logs de contagem, distribuições e caminho
+      gravado sem cobertura permanente; teste sugerido em
+      `tests/test_generate_labels.py`.
+- [ ] Lacuna de teste 006/FR-002: valores exatos das fórmulas e cobertura de
+      `count_hardcoded_ips`, `entropy_variance_across_sections` e
+      `compression_type`; teste sugerido em `tests/test_scoring.py`.
+- [ ] Lacuna de teste 006/FR-003: soma de pesos 0 com grupo presente e retorno
+      antes da avaliação das hard rules; teste sugerido em
+      `tests/test_scoring.py`.
+- [ ] Lacuna de teste 006/FR-004: fronteiras inclusivas exatas de `low` e
+      `high`; teste sugerido em `tests/test_scoring.py`.
+- [ ] Lacuna de teste 006/FR-005: hard rule `hardcoded_passwords`, mínimo
+      `cve_critica` configurado e registro da última regra aplicada
+      (`test_hard_rule_hardcoded_passwords` passa com score 0,375 e
+      `hard_rule_applied=None`); teste sugerido em `tests/test_scoring.py`.
+- [ ] Lacuna de teste 006/FR-006: campos de identidade não alterarem o
+      resultado completo; teste sugerido em `tests/test_scoring.py`.
+- [ ] Lacuna de teste 006/FR-007: guarda permanente que impeça chamadas ao
+      baseline pela geração de rótulos ou pelas demais etapas do pipeline;
+      teste sugerido em `tests/test_scoring.py`.
+- [ ] Lacuna de teste 006/FR-008: valores exatos do YAML, defaults para
+      subseção/chave ausente e rejeição de chave desconhecida; teste sugerido
+      em `tests/test_scoring.py`.
+- [ ] Lacuna de teste 006/FR-009: igualdade do detalhamento e da hard rule e
+      determinismo entre processos separados; teste sugerido em
+      `tests/test_scoring.py`.
+- [ ] Lacuna de teste 007/FR-001: os três tipos de entrada, a recursão e os
+      filtros de nome e extensão dos CLIs de treino e inspeção não têm teste
+      permanente; teste sugerido em `tests/test_doc2vec_cli.py`.
+- [ ] Lacuna de teste 007/FR-002: a aplicação conjunta dos limites de leitura,
+      strings e documento no treino e na inspeção não tem teste permanente;
+      teste sugerido em `tests/test_doc2vec_cli.py`.
+- [ ] Lacuna de teste 007/FR-003: o SHA256 como tag, os pulos com warning e a
+      falha por corpus vazio não têm teste permanente; teste sugerido em
+      `tests/test_doc2vec_cli.py`.
+- [ ] Lacuna de teste 007/FR-004: os padrões completos e as opções `--config`
+      e `--override` dos dois CLIs não têm teste permanente; teste sugerido em
+      `tests/test_doc2vec_cli.py`.
+- [ ] Lacuna de teste 007/FR-006: a precedência do output, a criação de
+      diretórios, a sobrescrita e o log do modelo não têm teste permanente;
+      teste sugerido em `tests/test_doc2vec_cli.py`.
+- [ ] Lacuna de teste 007/FR-007: o warning de modelo ausente e a carga única
+      do modelo por processo não têm teste permanente; teste sugerido em
+      `tests/test_pipeline_extraction.py`.
+- [ ] Lacuna de teste 007/FR-008: as colunas `doc2vec_*` na extração integrada
+      sem e com modelo não têm teste permanente; teste sugerido em
+      `tests/test_pipeline_extraction.py`.
+- [ ] Lacuna de teste 007/FR-009: `meta_doc2vec_used=True` com modelo
+      carregado, inclusive sem tokens, não tem teste permanente; teste
+      sugerido em `tests/test_pipeline_extraction.py`.
+- [ ] Lacuna de teste 007/FR-010: o limite de documentos, o preview, o log e o
+      pulo de firmware vazio na inspeção não têm teste permanente; teste
+      sugerido em `tests/test_doc2vec_cli.py`.
 
 ## Request: Responder o review do Kody no PR #5
 
