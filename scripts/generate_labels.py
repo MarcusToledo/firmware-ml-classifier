@@ -1,155 +1,152 @@
+"""Gera rótulos de vulnerabilidade conhecida a partir do cache CVE."""
+
 from __future__ import annotations
 
 import argparse
 import json
 import logging
-import sys
 from collections import Counter
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.append(str(ROOT))
-
-from src.scoring import ScoringResult, load_scoring_config, score_firmware  # noqa: E402
+from src.labeling.cve_labels import (
+    LABEL_CRITICAL_CVE,
+    LABEL_KNOWN_CVE,
+    LABEL_NO_KNOWN_CVE,
+    CveLabelThresholds,
+    label_from_cve_stats,
+)
 
 LOGGER = logging.getLogger(__name__)
+ID_COLUMNS = ("firmware_id", "meta_path", "meta_brand", "meta_model")
 
 
-def _merge_cve_features(
-    row: dict[str, Any],
-    cve_cache: dict[str, Any],
-) -> dict[str, Any]:
-    """Merge CVE features from cache into a feature row.
+def _lookup_cve_stats(row: dict[str, Any], cache: dict[str, Any]) -> dict[str, Any]:
+    """Busca o resultado de uma consulta concluída por fabricante/modelo."""
+    brand = row.get("meta_brand")
+    model = row.get("meta_model")
+    if not isinstance(brand, str) or not brand.strip():
+        raise ValueError("meta_brand/meta_model ausentes na tabela de features")
+    if not isinstance(model, str) or not model.strip():
+        raise ValueError("meta_brand/meta_model ausentes na tabela de features")
 
-    Looks up by ``{meta_brand}/{meta_model}`` (lowercase) to match
-    the keys produced by ``fetch_cves.py``.
+    key = f"{brand.strip().lower()}/{model.strip().lower()}"
+    if key not in cache:
+        raise ValueError(f"Consulta CVE ausente no cache para {key}")
+    stats = cache[key]
+    if not isinstance(stats, dict) or "cve_total" not in stats:
+        raise ValueError(f"Resultado CVE inválido no cache para {key}")
+    return stats
+
+
+def _max_severity(stats_list: list[dict[str, Any]]) -> dict[str, Any]:
+    """Combina os dados de CVE de varios alias do mesmo firmware num único
+    perfil de severidade máxima.
+
+    Binários de firmware são frequentemente reaproveitados sob nomes de
+    modelo diferentes (hardware "rebadged"). A cobertura de pesquisa de CVE
+    varia por nome de modelo mesmo quando o binário é byte a byte idêntico:
+    um alias pode ter CVEs conhecidas enquanto outro, com o mesmo código,
+    não tem nenhuma simplesmente porque ninguém pesquisou aquele nome
+    específico. Usar a severidade máxima entre os alias evita que o mesmo
+    conteúdo receba rótulos contraditórios dependendo de qual alias foi
+    consultado.
     """
-    brand = str(row.get("meta_brand", "")).strip().lower()
-    model = str(row.get("meta_model", "")).strip().lower()
-    if not brand or not model or brand == "nan" or model == "nan":
-        return row
-
-    key = f"{brand}/{model}"
-    cve_entry = cve_cache.get(key, {})
-    if not cve_entry:
-        return row
-
-    merged = dict(row)
-    for field in (
-        "cvss_max",
-        "cve_count_critical",
-        "cve_count_high",
-        "cve_count_medium",
-        "cve_count_low",
-    ):
-        if field in cve_entry:
-            merged[field] = cve_entry[field]
-    return merged
+    if not stats_list:
+        return {"cve_total": 0, "cvss_max": 0.0}
+    return {
+        "cve_total": max(s.get("cve_total", 0) for s in stats_list),
+        "cvss_max": max(s.get("cvss_max", 0.0) for s in stats_list),
+    }
 
 
 def _result_to_record(
-    row: dict[str, Any],
-    result: ScoringResult,
+    row: dict[str, Any], cve_stats: dict[str, Any], label: str
 ) -> dict[str, Any]:
-    """Build an output record from a scoring result."""
-    signal_scores = {s.name: s.score for s in result.signals}
+    """Monta registro de rótulo com dados CVE para auditoria."""
     return {
-        "firmware_id": row.get("firmware_id", ""),
-        "meta_path": row.get("meta_path", ""),
-        "vendor": row.get("meta_brand", ""),
-        "model": row.get("meta_model", ""),
-        "security_level": result.level,
-        "numeric_score": round(result.numeric_score, 4),
-        "signal_stats": round(signal_scores.get("stats", 0.0), 4),
-        "signal_cve": round(signal_scores.get("cve", 0.0), 4),
-        "signal_strings": round(signal_scores.get("strings", 0.0), 4),
-        "signal_binwalk": round(signal_scores.get("binwalk", 0.0), 4),
-        "hard_rule_applied": result.hard_rule_applied or "",
+        "firmware_id": row["firmware_id"],
+        "meta_path": row["meta_path"],
+        "vendor": row["meta_brand"],
+        "model": row["meta_model"],
+        "security_level": label,
+        "cve_total": cve_stats["cve_total"],
+        "cvss_max": cve_stats.get("cvss_max", 0.0),
     }
 
 
 def main() -> None:
-    """CLI para geração de labels de segurança a partir de features extraídas."""
-    parser = argparse.ArgumentParser(
-        description="Generate security labels from firmware features",
-    )
-    parser.add_argument(
-        "--features",
-        required=True,
-        help="Path to features parquet file",
-    )
-    parser.add_argument(
-        "--cves",
-        default=None,
-        help="Path to CVE cache JSON (optional)",
-    )
-    parser.add_argument(
-        "--config",
-        default="configs/scoring.yaml",
-        help="Path to scoring config YAML",
-    )
-    parser.add_argument(
-        "--output",
-        default="dataset/labels.csv",
-        help="Output path for labels CSV",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Show class distribution without saving",
-    )
+    """Executa a rotulagem CVE sem usar features do firmware no rótulo."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--features", type=Path, required=True)
+    parser.add_argument("--cves", type=Path, required=True)
+    parser.add_argument("--critical-cvss", type=float, default=9.0)
+    parser.add_argument("--output", type=Path, default=Path("dataset/labels.csv"))
+    parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    thresholds = CveLabelThresholds(args.critical_cvss)
 
-    config = load_scoring_config(Path(args.config))
-    LOGGER.info("Loaded scoring config from %s", args.config)
-
-    features_path = Path(args.features)
-    if features_path.suffix == ".parquet":
-        df = pd.read_parquet(features_path)
+    if args.features.suffix.lower() == ".parquet":
+        frame = pd.read_parquet(args.features, columns=list(ID_COLUMNS))
     else:
-        df = pd.read_csv(features_path)
-    LOGGER.info("Loaded %d firmware records from %s", len(df), args.features)
+        frame = pd.read_csv(args.features, usecols=list(ID_COLUMNS))
+    if frame.empty:
+        raise ValueError(f"Tabela de features vazia: {args.features}")
+    if frame["firmware_id"].isna().any():
+        raise ValueError(f"firmware_id ausente: {args.features}")
+    if frame.duplicated(subset=["firmware_id", "meta_path"]).any():
+        raise ValueError(
+            f"linha duplicada (firmware_id + meta_path repetidos): {args.features}"
+        )
 
-    cve_cache: dict[str, Any] = {}
-    if args.cves:
-        cve_path = Path(args.cves)
-        if cve_path.exists():
-            cve_cache = json.loads(cve_path.read_text())
-            LOGGER.info("Loaded CVE cache with %d entries", len(cve_cache))
-        else:
-            LOGGER.warning("CVE cache not found: %s", args.cves)
+    with args.cves.open(encoding="utf-8") as source:
+        cache = json.load(source)
+    if not isinstance(cache, dict):
+        raise ValueError(f"Cache CVE deve ser um objeto JSON: {args.cves}")
+    LOGGER.info("Firmwares: %d; entradas CVE: %d", len(frame), len(cache))
 
-    records: list[dict[str, Any]] = []
-    for _, row in df.iterrows():
-        row_dict = row.to_dict()
-        merged = _merge_cve_features(row_dict, cve_cache)
-        result = score_firmware(merged, config)
-        records.append(_result_to_record(row_dict, result))
+    rows = frame.to_dict(orient="records")
 
-    output_df = pd.DataFrame.from_records(records)
+    # Lookup por linha (fail-fast por par vendor/model ausente no cache).
+    own_stats: dict[int, dict[str, Any]] = {}
+    for i, row in enumerate(rows):
+        try:
+            own_stats[i] = _lookup_cve_stats(row, cache)
+        except ValueError as exc:
+            raise ValueError(f"firmware_id={row['firmware_id']}: {exc}") from exc
 
-    # Show distribution
-    distribution = Counter(output_df["security_level"])
-    LOGGER.info("Label distribution:")
-    for level in ("seguro", "vulneravel", "critico"):
-        count = distribution.get(level, 0)
-        pct = count / len(output_df) * 100 if len(output_df) else 0
-        LOGGER.info("  %s: %d (%.1f%%)", level, count, pct)
+    # Agrega por firmware_id: o mesmo binário reaproveitado sob vários
+    # nomes de modelo (rebadge) recebe a severidade máxima entre os alias,
+    # nunca o rótulo de um alias isolado (ver _max_severity).
+    by_firmware: dict[str, list[dict[str, Any]]] = {}
+    for i, row in enumerate(rows):
+        by_firmware.setdefault(row["firmware_id"], []).append(own_stats[i])
+    aggregated = {fw: _max_severity(stats) for fw, stats in by_firmware.items()}
 
+    records = []
+    for row in rows:
+        cve_stats = aggregated[row["firmware_id"]]
+        label = label_from_cve_stats(cve_stats, thresholds)
+        records.append(_result_to_record(row, cve_stats, label))
+
+    output = pd.DataFrame.from_records(records)
+    distribution = Counter(output["security_level"])
+    LOGGER.info(
+        "Distribuição: %s",
+        {
+            label: distribution[label]
+            for label in (LABEL_NO_KNOWN_CVE, LABEL_KNOWN_CVE, LABEL_CRITICAL_CVE)
+        },
+    )
     if args.dry_run:
-        LOGGER.info("Dry run — not saving output")
         return
-
-    output_path = Path(args.output)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_df.to_csv(output_path, index=False)
-    LOGGER.info("Saved labels to %s", output_path)
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    output.to_csv(args.output, index=False)
+    LOGGER.info("Rótulos salvos em %s", args.output)
 
 
 if __name__ == "__main__":

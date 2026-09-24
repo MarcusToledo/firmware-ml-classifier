@@ -14,6 +14,8 @@ from scripts.fetch_cves import (
 # ---------------------------------------------------------------------------
 # normalize_vendor / normalize_model
 # ---------------------------------------------------------------------------
+# TODO: mover essas regras de normalização para um módulo/script separado, para
+# centralizá-las e não poluir os módulos. Estes testes acompanham essa mudança.
 
 
 def test_normalize_vendor_dlink() -> None:
@@ -22,6 +24,13 @@ def test_normalize_vendor_dlink() -> None:
 
 def test_normalize_vendor_tplink() -> None:
     assert normalize_vendor("tplink") == "tp-link"
+
+
+def test_normalize_vendor_tp_link_underscore() -> None:
+    """dataset/raw/ tem tanto 'tplink/' quanto 'tp_link/' para o mesmo
+    fabricante (lotes de ingestao diferentes). As duas grafias devem
+    normalizar para o mesmo termo de busca na NVD."""
+    assert normalize_vendor("tp_link") == "tp-link"
 
 
 def test_normalize_vendor_passthrough() -> None:

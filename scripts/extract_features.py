@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import sys
 import time
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -106,6 +108,15 @@ def main() -> None:
             "min(num_arquivos, cpus)). Use 1 para forcar execucao sequencial."
         ),
     )
+    parser.add_argument(
+        "--findings-output",
+        default=None,
+        help=(
+            "Path opcional para os achados de seguranca estruturados "
+            "(JSONL, um SecurityFinding por linha, correlacionavel ao "
+            "output principal via firmware_id). Omitido por padrao."
+        ),
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
@@ -162,6 +173,24 @@ def main() -> None:
         output_path,
         elapsed_seconds,
     )
+
+    if args.findings_output:
+        findings_path = Path(args.findings_output)
+        findings_path.parent.mkdir(parents=True, exist_ok=True)
+        findings_count = 0
+        with findings_path.open("w", encoding="utf-8") as handle:
+            for result in results:
+                for finding in result.findings:
+                    record = {
+                        "firmware_id": result.firmware_id,
+                        "path": result.metadata.get("path"),
+                        **asdict(finding),
+                    }
+                    handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+                    findings_count += 1
+        LOGGER.info(
+            "Findings salvos: %d achado(s) em %s", findings_count, findings_path
+        )
 
 
 if __name__ == "__main__":

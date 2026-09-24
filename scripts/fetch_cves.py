@@ -35,6 +35,7 @@ SAVE_INTERVAL = 10
 VENDOR_ALIASES: dict[str, str] = {
     "dlink": "d-link",
     "tplink": "tp-link",
+    "tp_link": "tp-link",
 }
 
 # Regex pattern for models that should have a hyphen before the numeric part.
@@ -54,6 +55,9 @@ _MODEL_UNDERSCORE_RE = re.compile(
 # ---------------------------------------------------------------------------
 # Name normalization
 # ---------------------------------------------------------------------------
+# TODO: mover as regras de normalização (VENDOR_ALIASES, normalize_vendor e
+# normalize_model) para um módulo/script separado, para centralizá-las e não
+# poluir este módulo.
 
 
 def normalize_vendor(vendor: str) -> str:
