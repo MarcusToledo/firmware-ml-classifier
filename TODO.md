@@ -1,5 +1,85 @@
 # TODO
 
+## Request: Estruturar requisitos e histórias de usuário do TCC no Spec Kit
+
+### Completed
+- [x] Avaliar a task do TickTick: Spec Kit como única fonte dos requisitos
+      (sem `docs/requirements/`), RNF na constituição, status por spec/FR.
+- [x] Reorganizar a task no TickTick em 5 subtasks com critério de aceite e
+      separar a skill de Requirements Engineering para o OMP.
+- [x] Mover o System Design para a última subtask: as specs planejadas mudam
+      a arquitetura; o inventário de módulos que define as specs retroativas
+      passa para a subtask das specs retroativas.
+- [x] Subtask 1: `specify init` (1.0.9) no branch `docs/spec-kit-constitution`
+      com `--integration generic --commands-dir .omp/commands/`. Testado no
+      OMP headless: `/speckit.*` expande o template e substitui `$ARGUMENTS`.
+      A integração `claude` (skills em `.claude/skills/`) não expande
+      `/skill:speckit-*` no modo `-p`; descartada.
+- [x] Subtask 1: rascunho da constituição v1.0.0 em
+      `.specify/memory/constitution.md` (7 princípios, convenção de Status,
+      referência `NNN/FR-###`, pt-br, slug ASCII via `--short-name`).
+- [x] Subtask 1: `AGENTS.md` troca o Project Scope (Immutable) por
+      `@.specify/memory/constitution.md`; import confirmado no OMP headless.
+- [x] Review da constituição (revisão 1): famílias de features revistas com
+      literatura (Costin 2014/2017, EMBER, FACT, EMBA); Doc2Vec avaliado com o
+      oracle e rebaixado a variante experimental; regras de split agrupado,
+      ajuste só no treino e baseline de identidade; modelos alternativos
+      registrados no princípio IV; `docs/` deixa de ser fonte de verdade.
+- [x] Confirmar que a inferência do Doc2Vec não é determinística: duas
+      chamadas seguidas no mesmo modelo dão vetores diferentes e
+      `Doc2VecConfig.seed` não altera a inferência (gensim usa `model.random`
+      e `hash()`).
+- [x] Tirar o Doc2Vec do núcleo e da entrega mínima (constituição,
+      princípio I; `AGENTS.md`; `README.md`): o código fica, as colunas
+      `doc2vec_*` não entram no modelo reportado.
+- [x] TickTick: T06 marcado como `[Proposto]` (tag `proposto`, prioridade
+      baixa, item de determinismo adicionado); subtask 4 exclui T06 e inclui
+      T07.
+- [x] TickTick: criada a T07 (limpar campos de feature não utilizados). No
+      `features.parquet` atual, 105 das 120 colunas de feature são constantes
+      em 840/840: `doc2vec_0..99` e 5 detectores de strings
+      (`count_credential_pairs`, `has_telnetd`, `has_outdated_*`).
+- [x] Constituição (revisão 2): só invariantes. Saíram o catálogo de features
+      da literatura, a lista de modelos considerados, o nome do Doc2Vec e
+      detalhes de implementação (nome do teste de guarda, semente em
+      `configs/`, `model.random`). Relatórios salvos em
+      `.docs/brainstorming/literatura-features-e-modelos.md` e
+      `.docs/brainstorming/parecer-doc2vec-oracle.md`; subtask 4 no TickTick
+      aponta para eles como fonte dos `research.md`.
+- [x] Subtask 1: constituição v1.0.0 aprovada e ratificada em 2026-09-24;
+      Sync Impact Report removido.
+
+### Pending
+- [ ] Alinhar o item de `scripts/train.py` do roadmap (4 modelos, com XGBoost
+      e MLP) com o escopo do `AGENTS.md` (Extra Trees + Random Forest).
+- [ ] T07: limpar os campos de feature não utilizados (Doc2Vec desligado por
+      padrão sem gravar `doc2vec_*`; decidir os 5 detectores constantes;
+      codificar `fs_type` e `compression_type`).
+- [ ] Pós-entrega mínima — Doc2Vec (T06, Proposto): reiniciar `model.random` antes de cada `infer_vector`,
+      exigir `PYTHONHASHSEED`, treinar por fold e rever
+      `tests/test_doc2vec.py`, que segundo o oracle passa pelo motivo errado.
+- [ ] Documento de strings: segundo medição do oracle (amostra de 40), as
+      2000 primeiras strings (`max_strings`) cobrem ~3,7% dos bytes lidos e
+      são cabeçalho mais ruído de payload comprimido; os detectores de
+      `src/evidence/patterns.py` ficam quase cegos. Avaliar extração do
+      filesystem desempacotado ou filtro de ruído.
+- [ ] Pós-entrega mínima — `scripts/train_doc2vec.py` filtra por extensão e
+      `scripts/extract_features.py` por exclusão: conjuntos de firmware
+      diferentes entre treino e extração do Doc2Vec.
+- [ ] `docs/SCORING.md` desatualizado: diz que o cache não filtra versão e
+      usa `cve_cache.json`/`labels.csv` (v1).
+- [ ] Roadmap: marcar como feitos a integração do Binwalk e os regex de
+      strings, já implementados; `libssl_version_age` segue pendente.
+- [ ] O baseline `score_firmware` não é chamado por nenhum script; falta
+      rodá-lo sobre o dataset para comparar com os modelos.
+- [ ] Escrever as specs retroativas dos módulos implementados, a partir de um
+      inventário leve dos módulos.
+- [ ] Validar as specs contra código e testes (matriz US → FR → módulo →
+      teste) e registrar as lacunas de teste.
+- [ ] Especificar T03, T04, T05, T06 e o treino de Extra Trees/Random Forest.
+- [ ] Gerar o System Design a partir dos `plan.md` de todas as specs,
+      separando componentes implementados e planejados.
+
 ## Request: Responder o review do Kody no PR #5
 
 ### Completed
@@ -124,7 +204,7 @@
 - [x] Corrigir normalização de vendor `tp_link` para `tp-link` em `scripts/fetch_cves.py`: as 43 entradas `tp_link/*` já no cache retornavam 0 CVEs porque a busca na NVD usava o termo errado (`VENDOR_ALIASES` só tinha `tplink`, não `tp_link`).
 
 ### Pending
-- [ ] Doc2Vec: `models/doc2vec.model` não existe (pasta `models/` nem existe). Rodar `train-doc2vec` antes da próxima extração. Hoje as 100 colunas `doc2vec_0`..`doc2vec_99` do `features.parquet` são todas zero (`meta_doc2vec_used=False` em 840/840).
+- [ ] Pós-entrega mínima — Doc2Vec: `models/doc2vec.model` não existe (pasta `models/` nem existe). Hoje as 100 colunas `doc2vec_0`..`doc2vec_99` do `features.parquet` são todas zero (`meta_doc2vec_used=False` em 840/840); ficam fora do vetor do modelo reportado (constituição, princípio I).
 - [ ] Re-rodar `fetch_cves.py --force` para os 43 pares `tp_link/*` já em cache. Foram buscados com o termo antigo antes da correção do alias, precisam ser refeitos antes de gerar labels confiáveis para esses firmwares.
 - [ ] Detector `hardcoded_passwords` (`src/evidence/patterns.py`): 98,6% dos achados (1040/1055 no dataset real) são match de token avulso com alta taxa de falso positivo, ex. `" -- System halted"` (mensagem de kernel) contado como credencial por conter a palavra "system". Já sendo tratado em outra branch.
 - [ ] `dataset/raw/tplink/` (grafia com underscore, ex. `tl_er604w`) e `dataset/raw/tp_link/` (grafia com hífen, ex. `tl-er604w`) parecem ter modelos em comum sob nomes diferentes. Só o vendor foi normalizado nesta correção, o nome do modelo não. Avaliar se vale consolidar.
@@ -264,9 +344,9 @@
 
 #### Pre-processamento
 - [ ] Aplicar `StandardScaler` ou `MinMaxScaler` nas features estatisticas (entropia, byte_mean, compress_ratio).
-- [ ] Reduzir dimensionalidade do Doc2Vec: PCA para 10-20 componentes ou reduzir `vector_size` para 30.
-- [ ] Treinar baseline com apenas 3 features estatisticas (sem Doc2Vec) para validar contribuicao.
-- [ ] Comparar baseline vs baseline + Doc2Vec vs baseline + Doc2Vec + Binwalk features.
+- [ ] Pós-entrega mínima — Reduzir dimensionalidade do Doc2Vec: PCA para 10-20 componentes ou reduzir `vector_size` para 30.
+- [ ] Treinar baseline com apenas as features estatisticas para validar contribuicao.
+- [ ] Comparar baseline vs baseline + strings vs baseline + strings + Binwalk features; Doc2Vec só entra depois da entrega mínima.
 
 ### Fase 2 — Enriquecimento de Features (Mes 3-4)
 

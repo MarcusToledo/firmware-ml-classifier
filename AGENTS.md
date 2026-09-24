@@ -5,25 +5,11 @@ using static analysis and supervised ML. The guidance below is for
 agentic coding assistants operating in this repo.
 
 ## Project Scope (Immutable)
-- Static firmware analysis only (no dynamic execution).
-- Supervised classification of known-vulnerability classes via CVE only;
-  vendor/manufacturer is not the target.
-- Training labels come only from the CVE cache queried by vendor/model.
-  Missing lookups are errors, not evidence that no CVE is known.
-- Vendor/model are lookup metadata, never classifier inputs. CVE-derived
-  fields (`cvss_max`, `cve_total`, `cve_count_*`) must also stay out of the
-  classifier feature vector to prevent label leakage.
-- Hybrid features:
-  - Statistical: size, entropy, byte distribution, compressibility.
-  - Semantic: ASCII strings + Doc2Vec embeddings (DM or DBOW).
-  - Structural/security evidence: Binwalk and detectors in `src/evidence/`.
-- Models (still to be defined):
-  - Extra Trees as the main model.
-  - Random Forest as the ML baseline.
-  - `src/scoring.py` is a deterministic rule-based comparison baseline,
-    never a source of training labels.
-- Avoid heavy deep learning due to small datasets.
-- All changes must be academically justified and reproducible.
+The immutable scope and principles live in the Spec Kit constitution,
+the single source for these rules. Amend it only via
+`/speckit.constitution`.
+
+@.specify/memory/constitution.md
 
 ## Agent Responsibilities
 - dataset-agent
@@ -32,9 +18,12 @@ agentic coding assistants operating in this repo.
 - feature-agent
   - Implement statistical and string-based feature extraction in `src/`.
   - Keep feature code modular and auditable.
-- doc2vec-agent
-  - Train Doc2Vec only on strings from the local dataset.
-  - Save model and embeddings; document hyperparameters.
+- doc2vec-agent (outside the project core; T06 is Proposto; learned
+  representations follow constitution Principle I)
+  - Keep the existing Doc2Vec code working; do not add `doc2vec_*` to the
+    reported model before the minimum TCC deliverable is done.
+  - When reintroduced: train only on the training partition; save model and
+    embeddings; document hyperparameters.
 - model-agent
   - Train, tune, and evaluate Extra Trees and Random Forest.
   - Avoid scope creep into unrelated model families.
@@ -118,7 +107,7 @@ agentic coding assistants operating in this repo.
   - Document sampling procedures in scripts.
   - Keep label maps stable across runs.
 
-## Doc2Vec Requirements
+## Doc2Vec Requirements (post-minimum-deliverable only)
 - Each firmware is a single document.
 - Store Doc2Vec parameters (vector size, window, epochs, min_count).
 - Save:
