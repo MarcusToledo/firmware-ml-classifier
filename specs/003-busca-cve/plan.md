@@ -4,9 +4,7 @@
 
 **Input**: Feature specification from `/specs/003-busca-cve/spec.md`
 
-**Note**: plano retroativo. Descreve o código que já existe em `master`; não
-há Phase 0 (`research.md`), `contracts/` nem `quickstart.md`. O `tasks.md`
-fica para a subtask 3 (validação com `/speckit.analyze`).
+**Note**: plano retroativo. Descreve o código que já existe em `master`; não há Phase 0 (`research.md`), `contracts/` nem `quickstart.md`. O `tasks.md` é retroativo: registra a verificação de cada FR e cenário e as lacunas de teste.
 
 ## Summary
 
@@ -62,11 +60,13 @@ página; gravação do cache a cada 10 pares buscados
 
 ```text
 specs/003-busca-cve/
-├── spec.md              # /speckit.specify + /speckit.clarify
-├── plan.md              # este arquivo
-├── data-model.md        # esquema do cache de CVE v2 e medição
+├── spec.md                        # /speckit.specify + /speckit.clarify
+├── plan.md                        # este arquivo
+├── data-model.md                  # esquema do cache de CVE v2 e medição
+├── tasks.md                       # verificação retroativa de FRs e cenários
 └── checklists/
-    └── requirements.md  # checklist de qualidade da spec
+    ├── requirements.md            # checklist de qualidade da spec
+    └── rastreabilidade.md         # checklist de rastreabilidade e testabilidade
 ```
 
 ### Source Code (repository root)
@@ -83,40 +83,40 @@ tests/
 entre specs está no inventário `.docs/brainstorming/inventario-modulos.md`;
 esta spec é dona só do módulo acima.
 
-### FR → módulo → teste
+### US → FR → módulo → teste
 
-|FR|Módulo|Teste|
-|---|---|---|
-|FR-001|`scripts/fetch_cves.py::extract_pairs`, `main`|`test_fetch_cves.py::test_extract_pairs_dedupes_and_normalizes`, `::test_extract_pairs_skips_missing_values`, `::test_extract_pairs_empty_dataframe`, `::test_extract_pairs_sorted`|
-|FR-002|`scripts/fetch_cves.py::VENDOR_ALIASES`, `normalize_vendor`, `normalize_model`|`test_fetch_cves.py::test_normalize_vendor_dlink`, `::test_normalize_vendor_tplink`, `::test_normalize_vendor_tp_link_underscore`, `::test_normalize_vendor_passthrough`, `::test_normalize_model_with_hyphen`, `::test_normalize_model_missing_hyphen`, `::test_normalize_model_underscore_suffix`, `::test_normalize_model_double_underscore`, `::test_normalize_model_underscore_separated_words`, `::test_normalize_model_never_sends_underscore`, `::test_normalize_model_plain`|
-|FR-003|`scripts/fetch_cves.py::resolve_cpe_name`, `_fetch_cpe_page`, `_canonical_cpe_token`|`test_fetch_cves.py::test_resolve_cpe_selects_matching_firmware_and_wildcards_version`, `::test_resolve_cpe_generalizes_specific_update_and_edition`|
-|FR-004|`scripts/fetch_cves.py::fetch_cves_for_pair`, `_fetch_all_pages`, `_fetch_page`|`test_fetch_cves.py::test_fetch_prefers_resolved_cpe_query`, `::test_fetch_keyword_retains_cve_and_configurations`|
-|FR-005|`scripts/fetch_cves.py::extract_cvss`, `severity_bucket`, `_fetch_all_pages`|`test_fetch_cves.py::test_extract_cvss_v31`, `::test_extract_cvss_v30_fallback`, `::test_extract_cvss_v2_fallback`, `::test_extract_cvss_no_metrics`, `::test_extract_cvss_empty_cve`, `::test_fetch_keyword_retains_cve_and_configurations`|
-|FR-006|`scripts/fetch_cves.py::fetch_cves_for_pair`, `load_cache`, `save_cache`, `main`|`test_fetch_cves.py::test_fetch_keyword_retains_cve_and_configurations` (parcial: `schema_version`, `source`, `cves`)|
-|FR-007|`scripts/fetch_cves.py::main`|sem teste|
-|FR-008|`scripts/fetch_cves.py::main`|sem teste|
-|FR-009|`scripts/fetch_cves.py::_should_save`, `SAVE_INTERVAL`, `main`|`test_fetch_cves.py::test_should_save_at_interval`, `::test_should_save_between_intervals`|
-|FR-010|`scripts/fetch_cves.py::_build_headers`, `DEFAULT_DELAY_NO_KEY`, `DEFAULT_DELAY_WITH_KEY`, `main`|sem teste|
-|FR-011|`scripts/fetch_cves.py::main`|sem teste|
-|FR-012|`scripts/fetch_cves.py::main`|sem teste|
+|FR|US|Módulo|Teste|
+|---|---|---|---|
+|FR-001|US1|`scripts/fetch_cves.py::extract_pairs`, `main`|`tests/test_fetch_cves.py::test_extract_pairs_dedupes_and_normalizes`, `tests/test_fetch_cves.py::test_extract_pairs_skips_missing_values`, `tests/test_fetch_cves.py::test_extract_pairs_empty_dataframe`, `tests/test_fetch_cves.py::test_extract_pairs_sorted` (parcial)|
+|FR-002|US1, US3|`scripts/fetch_cves.py::VENDOR_ALIASES`, `normalize_vendor`, `normalize_model`|`tests/test_fetch_cves.py::test_normalize_vendor_dlink`, `tests/test_fetch_cves.py::test_normalize_vendor_tplink`, `tests/test_fetch_cves.py::test_normalize_vendor_tp_link_underscore`, `tests/test_fetch_cves.py::test_normalize_vendor_passthrough`, `tests/test_fetch_cves.py::test_normalize_model_with_hyphen`, `tests/test_fetch_cves.py::test_normalize_model_missing_hyphen`, `tests/test_fetch_cves.py::test_normalize_model_underscore_suffix`, `tests/test_fetch_cves.py::test_normalize_model_double_underscore`, `tests/test_fetch_cves.py::test_normalize_model_underscore_separated_words`, `tests/test_fetch_cves.py::test_normalize_model_never_sends_underscore`, `tests/test_fetch_cves.py::test_normalize_model_plain`|
+|FR-003|US2|`scripts/fetch_cves.py::resolve_cpe_name`, `_fetch_cpe_page`, `_canonical_cpe_token`|`tests/test_fetch_cves.py::test_resolve_cpe_selects_matching_firmware_and_wildcards_version`, `tests/test_fetch_cves.py::test_resolve_cpe_generalizes_specific_update_and_edition` (parcial)|
+|FR-004|US2|`scripts/fetch_cves.py::fetch_cves_for_pair`, `_fetch_all_pages`, `_fetch_page`|`tests/test_fetch_cves.py::test_fetch_prefers_resolved_cpe_query`, `tests/test_fetch_cves.py::test_fetch_keyword_retains_cve_and_configurations` (parcial)|
+|FR-005|US2|`scripts/fetch_cves.py::extract_cvss`, `severity_bucket`, `_fetch_all_pages`|`tests/test_fetch_cves.py::test_extract_cvss_v31`, `tests/test_fetch_cves.py::test_extract_cvss_v30_fallback`, `tests/test_fetch_cves.py::test_extract_cvss_v2_fallback`, `tests/test_fetch_cves.py::test_extract_cvss_no_metrics`, `tests/test_fetch_cves.py::test_extract_cvss_empty_cve`, `tests/test_fetch_cves.py::test_fetch_keyword_retains_cve_and_configurations` (parcial)|
+|FR-006|US1, US2|`scripts/fetch_cves.py::fetch_cves_for_pair`, `load_cache`, `save_cache`, `main`|`tests/test_fetch_cves.py::test_fetch_keyword_retains_cve_and_configurations` (parcial)|
+|FR-007|US1|`scripts/fetch_cves.py::main`|—|
+|FR-008|US4|`scripts/fetch_cves.py::main`|—|
+|FR-009|US4|`scripts/fetch_cves.py::_should_save`, `SAVE_INTERVAL`, `main`|`tests/test_fetch_cves.py::test_should_save_at_interval`, `tests/test_fetch_cves.py::test_should_save_between_intervals` (parcial)|
+|FR-010|US4|`scripts/fetch_cves.py::_build_headers`, `DEFAULT_DELAY_NO_KEY`, `DEFAULT_DELAY_WITH_KEY`, `main`|—|
+|FR-011|US1|`scripts/fetch_cves.py::main`|—|
+|FR-012|US4|`scripts/fetch_cves.py::main`|—|
 
 ### Sem verificação
 
-Partes de FR sem teste que as exercite (`main()` não tem teste):
+Partes de FR sem teste permanente que as exercite (`main()` não tem teste):
 
 - FR-001: leitura das duas colunas do parquet via `--features`.
-- FR-003: filtro de parte `o` (nenhum teste tem CPE de outra parte) e
-  leitura só da primeira página do dicionário.
-- FR-004: paginação com mais de uma página (os testes simulam uma só).
-- FR-005: métrica v2 sem `baseSeverity` (`MEDIUM`).
+- FR-003: filtro de parte `o` e leitura só da primeira página do dicionário
+  de CPE.
+- FR-004: paginação com mais de uma página.
+- FR-005: métrica v2 sem `baseSeverity`, que recebe `MEDIUM`.
 - FR-006: chave `"<fabricante>/<modelo>"`, `vendor`/`model` na forma NVD,
   gravação do arquivo e preservação de entradas de outros pares.
 - FR-007: pulo de par em cache, validação de schema e `--force`.
-- FR-008: ramo de falha de rede e ausência de entrada para o par.
-- FR-009: gravação final no `finally`.
+- FR-008: ramo de falha de rede, ausência de entrada nova e continuação.
+- FR-009: gravação periódica chamada por `main` e gravação final no `finally`.
 - FR-010: `--delay`, padrões de 6 s e 1 s e cabeçalho `apiKey`.
-- FR-011: `--dry-run`.
-- FR-012: mensagens de log e resumo.
+- FR-011: fluxo `--dry-run` sem acesso à rede nem ao cache.
+- FR-012: mensagens de progresso, falha e resumo.
 
 ### Símbolos com requisito em outra spec
 
@@ -131,4 +131,8 @@ Ficam no módulo desta spec, mas o requisito pertence a outra:
 
 ## Complexity Tracking
 
-Nenhuma violação.
+|Violação|Justificativa|Mitigação pendente|
+|---|---|---|
+|FR-006: o `--output` padrão aponta para o cache v1 e `--force` pode produzir um arquivo de esquemas mistos|O caminho padrão histórico foi mantido, enquanto o artefato v2 em uso tem outro nome|Alterar o padrão ou migrar o cache de forma atômica; defeito já registrado no `TODO.md` para 003/FR-006|
+|Princípio II: com `--force`, uma falha de rede preserva a entrada anterior sem indicar que a nova consulta falhou|A execução retomável evita perder evidência já gravada, mas o artefato pode aparentar uma consulta atual bem-sucedida|Registrar a falha no artefato ou invalidar a entrada anterior; defeito já registrado no `TODO.md` para 003/FR-008|
+|Princípio V: as entradas não registram a data da consulta à NVD|O código atual preserva o retrato da NVD, mas não permite datá-lo sem evidência externa|Persistir a data da consulta por entrada; defeito já registrado no `TODO.md` para 003/princípio V|

@@ -77,8 +77,9 @@ que as colunas `doc2vec_*` são zero e `meta_doc2vec_used=False`.
 2. **Given** um modelo treinado e um firmware legível, **When** a extração
    roda, **Then** as colunas `doc2vec_*` recebem o vetor inferido e
    `meta_doc2vec_used=True`.
-3. **Given** um modelo treinado e um documento sem tokens, **When** o vetor
-   é inferido, **Then** ele é zero, com `vector_size` posições.
+3. **Given** um modelo treinado e um documento sem tokens, **When** o
+   vetor é inferido, **Then** ele é zero, com `vector_size` posições, e
+   `meta_doc2vec_used=True`.
 4. **Given** tokens que não existem no vocabulário do modelo, **When** o
    vetor é inferido, **Then** todos os valores são finitos.
 
@@ -174,9 +175,9 @@ contagem e 5 tokens.
 - **FR-001** [Implementado]: O treino e a inspeção de tokens DEVEM aceitar
   como entrada um diretório (percorrido recursivamente), um arquivo `.txt`
   com um path por linha ou um arquivo único, e DEVEM considerar só arquivos
-  não ocultos com extensão `.bin`, `.img`, `.trx`, `.chk`, `.fw` ou `.rom`
-  (sem distinção de maiúsculas). Um arquivo único fora dessas extensões
-  DEVE ser ignorado com warning.
+  cujo nome não começa com `.` e cuja extensão é `.bin`, `.img`, `.trx`,
+  `.chk`, `.fw` ou `.rom` (sem distinção de maiúsculas). Um arquivo único
+  fora dessas extensões DEVE ser ignorado com warning.
 - **FR-002** [Implementado]: O sistema DEVE montar um documento por
   firmware com a mesma leitura e os mesmos limites da extração
   (`max_bytes`, `feature.min_string_len`, `feature.max_single_string_len`,

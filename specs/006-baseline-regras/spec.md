@@ -49,10 +49,17 @@ risco alto, um de risco baixo e um vazio, e conferir nível e score.
    **When** o baseline é calculado, **Then** o score é < 0,20 e o nível é
    `sem_cve_conhecida`.
 4. **Given** as mesmas features e a mesma configuração, **When** o baseline
-   é calculado duas vezes, **Then** nível e score são idênticos.
+   é calculado duas vezes, **Then** nível, score, detalhamento e hard rule
+   aplicada são idênticos.
 5. **Given** limiares `low=0.10` e `high=0.30`, **When** o baseline é
    calculado para `entropy=7.5` e `compress_ratio=0.90`, **Then** o nível é
    `cve_conhecida` ou `cve_critica`.
+6. **Given** features cujo score é exatamente igual a um limiar, **When**
+   o baseline é calculado, **Then** o limite `low` pertence a
+   `cve_conhecida` e o limite `high` pertence a `cve_critica`.
+7. **Given** as mesmas features e a mesma configuração em dois processos
+   separados, **When** cada processo calcula o baseline, **Then** os
+   resultados completos são idênticos.
 
 ---
 
@@ -75,6 +82,11 @@ princípios II e III).
    nível, score e hard rule aplicada não mudam.
 2. **Given** qualquer entrada, **When** o baseline é calculado, **Then** o
    detalhamento tem exatamente três grupos: `stats`, `strings` e `binwalk`.
+3. **Given** features reconhecidas, **When** são acrescentados campos de
+   identidade (`meta_brand`, `meta_model` e `meta_version`), **Then** nível,
+   score, detalhamento e hard rule aplicada não mudam.
+4. **Given** o pipeline de geração de rótulos de treino, **When** suas
+   dependências são auditadas, **Then** nenhuma delas chama o baseline.
 
 ---
 
@@ -101,6 +113,16 @@ dilui; a regra precisa ser explícita e auditável no resultado.
 3. **Given** features que já levam a `cve_critica` e `has_telnetd=True`,
    **When** o baseline é calculado, **Then** o nível continua
    `cve_critica`.
+4. **Given** features de score baixo, `count_hardcoded_passwords=1` e peso
+   0 para o grupo `strings`, **When** o baseline é calculado, **Then** o
+   nível é pelo menos `cve_conhecida` e a regra aplicada é
+   `hardcoded_passwords`.
+5. **Given** `has_telnetd=True` e nível mínimo configurado como
+   `cve_critica`, **When** o baseline é calculado para features de score
+   baixo, **Then** o nível é `cve_critica`.
+6. **Given** duas hard rules que elevam o nível em sequência, **When** o
+   baseline é calculado, **Then** o resultado registra a última regra que
+   elevou o nível.
 
 ---
 
@@ -125,6 +147,12 @@ com só as features estatísticas.
    outros dois têm peso 0 e o score é maior que 0.
 3. **Given** `n_filesystems=0` e nenhum outro sinal do Binwalk, **When** o
    baseline é calculado, **Then** o grupo `binwalk` não está presente.
+4. **Given** uma configuração cuja seção `scoring` omite uma subseção ou
+   chave, **When** a configuração é carregada, **Then** o valor padrão
+   correspondente é usado.
+5. **Given** uma configuração com chave desconhecida numa subseção de
+   `scoring`, **When** a configuração é carregada, **Then** o carregamento
+   é interrompido com exceção.
 
 ---
 
@@ -216,13 +244,16 @@ com só as features estatísticas.
   dois limiares: abaixo de `low` é `sem_cve_conhecida`; de `low` até abaixo
   de `high` é `cve_conhecida`; a partir de `high` é `cve_critica`. Os
   valores versionados são `low` 0,20 e `high` 0,60.
-- **FR-005** [Implementado]: O sistema DEVE aplicar três hard rules depois
-  do mapeamento: `has_telnetd` verdadeiro, `has_debug_account` verdadeiro e
-  `count_hardcoded_passwords` maior que 0. Cada uma DEVE elevar o nível ao
-  mínimo configurado (`cve_conhecida` na configuração versionada) só quando
-  ele é mais grave que o nível atual, e NÃO DEVE rebaixar o nível. O
-  resultado DEVE registrar o nome da última regra que elevou o nível
-  (`has_telnetd`, `has_debug_account` ou `hardcoded_passwords`).
+- **FR-005** [Implementado]: Quando houver ao menos um grupo presente e a
+  soma dos pesos for diferente de 0, o sistema DEVE aplicar três hard rules
+  depois do mapeamento: `has_telnetd` verdadeiro,
+  `has_debug_account` verdadeiro e `count_hardcoded_passwords` maior que 0.
+  Cada uma DEVE elevar o nível ao mínimo configurado (`cve_conhecida` na
+  configuração versionada) só quando ele é mais grave que o nível atual, e
+  NÃO DEVE rebaixar o nível. O resultado DEVE registrar o nome da última
+  regra que elevou o nível (`has_telnetd`, `has_debug_account` ou
+  `hardcoded_passwords`). Sem grupo presente ou com soma de pesos 0,
+  prevalece o retorno sem hard rule de FR-003.
 - **FR-006** [Implementado]: O baseline NÃO DEVE ler campos derivados de
   CVE (`cvss_max`, `cve_total`, `cve_count_*`) nem de identidade: o
   resultado só depende das features listadas em FR-002 e das três flags
@@ -238,7 +269,8 @@ com só as features estatísticas.
   numa subseção DEVE interromper o carregamento com exceção.
 - **FR-009** [Implementado]: O baseline DEVE ser determinístico: as mesmas
   features e a mesma configuração DEVEM gerar o mesmo nível, score,
-  detalhamento e hard rule, sem estado aleatório.
+  detalhamento e hard rule, sem estado aleatório, inclusive em processos
+  separados e independentemente da ordem de execução.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -256,9 +288,9 @@ com só as features estatísticas.
 ### Measurable Outcomes
 
 - **SC-001**: 100% das repetições com as mesmas features e configuração
-  dão o mesmo nível e o mesmo score.
-- **SC-002**: acrescentar campos de CVE às features muda zero resultados
-  (nível, score e hard rule).
+  dão o mesmo nível, score, detalhamento e hard rule aplicada.
+- **SC-002**: acrescentar campos de CVE ou identidade às features muda zero
+  resultados (nível, score, detalhamento e hard rule).
 - **SC-003**: zero casos em que uma hard rule deixa o nível menos grave que
   o do score.
 - **SC-004**: zero chamadas ao baseline na geração de rótulos de treino.

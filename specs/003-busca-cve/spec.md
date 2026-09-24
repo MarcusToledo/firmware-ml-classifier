@@ -234,10 +234,11 @@ falha HTTP num par e inspecionando o log e o cache.
   `0.0` e `NONE`. `severity` DEVE estar em maiúsculas.
 - **FR-006** [Implementado]: O sistema DEVE gravar um cache JSON em
   `--output` (padrão `dataset/cve_cache.json`), indexado por
-  `"<fabricante>/<modelo>"` na forma do par (FR-001). Cada entrada DEVE ter
+  `"<fabricante>/<modelo>"` na forma do par em minúsculas e sem espaços nas
+  pontas (FR-001). Cada entrada nova ou substituída DEVE ter
   `schema_version: 2`, `source`, `vendor` e `model` na forma NVD,
   `cpe_name` e a lista `cves`. Entradas já existentes de outros pares DEVEM
-  ser preservadas.
+  ser preservadas, mesmo quando usam o esquema antigo.
 - **FR-007** [Implementado]: Sem `--force`, o sistema DEVE pular sem
   requisição o par que já tem entrada no cache. Antes de pular, DEVE
   interromper a execução com erro se a entrada não for um objeto com a

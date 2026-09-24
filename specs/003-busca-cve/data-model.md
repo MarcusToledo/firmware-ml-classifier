@@ -1,16 +1,18 @@
 # Data Model: Busca de CVEs na NVD
 
-Esquema do cache JSON gravado pelo código atual em `master` (spec, FR-006).
-O arquivo é um objeto JSON; cada chave é um par `"<fabricante>/<modelo>"`
-na forma lida do parquet de features (minúsculas, sem espaços nas pontas) e
-cada valor é uma entrada. Não há campo global de versão: `schema_version`
-fica em cada entrada.
+Esquema das entradas v2 gravadas pelo código atual em `master` (spec,
+FR-006). O arquivo é um objeto JSON; cada chave é um par
+`"<fabricante>/<modelo>"` na forma lida do parquet de features (minúsculas,
+sem espaços nas pontas) e cada valor é uma entrada. Não há campo global de
+versão: `schema_version` fica em cada entrada. Com `--force` sobre um cache
+v1, entradas antigas de outros pares são preservadas e o arquivo pode
+misturar os dois esquemas.
 
 ## Entrada do cache
 
 |Campo|Tipo|Significado|
 |---|---|---|
-|`schema_version`|int|sempre `2`; outro valor interrompe a execução ao pular o par (FR-007) e a rotulagem|
+|`schema_version`|int|sempre `2` nas entradas v2; outro valor interrompe a execução ao pular o par (FR-007) e a rotulagem|
 |`source`|texto|`cpe` (CVEs por `virtualMatchString`) ou `keyword` (CVEs por `keywordSearch`) (FR-004)|
 |`vendor`|texto|fabricante na forma NVD (ex.: `d-link`, `tp-link`) (FR-002)|
 |`model`|texto|modelo na forma NVD (ex.: `DIR-300`) (FR-002)|
@@ -28,11 +30,12 @@ fica em cada entrada.
 
 ## Regras de validação
 
-- Toda entrada é um objeto com a lista `cves` e `schema_version` igual a 2.
-  Entrada fora disso é erro, na busca (ao pular o par) e na rotulagem.
+- Toda entrada v2 é um objeto com a lista `cves` e `schema_version` igual a
+  2. Entrada fora disso é erro ao pular o par na busca e na rotulagem.
 - `cpe_name` é preenchido se e só se `source=cpe`.
-- Um par cuja consulta falhou não tem entrada (FR-008). Ausência de par é
-  erro na rotulagem, não "sem CVE" (constituição, princípio II;
+- Um par cuja primeira consulta falhou não ganha entrada (FR-008). Com
+  `--force`, uma entrada anterior permanece sem marca da falha. Ausência de
+  par é erro na rotulagem, não "sem CVE" (constituição, princípio II;
   005/FR-003).
 - A mesma CVE pode aparecer em várias entradas; não há deduplicação entre
   pares.

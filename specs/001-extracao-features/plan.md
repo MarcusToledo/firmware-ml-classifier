@@ -5,8 +5,8 @@
 **Input**: Feature specification from `/specs/001-extracao-features/spec.md`
 
 **Note**: plano retroativo. Descreve o código que já existe em `master`; não
-há Phase 0 (`research.md`), `contracts/` nem `quickstart.md`. O `tasks.md`
-fica para a subtask 3 (validação com `/speckit.analyze`).
+há Phase 0 (`research.md`), `contracts/` nem `quickstart.md`. O `tasks.md` é
+retroativo: registra a verificação de cada FR e cenário e as lacunas de teste.
 
 ## Summary
 
@@ -60,11 +60,13 @@ timeout do Binwalk de 60 s
 
 ```text
 specs/001-extracao-features/
-├── spec.md              # /speckit.specify + /speckit.clarify
-├── plan.md              # este arquivo
-├── data-model.md        # esquema do registro de features.parquet
+├── spec.md                        # /speckit.specify + /speckit.clarify
+├── plan.md                        # este arquivo
+├── data-model.md                  # esquema do registro de features.parquet
+├── tasks.md                       # verificação retroativa de FRs e cenários
 └── checklists/
-    └── requirements.md  # checklist de qualidade da spec
+    ├── requirements.md            # checklist de qualidade da spec
+    └── rastreabilidade.md         # checklist de rastreabilidade e testabilidade
 ```
 
 ### Source Code (repository root)
@@ -100,33 +102,43 @@ entre specs (módulos donos de cada uma) está no inventário
 `.docs/brainstorming/inventario-modulos.md`; esta spec é dona só dos
 módulos acima.
 
-### FR → módulo → teste
+### US → FR → módulo → teste
 
-|FR|Módulo|Teste|
-|---|---|---|
-|FR-001|`scripts/extract_features.py::gather_paths`|`test_pipeline_cli.py::test_cli_directory_input` (parcial)|
-|FR-002|`pipeline/feature_extraction.py::load_pipeline_config`, `apply_overrides`|`test_pipeline_config.py::test_load_pipeline_config_defaults`, `::test_load_pipeline_config_with_overrides`; `test_pipeline_cli.py::test_cli_with_override`|
-|FR-003|`src/io_utils.py::read_binary`; `pipeline/feature_extraction.py::extract_features_from_path`|`test_io_utils.py::test_read_binary_max_bytes_zero_returns_empty`, `::test_read_binary_missing_file_returns_empty_and_logs_warning`; `test_pipeline_extraction.py::test_extract_features_from_path_max_bytes_zero`, `::test_extract_features_from_path_empty_file`|
-|FR-004|`pipeline/feature_extraction.py::extract_features_from_path`|`test_pipeline_extraction.py::test_extract_features_from_path_valid_file`|
-|FR-005|`src/features/statistics.py`; `src/feature_extraction.py::combine_features`|`test_statistics.py` (9 testes)|
-|FR-006|`src/features/strings.py`; `src/feature_extraction.py::extract_features`|`test_strings.py` (9 testes); `test_feature_vector.py::test_extract_features_exposes_limited_strings`|
-|FR-007|`src/features/binwalk.py`; `pipeline/feature_extraction.py::_extract_binwalk_descriptions`|`test_binwalk_features.py` (11 testes); `test_pipeline_extraction.py::test_extract_features_with_mocked_binwalk`, `::test_extract_features_includes_binwalk_keys`|
-|FR-008|`pipeline/feature_extraction.py::extract_features_from_path`|`test_pipeline_extraction.py::test_extract_features_includes_string_pattern_keys`|
-|FR-009|`scripts/extract_features.py::main`|`test_pipeline_cli.py::test_cli_basic_file`, `::test_cli_csv_output`|
-|FR-010|`scripts/extract_features.py::main`|`test_pipeline_cli.py::test_cli_without_label_from_path_zeroes_version`, `::test_cli_label_from_path`|
-|FR-011|`pipeline/feature_extraction.py::extract_features_from_path`|`test_pipeline_extraction.py::test_classifier_features_exclude_cve_and_identity_fields`|
-|FR-012|`pipeline/feature_extraction.py::extract_features_batch`|`test_pipeline_extraction.py::test_extract_features_batch_continues_on_error`, `::test_extract_features_batch_sequential_mode`, `::test_extract_features_batch_preserves_order_with_multiple_workers`, `::test_extract_features_batch_empty_list_returns_empty`|
-|FR-013|`scripts/extract_features.py::main`|`test_pipeline_cli.py::test_cli_reports_elapsed_time`|
+|FR|US|Módulo|Teste|
+|---|---|---|---|
+|FR-001|US1|`scripts/extract_features.py::gather_paths`|`test_pipeline_cli.py::test_cli_directory_input` (parcial)|
+|FR-002|US1|`pipeline/feature_extraction.py::load_pipeline_config`, `apply_overrides`|`test_pipeline_config.py::test_load_pipeline_config_defaults`, `test_pipeline_config.py::test_load_pipeline_config_with_overrides`; `test_pipeline_cli.py::test_cli_with_override`|
+|FR-003|US3|`src/io_utils.py::read_binary`; `pipeline/feature_extraction.py::extract_features_from_path`|`test_io_utils.py::test_read_binary_max_bytes_zero_returns_empty`, `test_io_utils.py::test_read_binary_missing_file_returns_empty_and_logs_warning`; `test_pipeline_extraction.py::test_extract_features_from_path_max_bytes_zero`, `test_pipeline_extraction.py::test_extract_features_from_path_empty_file` (parcial)|
+|FR-004|US1|`pipeline/feature_extraction.py::extract_features_from_path`|`test_pipeline_extraction.py::test_extract_features_from_path_valid_file` (parcial)|
+|FR-005|US4|`src/features/statistics.py`; `src/feature_extraction.py::combine_features`|`test_statistics.py::test_entropy_known_distribution`, `test_statistics.py::test_byte_mean_empty_returns_zero`, `test_statistics.py::test_compress_ratio_level_affects_output`, `test_statistics.py::test_entropy_variance_different_blocks`|
+|FR-006|US4|`src/features/strings.py`; `src/feature_extraction.py::extract_features`|`test_strings.py::test_extract_ascii_strings_min_len`, `test_strings.py::test_extract_ascii_strings_max_string_len_truncates`, `test_strings.py::test_limit_strings_truncates`, `test_strings.py::test_strings_to_document_truncates`; `test_feature_vector.py::test_extract_features_exposes_limited_strings` (parcial)|
+|FR-007|US4|`src/features/binwalk.py`; `pipeline/feature_extraction.py::_extract_binwalk_descriptions`|`test_binwalk_features.py::test_count_filesystems_matches`, `test_binwalk_features.py::test_detect_fs_type_returns_most_common`, `test_binwalk_features.py::test_detect_compression_first_match`; `test_pipeline_extraction.py::test_extract_features_with_mocked_binwalk`, `test_pipeline_extraction.py::test_extract_features_includes_binwalk_keys` (parcial)|
+|FR-008|US4|`pipeline/feature_extraction.py::extract_features_from_path`|`test_pipeline_extraction.py::test_extract_features_includes_string_pattern_keys`, `test_pipeline_extraction.py::test_extract_features_includes_binwalk_keys` (parcial)|
+|FR-009|US1, US2, US3|`scripts/extract_features.py::main`|`test_pipeline_cli.py::test_cli_basic_file`, `test_pipeline_cli.py::test_cli_csv_output`, `test_pipeline_cli.py::test_cli_directory_input` (parcial)|
+|FR-010|US2|`scripts/extract_features.py::main`|`test_pipeline_cli.py::test_cli_without_label_from_path_zeroes_version`, `test_pipeline_cli.py::test_cli_label_from_path`, `test_pipeline_cli.py::test_cli_label_from_path_extracts_version` (parcial)|
+|FR-011|US2|`pipeline/feature_extraction.py::extract_features_from_path`|`test_pipeline_extraction.py::test_classifier_features_exclude_cve_and_identity_fields`|
+|FR-012|US1, US3|`pipeline/feature_extraction.py::extract_features_batch`|`test_pipeline_extraction.py::test_extract_features_batch_continues_on_error`, `test_pipeline_extraction.py::test_extract_features_batch_sequential_mode`, `test_pipeline_extraction.py::test_extract_features_batch_preserves_order_with_multiple_workers`, `test_pipeline_extraction.py::test_extract_features_batch_empty_list_returns_empty` (parcial)|
+|FR-013|US1|`scripts/extract_features.py::main`|`test_pipeline_cli.py::test_cli_reports_elapsed_time`, `test_pipeline_cli.py::test_cli_basic_file` (parcial)|
 
 ### Sem verificação
 
 Partes de FR sem teste que as exercite:
 
-- FR-001: filtro de extensões excluídas e entrada `.txt` com lista de paths.
-- FR-003: leitura parcial com `max_bytes>0` (só `max_bytes=0` e arquivo
-  ausente têm teste).
+- FR-001: entrada `.txt`, filtro das extensões excluídas e arquivos ocultos.
+- FR-003: leitura parcial com `max_bytes>0` e mensagens exatas nos metadados
+  para arquivo vazio e limite não positivo.
+- FR-004: valor de `firmware_id` como SHA256 exato do prefixo lido.
 - FR-006: valor de `meta_truncated` no registro.
+- FR-007: fallback 0/nulo quando o Binwalk está ausente, excede o timeout ou
+  encerra com erro.
+- FR-008: conjunto integrado completo das 11 features de strings, 2 features
+  de Binwalk e colunas `doc2vec_*`.
+- FR-009: cardinalidade da saída e esquema completo dos 14 metadados em
+  parquet e CSV.
+- FR-010: nulidade simultânea dos cinco metadados de identidade sem
+  `--label-from-path`.
 - FR-012: `--workers` via CLI (o lote paralelo é testado só pela função).
+- FR-013: os cinco campos do log emitido para cada arquivo.
 
 ### Símbolos com requisito em outra spec
 

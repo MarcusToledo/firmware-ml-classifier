@@ -4,10 +4,7 @@
 
 **Input**: Feature specification from `/specs/006-baseline-regras/spec.md`
 
-**Note**: plano retroativo. Descreve o código que já existe em `master`; não
-há Phase 0 (`research.md`), `data-model.md` (a spec não persiste artefato),
-`contracts/` nem `quickstart.md`. O `tasks.md` fica para a subtask 3
-(validação com `/speckit.analyze`).
+**Note**: plano retroativo. Descreve o código que já existe em `master`; não há Phase 0 (`research.md`), `contracts/` nem `quickstart.md`. O `tasks.md` é retroativo: registra a verificação de cada FR e cenário e as lacunas de teste.
 
 ## Summary
 
@@ -59,10 +56,12 @@ dataset hoje
 
 ```text
 specs/006-baseline-regras/
-├── spec.md              # /speckit.specify + /speckit.clarify
-├── plan.md              # este arquivo
+├── spec.md                       # /speckit.specify + /speckit.clarify
+├── plan.md                       # este arquivo
+├── tasks.md                      # verificação retroativa
 └── checklists/
-    └── requirements.md  # checklist de qualidade da spec
+    ├── requirements.md           # checklist de qualidade da spec
+    └── rastreabilidade.md        # checklist de rastreabilidade e testabilidade
 ```
 
 ### Source Code (repository root)
@@ -85,19 +84,19 @@ importados de `src/labeling/cve_labels.py`, módulo de
 `005-rotulagem-cve`; `LEVEL_ORDER` e `LEVEL_FROM_INT` ficam em
 `src/scoring.py` e só o baseline os usa.
 
-### FR → módulo → teste
+### US → FR → módulo → teste
 
-|FR|Módulo|Teste|
-|---|---|---|
-|FR-001|`src/scoring.py::score_firmware`, `ScoringResult`, `SignalResult`, `LEVEL_ORDER`|`test_scoring.py::test_baseline_uses_shared_class_names`, `::test_signals_breakdown_present`, `::test_no_signals_returns_no_known_cve`|
-|FR-002|`src/scoring.py::_score_stats`, `_score_strings`, `_score_binwalk`, `_sigmoid` e constantes `_ENCRYPTED_SCORE` … `_OUTDATED_LIB_SCORE`|`test_scoring.py::test_score_strings_outdated_libssl_raises_score`, `::test_score_strings_no_outdated_lib_zero`, `::test_score_strings_outdated_busybox_contributes`, `::test_score_strings_outdated_dropbear_contributes`, `::test_score_strings_passwords_contributes`, `::test_score_strings_combined_features`, `::test_score_strings_cred_pairs_contributes`, `::test_score_strings_public_ips_contributes`, `::test_binwalk_features_contribute`, `::test_n_filesystems_contributes_to_score`|
-|FR-003|`src/scoring.py::score_firmware`, `_score_stats`, `_score_strings`, `_score_binwalk`|`test_scoring.py::test_stats_only_redistributes_weight`, `::test_n_filesystems_zero_does_not_activate_binwalk_signal`, `::test_empty_features_returns_no_known_cve`, `::test_no_signals_returns_no_known_cve`, `::test_score_strings_no_features_absent`, `::test_score_strings_zero_new_counts_no_dilution`|
-|FR-004|`src/scoring.py::score_firmware`, `ThresholdConfig`; `configs/scoring.yaml`|`test_scoring.py::test_high_score_maps_to_critical_cve`, `::test_low_risk_maps_to_no_known_cve`, `::test_custom_thresholds`|
-|FR-005|`src/scoring.py::score_firmware`, `HardRuleConfig`, `LEVEL_ORDER`; `configs/scoring.yaml`|`test_scoring.py::test_hard_rule_telnetd_overrides_to_known_cve`, `::test_hard_rule_debug_account`, `::test_hard_rule_does_not_downgrade`, `::test_hard_rule_hardcoded_passwords` (parcial)|
-|FR-006|`src/scoring.py::score_firmware`|`test_scoring.py::test_baseline_ignores_cve_fields`, `::test_baseline_has_no_cve_signal`|
-|FR-007|nenhum chamador de `src/scoring.py::score_firmware` no pipeline|nenhum (ver "Sem verificação")|
-|FR-008|`src/scoring.py::load_scoring_config`, `ScoringConfig`, `ThresholdConfig`, `WeightConfig`, `HardRuleConfig`; `configs/scoring.yaml`|`test_scoring.py::test_scoring_config_loads_without_cve_weight`|
-|FR-009|`src/scoring.py::score_firmware`|`test_scoring.py::test_deterministic_same_inputs_same_result`|
+|FR|US|Módulo|Teste|
+|---|---|---|---|
+|FR-001|US1|`src/scoring.py::score_firmware`, `ScoringResult`, `SignalResult`, `LEVEL_ORDER`|`test_scoring.py::test_baseline_uses_shared_class_names`, `::test_signals_breakdown_present`, `::test_no_signals_returns_no_known_cve`|
+|FR-002|US1|`src/scoring.py::_score_stats`, `_score_strings`, `_score_binwalk`, `_sigmoid` e constantes `_ENCRYPTED_SCORE` … `_OUTDATED_LIB_SCORE`|`test_scoring.py::test_score_strings_outdated_libssl_raises_score`, `::test_score_strings_no_outdated_lib_zero`, `::test_score_strings_outdated_busybox_contributes`, `::test_score_strings_outdated_dropbear_contributes`, `::test_score_strings_passwords_contributes`, `::test_score_strings_combined_features`, `::test_score_strings_cred_pairs_contributes`, `::test_score_strings_public_ips_contributes`, `::test_binwalk_features_contribute`, `::test_n_filesystems_contributes_to_score` (parcial)|
+|FR-003|US1, US4|`src/scoring.py::score_firmware`, `_score_stats`, `_score_strings`, `_score_binwalk`|`test_scoring.py::test_stats_only_redistributes_weight`, `::test_n_filesystems_zero_does_not_activate_binwalk_signal`, `::test_empty_features_returns_no_known_cve`, `::test_no_signals_returns_no_known_cve`, `::test_score_strings_no_features_absent`, `::test_score_strings_zero_new_counts_no_dilution` (parcial)|
+|FR-004|US1|`src/scoring.py::score_firmware`, `ThresholdConfig`; `configs/scoring.yaml`|`test_scoring.py::test_high_score_maps_to_critical_cve`, `::test_low_risk_maps_to_no_known_cve`, `::test_custom_thresholds` (parcial)|
+|FR-005|US3|`src/scoring.py::score_firmware`, `HardRuleConfig`, `LEVEL_ORDER`; `configs/scoring.yaml`|`test_scoring.py::test_hard_rule_telnetd_overrides_to_known_cve`, `::test_hard_rule_debug_account`, `::test_hard_rule_does_not_downgrade`, `::test_hard_rule_hardcoded_passwords` (parcial)|
+|FR-006|US2|`src/scoring.py::score_firmware`|`test_scoring.py::test_baseline_ignores_cve_fields`, `::test_baseline_has_no_cve_signal`, `::test_no_signals_returns_no_known_cve` (parcial)|
+|FR-007|US2|nenhum chamador de `src/scoring.py::score_firmware` no pipeline|—|
+|FR-008|US1, US4|`src/scoring.py::load_scoring_config`, `ScoringConfig`, `ThresholdConfig`, `WeightConfig`, `HardRuleConfig`; `configs/scoring.yaml`|`test_scoring.py::test_scoring_config_loads_without_cve_weight` (parcial)|
+|FR-009|US1|`src/scoring.py::score_firmware`|`test_scoring.py::test_deterministic_same_inputs_same_result` (parcial)|
 
 ### Sem verificação
 
@@ -106,19 +105,21 @@ Partes de FR sem teste que as exercite:
 - FR-002: valores exatos das faixas e constantes (os testes só comparam
   maior/menor); `count_hardcoded_ips`, `entropy_variance_across_sections`
   e `compression_type` não aparecem em nenhum teste.
-- FR-003: soma de pesos 0 com grupo presente (hard rules não avaliadas).
-- FR-005: a regra `hardcoded_passwords`. Em
-  `test_scoring.py::test_hard_rule_hardcoded_passwords` o score já vale
-  0,375 (`cve_conhecida`) sem a regra, e o teste não confere a regra
-  aplicada: passa com `hard_rule_applied=None` (conferido em 2026-09-24).
-  Também sem teste: elevação a `cve_critica` por nível configurado e o
-  registro da última regra quando mais de uma eleva.
-- FR-007: sem teste. Evidência por grep em `**/*.py` (2026-09-24):
-  `score_firmware` e `load_scoring_config` só aparecem em `src/scoring.py`
-  e `tests/test_scoring.py`; fora do código, só em documentação
-  (`README.md`, `docs/`, `TODO.md`).
-- FR-008: subseção ou chave ausente usando o padrão e exceção com chave
-  desconhecida.
+- FR-003: soma de pesos 0 com grupo presente e o consequente retorno antes
+  da avaliação das hard rules.
+- FR-004: inclusão exata dos valores de fronteira nos níveis definidos por
+  `low` e `high`.
+- FR-005: a regra `hardcoded_passwords`; o teste existente já obtém score
+  0,375 (`cve_conhecida`) e não confere `hard_rule_applied`. Também faltam
+  elevação a `cve_critica` por nível configurado e registro da última regra.
+- FR-006: campos de identidade não alterarem o resultado.
+- FR-007: ausência de chamadas ao baseline na geração de rótulos e nas
+  demais etapas do pipeline.
+- FR-008: valores exatos do YAML, subseção ou chave ausente usando o padrão
+  e exceção para chave desconhecida.
+- FR-009: igualdade do detalhamento e da hard rule entre repetições e
+  determinismo entre processos; o teste atual compara apenas nível e score
+  em duas chamadas no mesmo processo.
 
 ### Símbolos com requisito em outra spec
 
@@ -126,4 +127,8 @@ Nenhum.
 
 ## Complexity Tracking
 
-Nenhuma violação.
+|Requisito|Desvio observado no código atual|Tratamento|
+|---|---|---|
+|006/FR-003|NaN conta como valor presente e pode maximizar sub-scores ou ativar flags.|Defeito já registrado no `TODO.md`; a spec preserva o comportamento observado em Edge Cases.|
+|006/FR-005|Sem grupo presente ou com soma de pesos 0, o retorno antecipado impede a avaliação das hard rules.|Defeito já registrado no `TODO.md`; FR-003 e FR-005 documentam a precedência atual.|
+|006/FR-008|Pesos, limiares e níveis mínimos inválidos não são validados; YAML vazio produz `AttributeError` genérico.|Defeito já registrado no `TODO.md`; a validação fica fora desta mudança documental.|

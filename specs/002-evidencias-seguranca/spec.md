@@ -142,30 +142,30 @@ ASCII são extraídas, e extrair um arquivo vazio.
 - `debug_account` casa qualquer palavra inteira `debug`, `guest` ou `test`.
   Medido em 2026-09-24 sobre `findings_v2.jsonl`: 128 dos 199 achados são
   `test`, vindos de mensagens como `"mtest   - simple RAM test"` e
-  `"DRAM Test Fail at address %p."`. Sem item no `TODO.md`.
+  `"DRAM Test Fail at address %p."`. Registrado no `TODO.md`.
 - `api_tokens` aceita qualquer sequência de 32+ caracteres de
   `[A-Za-z0-9+/=_-]`. Medido em 2026-09-24: 1121 dos 1128 achados de
   `findings_v2.jsonl` não são hexadecimais; exemplos são identificadores e
   paths como `WLAN_ABandRegion0_ChannelselectItems_3` e
-  `0123456789abcdefghijklmnopqrstuvwxyz`. Sem item no `TODO.md`.
+  `0123456789abcdefghijklmnopqrstuvwxyz`. Registrado no `TODO.md`.
 - `public_ips` e `hardcoded_ips` casam números de versão com 4 partes.
   Medido em 2026-09-24: os 39 achados de `public_ips` em
   `findings_v2.jsonl` vêm de textos com forma de versão, como `7.0.1.0`
   (23 achados), `Linux-2.6.22.18` e
   `(E03.AZ.3)3.12.8.31`; a máscara `255.255.255.0` aparece 11 vezes como
-  `hardcoded_ips`. Sem item no `TODO.md`.
+  `hardcoded_ips`. Registrado no `TODO.md`.
 - `encrypted_sections` casa `AES`, e o Binwalk descreve tabelas de código
   AES como `AES S-Box` e `AES Inverse S-Box`. Medido em 2026-09-24: 137 dos
   171 achados de `encrypted_sections` são essas tabelas, e em 8 dos 17
   paths com `has_encrypted_sections=True` elas são o único motivo. Como
   `AES` também está na regra de `crypto_signatures`, a mesma descrição gera
-  achado nos dois detectores. Sem item no `TODO.md`.
+  achado nos dois detectores. Registrado no `TODO.md`.
 - A regra de Dropbear exige ano com 4 dígitos (`2020.81`). Versões no
-  formato `0.NN` não casam e não geram achado. Sem item no `TODO.md`.
+  formato `0.NN` não casam e não geram achado. Registrado no `TODO.md`.
 - `detector_version` é `1.0` para os 13 detectores e não muda quando uma
   regra muda. Um JSONL gerado antes e depois de portar a correção de
-  `hardcoded_passwords` teria a mesma versão com regras diferentes. Sem
-  item no `TODO.md`.
+  `hardcoded_passwords` teria a mesma versão com regras diferentes.
+  Registrado no `TODO.md`.
 - Sem Binwalk no PATH, ou com a varredura encerrada com erro, não há
   achados de Binwalk: `n_crypto_signatures=0` e
   `has_encrypted_sections=False` ficam indistinguíveis de "sem cripto".
@@ -258,8 +258,11 @@ ASCII são extraídas, e extrair um arquivo vazio.
   `count_api_tokens` e `n_crypto_signatures` valem o número de achados do
   detector; `has_telnetd`, `has_debug_account`, `has_outdated_libssl`,
   `has_outdated_busybox`, `has_outdated_dropbear` e
-  `has_encrypted_sections` valem `True` se há ao menos um achado. As 13
-  colunas DEVEM estar sempre presentes, com 0/`False` sem achado.
+  `has_encrypted_sections` valem `True` se há ao menos um achado. Em
+  resultados regulares de `extract_features_from_path`, as 13 colunas DEVEM
+  estar presentes, com 0/`False` sem achado, inclusive em falha de leitura
+  tratada. Uma exceção inesperada capturada pelo lote produz um resultado de
+  erro sem features.
 - **FR-015** [Implementado]: O resultado da extração de cada firmware DEVE
   carregar a lista de todos os achados, na ordem `hardcoded_passwords`,
   `credential_pairs`, `hardcoded_ips`, `public_ips`, `telnetd`,
