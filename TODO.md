@@ -48,6 +48,12 @@
       aponta para eles como fonte dos `research.md`.
 - [x] Subtask 1: constituição v1.0.0 aprovada e ratificada em 2026-09-24;
       Sync Impact Report removido.
+- [x] Subtask 2: inventário de módulos e fronteiras das specs em
+      `.docs/brainstorming/inventario-modulos.md` (7 specs; utilitários sem
+      spec justificados).
+- [x] Subtask 2: spec piloto `specs/001-extracao-features/` (`spec.md`,
+      clarify sem ambiguidades críticas, `plan.md`, `data-model.md`) na
+      branch `docs/specs-retroativas`.
 
 ### Pending
 - [ ] Alinhar o item de `scripts/train.py` do roadmap (4 modelos, com XGBoost
@@ -72,13 +78,38 @@
       strings, já implementados; `libssl_version_age` segue pendente.
 - [ ] O baseline `score_firmware` não é chamado por nenhum script; falta
       rodá-lo sobre o dataset para comparar com os modelos.
-- [ ] Escrever as specs retroativas dos módulos implementados, a partir de um
-      inventário leve dos módulos.
+- [ ] Escrever as specs retroativas 002–007 após revisão do piloto 001.
 - [ ] Validar as specs contra código e testes (matriz US → FR → módulo →
       teste) e registrar as lacunas de teste.
 - [ ] Especificar T03, T04, T05, T06 e o treino de Extra Trees/Random Forest.
 - [ ] Gerar o System Design a partir dos `plan.md` de todas as specs,
       separando componentes implementados e planejados.
+- [ ] Binwalk ausente (log debug) ou encerrado com código de erro (sem log)
+      gera features estruturais vazias sem registro no artefato
+      (constituição, princípio VI), em
+      `pipeline/feature_extraction.py::_extract_binwalk_descriptions`.
+- [ ] `max_bytes=5 MiB` corta 696/840 arquivos, e as features estatísticas
+      veem 23,3% dos bytes do dataset. Avaliar leitura completa em streaming,
+      com `max_bytes` alto para cumprir o princípio VI: bincount
+      incremental, `zlib.compressobj`, variância por bloco e strings com
+      parada em `max_strings`. Exige reextrair e regerar os rótulos, porque o
+      `firmware_id` muda. A implementação atual carrega o arquivo inteiro na
+      memória: processar o arquivo de 150,9 MiB inteiro foi morto por OOM
+      nesta máquina (7,9 GB). Nenhuma coluna guarda o tamanho original do
+      arquivo (`meta_byte_len` = bytes lidos).
+- [ ] `firmware_id` é o SHA256 do prefixo de `max_bytes` (0 colisões
+      medidas em 2026-09-24). Avaliar trocar pelo SHA256 do arquivo
+      completo, com leitura sequencial e memória constante.
+- [ ] `scripts/validate_dataset.py` desatualizado para `labels_v2.csv`: lê o
+      `labels.csv` v1, compara paths relativos e acusa como duplicata o
+      `firmware_id` compartilhado por aliases.
+- [ ] `docs/PIPELINE.md`: diz "8 detectores" em `patterns.py` (são 11) e
+      chama o módulo de `stats.py` (é `statistics.py`).
+- [ ] Docstring de
+      `tests/test_pipeline_extraction.py::test_error_result_preserves_version_from_path`
+      diz que o path inexistente faz `read_binary` levantar exceção e
+      exercita o ramo de erro de `_process_path`, mas `read_binary` engole o
+      `OSError` e o teste passa pelo caminho `empty firmware`.
 
 ## Request: Responder o review do Kody no PR #5
 
