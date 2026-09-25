@@ -192,6 +192,13 @@
       contagens do FR-009) e critérios do checksec 2.7.1, ELF estático à
       parte, `meta_fs_status` (a 008 exclui `erro`). Relatório em
       `.docs/brainstorming/validacao-rastreabilidade/012-planejado.md`.
+- [x] Task 4, etapa 7 (verificação, 2026-09-25): 12 specs com Status
+      válido; toda linha `[Planejado|Proposto` cita TickTick; todo FR
+      Planejado tem `- [ ] T###`; nenhum FR Proposto tem task; nenhum
+      `[NEEDS CLARIFICATION]`; 81 itens do mapa decididos; T08-T12
+      existem no TickTick; diff contra `master` só em `specs/`,
+      `TODO.md`, `AGENTS.md`, `pyproject.toml` e constituição; `pytest`
+      com 377 testes passando.
 
 ### Pending
 - [ ] T07: limpar os campos de feature não utilizados. Especificado em
