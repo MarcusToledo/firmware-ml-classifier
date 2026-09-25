@@ -130,6 +130,19 @@
       metadados da busca (CR-29). PR-05 corrigido para a 005 (FR-024 regra
       i Planejado, FR-025 regra ii Proposto, TickTick T04). Relatório em
       `.docs/brainstorming/validacao-rastreabilidade/003-planejado.md`.
+- [x] Task 4, etapa 5, spec 004 (Misto): FR-015 a FR-017 Planejado, FR-018
+      Proposto (TickTick T11); US5; clarify com 4 perguntas (`meta_path`
+      relativo à raiz); Phase 7 (T033-T041); analyze com 2 HIGH decididos:
+      marca de terceiros só por nome `webflash` ou banner `DD-WRT` (medido
+      em 2026-09-25: `OpenWrt` aparece em 47 firmwares oficiais) e versão
+      anulada só pela marca de nome. Relatório em
+      `.docs/brainstorming/validacao-rastreabilidade/004-planejado.md`.
+- [x] Task 4, etapa 5, spec 007 (Misto): FR-011 a FR-015 Proposto
+      (TickTick T06), sem task; analyze com 1 HIGH corrigido (SC-001 e US2
+      condicionados ao Doc2Vec ligado); exceção confirmada para as
+      violações III/V, com FR Planejado exigido na 008 e na 011 que exclua
+      `doc2vec_*` e o braço Doc2Vec enquanto a T06 for Proposto. Relatório
+      em `.docs/brainstorming/validacao-rastreabilidade/007-proposto.md`.
 
 ### Pending
 - [ ] T07: limpar os campos de feature não utilizados (Doc2Vec desligado por

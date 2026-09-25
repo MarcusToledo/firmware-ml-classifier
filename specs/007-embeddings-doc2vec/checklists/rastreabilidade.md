@@ -34,9 +34,14 @@
 
 ## Requisitos não funcionais e constituição
 
-- [ ] CHK016 O requisito de determinismo entre processos possui critério verificável para ordem de inferência e `PYTHONHASHSEED`, em vez de depender apenas da semente global? [Gap] [Spec §Edge Cases] [Constitution V] — pendente: TODO.md 007/princípio V
-- [ ] CHK017 O requisito de persistência do transformador enumera metadados legíveis, limites do corpus e `firmware_id` da partição de treino necessários para reprodução? [Gap] [Spec §FR-006] [Constitution V] — pendente: TODO.md 007/FR-006
+- [ ] CHK016 O requisito de determinismo entre processos possui critério verificável para ordem de inferência e `PYTHONHASHSEED`, em vez de depender apenas da semente global? [Gap] [Spec §Edge Cases] [Constitution V] — pendente: FR-012 é Proposto (TickTick T06)
+- [ ] CHK017 O requisito de persistência do transformador enumera metadados legíveis, limites do corpus e `firmware_id` da partição de treino necessários para reprodução? [Gap] [Spec §FR-006] [Constitution V] — pendente: FR-013 é Proposto (TickTick T06)
 - [x] CHK018 Os requisitos de entrada não confiável definem limites de leitura e tornam falhas, arquivos vazios e documentos sem tokens observáveis? [Coverage] [Spec §FR-002] [Spec §FR-003] [Constitution VI]
+
+## Requisitos propostos (escopo restante, 2026-09-24)
+
+- [x] CHK019 Cada FR Proposto cita a TickTick de origem (T06), aparece na matriz marcado sem task e não tem task no `tasks.md`? [Traceability] [Spec §FR-011–FR-015]
+- [x] CHK020 A condição de uso das violações herdadas (III, V) está explícita: `doc2vec_*` desligado por padrão (`001/FR-018`) e fora do modelo reportado até a T06 ser promovida? [Consistency] [Plan §Complexity Tracking] [001/FR-018]
 
 ## Notes
 

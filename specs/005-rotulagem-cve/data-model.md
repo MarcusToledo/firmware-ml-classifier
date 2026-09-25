@@ -10,7 +10,7 @@ ordem (spec, FR-015). A chave de junção com a tabela de features é
 |Coluna|Tipo|Origem|
 |---|---|---|
 |`firmware_id`|texto (SHA256 hex)|cópia de `firmware_id` da tabela de features (`001/FR-004`); nunca nulo (FR-002)|
-|`meta_path`|texto|cópia de `meta_path`; nunca nulo|
+|`meta_path`|texto|cópia de `meta_path`; nunca nulo. Planejado (`004/FR-016`): relativo à raiz do dataset; tabela com `meta_path` absoluto é recusada com instrução de reextrair|
 |`vendor`|texto|cópia de `meta_brand`|
 |`model`|texto|cópia de `meta_model`|
 |`version`|texto ou nulo|cópia de `meta_version`, conferida contra a versão reinferida do path (FR-004)|

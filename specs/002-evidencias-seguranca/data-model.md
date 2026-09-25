@@ -51,7 +51,7 @@ Ordem das chaves:
 |Campo|Tipo|Origem|
 |---|---|---|
 |`firmware_id`|texto (SHA256 hex)|`001/FR-004`; nunca nulo na prática, porque falha de leitura não gera achado|
-|`path`|texto|mesmo valor de `meta_path`; contém fabricante e modelo mesmo no modo inferência|
+|`path`|texto|mesmo valor de `meta_path`; contém fabricante e modelo mesmo no modo inferência. Planejado (`004/FR-016`): relativo à raiz do dataset|
 |`type`, `source`, `context`, `confidence`, `detector`, `detector_version`|texto|achado (tabela acima)|
 
 ## Regras de validação

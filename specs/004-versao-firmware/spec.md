@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-24
 
-**Status**: Implementado
+**Status**: Misto
 
 **Input**: User description: "Spec retroativa (Status Implementado) da inferência de fabricante, modelo e versão do firmware a partir do path: fabricante e modelo pelo diretório, versão pelo sufixo do diretório (prioritária) ou por regra de nome de arquivo por fabricante, com origem registrada e sem chute quando não há versão. Derivar só do código em master, testes, docs/PIPELINE.md e TODO.md."
 
@@ -12,15 +12,36 @@
 
 ### Session 2026-09-24
 
-- Varredura de ambiguidade (`/speckit.clarify`): sem ambiguidades
-  críticas. Por ser spec retroativa, cada FR descreve o comportamento do
-  código em `master`: a prioridade entre diretório e nome de arquivo, o
-  formato aceito por fabricante e o retorno sem versão já estão fixados no
-  código e nos testes. As lacunas de cobertura (firmwares sem versão,
-  extração relaxada, arquivos `*webflash*`) são limitações registradas em
-  Edge Cases e no `TODO.md`. Nenhuma pergunta feita.
+- Varredura de ambiguidade (`/speckit.clarify`, histórico da spec
+  retroativa): sem ambiguidades críticas. Os FRs `[Implementado]` descrevem
+  o comportamento do código em `master`: a prioridade entre diretório e
+  nome de arquivo, o formato aceito por fabricante e o retorno sem versão
+  já estão fixados no código e nos testes. As lacunas de cobertura
+  (firmwares sem versão, extração relaxada, arquivos `*webflash*`) ficaram
+  em Edge Cases. Nenhuma pergunta feita nessa varredura.
 - Terminologia: "sem versão" significa `version` e `version_source` nulos;
   "origem" é o valor de `version_source` (`directory` ou `filename`).
+
+### Session 2026-09-24 (escopo restante, TickTick T11)
+
+- Q: Como tratar arquivo direto em `raw/<fabricante>/`? → A: com
+  `--label-from-path`, a extração falha antes do lote listando os paths
+  fora do layout (FR-015).
+- Q: Como ancorar a inferência no layout? → A: relativo ao diretório de
+  entrada da CLI, `<entrada>/<fabricante>/<modelo>/arquivo`; arquivo único
+  ou lista `.txt` exigem `--dataset-root` explícito (FR-016).
+- Q: O que fazer com as imagens `*webflash*`? → A: detectar imagens de
+  terceiros (DD-WRT, OpenWrt) pelo nome e pelas strings, gravar
+  `meta_third_party` e não atribuir versão do fabricante; a preparação do
+  dataset decide a exclusão (FR-017). Medido em 2026-09-24: 2 dos 23
+  arquivos têm `DD-WRT` nos bytes brutos.
+- Q: Como a raiz do dataset chega à rotulagem? → A: `meta_path` passa a
+  ser gravado relativo à raiz, e a 005 reinfere sobre ele (FR-016).
+- Analyze (2026-09-25), decisões do pesquisador: a marca de terceiros vem
+  do nome `*webflash*` ou do banner `DD-WRT`; `OpenWrt` sozinho não marca,
+  porque aparece em 47 arquivos oficiais (32 ASUS/Netgear com versão),
+  medido nos bytes de `dataset/raw` (F1). Só a marca pelo nome anula a
+  versão, para a reinferência da 005 pelo path continuar coerente (I1).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -143,6 +164,42 @@ diretório com versão, e extrair um path inexistente dentro do layout.
 
 ---
 
+### User Story 5 - Identidade ancorada e imagens de terceiros marcadas (Priority: P1) *(Planejado)*
+
+O pesquisador obtém a identidade só de paths no layout esperado, relativo
+à raiz do dataset, e vê marcadas as imagens de terceiros guardadas sob o
+diretório de um fabricante.
+
+**Why this priority**: identidade errada vira consulta de CVE errada, e uma
+imagem DD-WRT sob `tp_link/<modelo>` herdaria as CVEs do firmware original
+da TP-Link, invalidando o rótulo (constituição, princípios II e VI;
+TickTick T11).
+
+**Independent Test**: extrair, com `--label-from-path`, um arquivo direto
+em `<raiz>/<fabricante>/`, um path com `raw` acima da raiz e um arquivo
+`*webflash*`.
+
+**Acceptance Scenarios**:
+
+1. **Given** `<raiz>/dlink/firmware.bin` e `--label-from-path`, **When** a
+   extração começa, **Then** ela falha antes do lote, listando o path.
+2. **Given** a raiz `/data/raw/projeto/dataset/raw` e o arquivo
+   `<raiz>/dlink/dir300/fw.bin`, **When** a identidade é inferida, **Then**
+   o fabricante é `dlink` e o modelo `dir300`, sem usar o primeiro `raw`
+   do path.
+3. **Given** um arquivo único passado à CLI sem `--dataset-root` e com
+   `--label-from-path`, **When** a extração começa, **Then** ela falha
+   pedindo `--dataset-root`.
+4. **Given** `tp_link/tl-wr710v1/tl-wr710v1-webflash.bin`, **When** a
+   identidade é inferida, **Then** `meta_third_party=dd-wrt` e a imagem fica
+   sem versão. **Given** um firmware oficial com a string `OpenWrt` e
+   versão no nome (ex.: `netgear/wndr4300/WNDR4300-V1.0.1.30.img`), **Then**
+   ele não é marcado e mantém a versão. **Given** uma imagem sem `webflash`
+   no nome e com o banner `DD-WRT`, **Then** `meta_third_party=dd-wrt` e a
+   versão do nome continua.
+
+---
+
 ### Edge Cases
 
 - Firmwares sem versão. Medido em 2026-09-24 sobre
@@ -153,22 +210,24 @@ diretório com versão, e extrair um path inexistente dentro do layout.
   diretório. Isso coincide com `docs/PIPELINE.md`, §"Estado real do
   dataset" (0 `directory`, 614 `filename`, 226 sem versão) e com o
   `labels_v2.csv`. A rotulagem trata as CVEs desses firmwares como
-  indeterminadas. Usar evidência independente de versão (+13
-  `firmware_id`) é trabalho futuro no `TODO.md`, request "Analisar
-  aplicabilidade de CVE por versão do firmware".
+  indeterminadas. Usar evidência independente de versão é regra de
+  rotulagem da `005-rotulagem-cve` (005/FR-024, Planejado; 005/FR-025,
+  Proposto).
 - A extração relaxada pelo nome do arquivo (D-Link compacto `FW101B04`,
   D-Link com build `1.04B58`, ASUS compacto `30043763754`) daria versão a
   mais 37 `firmware_id`, segundo `docs/PIPELINE.md`, §"Limitações da
   rotulagem". Levada como trabalho futuro no `TODO.md`.
 - Os 23 arquivos `*webflash*` (ex.: `tl-wr710v1-webflash.bin`) ficam sem
-  versão. Verificar se são DD-WRT antes de atribuir versão está pendente
-  no `TODO.md`.
+  versão. Pela convenção de nome, são prováveis builds DD-WRT de terceiros
+  [INFERÊNCIA]; só 2 têm `DD-WRT` nos bytes brutos (medido em 2026-09-24).
+  Detectar e marcar é FR-017 (Planejado).
 - Divergência entre as regras: quando o diretório tem versão, a do nome do
   arquivo não é calculada nem comparada, e um conflito não fica registrado
   em lugar nenhum. A versão do diretório é gravada como está (pode ter
   parênteses e letras, ex.: `7.10(ABTG.4)C0`), enquanto a do nome do
   arquivo é sempre números separados por ponto. Nenhuma linha do dataset
-  atual usa a versão do diretório.
+  atual usa a versão do diretório. Registrar o conflito é FR-018
+  (Proposto).
 - O sufixo do diretório só é separado quando o modelo começa por letra,
   tem um dígito e não tem `_`, e a versão começa por `N.N`. Um diretório
   como `archer_c20i_1.0` ficaria inteiro como modelo. Medido em 2026-09-24:
@@ -180,10 +239,11 @@ diretório com versão, e extrair um path inexistente dentro do layout.
   maiúsculas) é o usado, então um diretório `raw` acima do dataset
   desviaria a inferência. Nenhum dos dois ocorre hoje: a inferência atual
   sobre os 840 `meta_path` reproduz fabricante, modelo e versão gravados.
+  As correções são FR-015 e FR-016 (Planejado).
 - As grafias `tplink/` e `tp_link/` usam a mesma regra de nome de arquivo,
   mas geram identificadores diferentes para o mesmo modelo (ex.:
-  `tplink_tl_er604w` e `tp_link_tl-er604w`). A consolidação está pendente
-  no `TODO.md`.
+  `tplink_tl_er604w` e `tp_link_tl-er604w`). A unificação em `dataset/raw`
+  fica com a preparação do dataset (TickTick T08).
 - Fabricante sem regra de nome de arquivo (ex.: `zyxel`) só obtém versão
   pelo diretório. Os seis diretórios de fabricante do dataset atual
   (`asus`, `belkin`, `dlink`, `netgear`, `tp_link`, `tplink`) têm regra.
@@ -200,7 +260,8 @@ diretório com versão, e extrair um path inexistente dentro do layout.
 - **FR-002** [Implementado]: Quando o path não tem segmento `raw`, tem
   menos de dois segmentos depois dele ou resulta em fabricante ou modelo
   vazio, o sistema DEVE devolver fabricante, modelo, identificador, versão
-  e origem nulos.
+  e origem nulos. Com FR-016, a regra passa a valer para o path relativo à
+  raiz, sem depender do segmento `raw`.
 - **FR-003** [Implementado]: O sistema DEVE formar o identificador
   (`label`) como `<fabricante>_<modelo>`, já sem o sufixo de versão.
 - **FR-004** [Implementado]: O sistema DEVE separar o segmento do modelo
@@ -259,12 +320,42 @@ diretório com versão, e extrair um path inexistente dentro do layout.
   `meta_version` e `meta_version_source` só com `--label-from-path`
   (`001/FR-009`, `001/FR-010`) e nunca entram no vetor de features
   (`001/FR-011`).
+- **FR-015** [Planejado, TickTick T11]: Com `--label-from-path`, a extração
+  DEVE falhar antes de processar o lote quando algum path não segue o
+  layout `<raiz>/<fabricante>/<modelo>[_versão]/arquivo` (ex.: arquivo
+  direto em `<raiz>/<fabricante>/`), listando os paths. Substitui, nesse
+  modo, a identidade inferida do nome do arquivo.
+- **FR-016** [Planejado, TickTick T11]: A inferência DEVE usar o layout
+  relativo à raiz do dataset: `--dataset-root`, se passado (tem
+  precedência), senão o diretório de entrada da CLI; `--dataset-root` é
+  obrigatório com `--label-from-path` quando a entrada é um arquivo único ou
+  uma lista `.txt`, e um path fora da raiz com `--label-from-path` é erro.
+  `meta_path` DEVE ser gravado relativo a essa raiz
+  (`<fabricante>/<modelo>[_versão]/arquivo`), e a reinferência da
+  `005-rotulagem-cve` (005/FR-004) DEVE usar esse path relativo e recusar
+  `meta_path` absoluto, pedindo a reextração. Sem raiz (modo inferência com
+  arquivo único ou lista), `meta_path` é o path recebido. Quando
+  implementado, substitui o uso do primeiro segmento `raw` de FR-001 e
+  FR-002, os cenários que usam `raw/...` (US1, US4) e o conteúdo de
+  `meta_path` de `001/FR-009`.
+- **FR-017** [Planejado, TickTick T11]: O sistema DEVE gravar
+  `meta_third_party` (`dd-wrt` ou nulo), também sem `--label-from-path`,
+  quando o nome do arquivo contém `webflash` ou quando as strings varridas
+  pelos detectores (`001/FR-016`, até `max_bytes`) contêm o banner `DD-WRT`
+  (caixa exata). `OpenWrt` sozinho NÃO DEVE marcar. A imagem marcada pelo
+  nome NÃO DEVE receber versão (nem do diretório nem do nome); a marcada só
+  pelo banner mantém a versão inferida do path. A exclusão do treino fica
+  com a preparação do dataset (TickTick T08).
+- **FR-018** [Proposto, TickTick T11]: Quando o diretório tem versão, o
+  sistema DEVE calcular também a do nome do arquivo, registrar o conflito e
+  normalizar a versão do diretório pela mesma regra.
 
 ### Key Entities *(include if feature involves data)*
 
 - **Path do firmware**: localização do arquivo no layout
-  `raw/<fabricante>/<modelo>[_versão]/arquivo`. É a única entrada; o
-  conteúdo do binário não é lido.
+  `raw/<fabricante>/<modelo>[_versão]/arquivo` (Planejado: relativo à raiz
+  do dataset, FR-016). No código atual é a única entrada; com FR-017, o
+  banner `DD-WRT` nas strings também é lido, sem afetar a versão.
 - **Identidade inferida**: fabricante, modelo, identificador
   `<fabricante>_<modelo>`, versão e origem da versão. É metadado de
   consulta, não feature.
@@ -279,7 +370,8 @@ diretório com versão, e extrair um path inexistente dentro do layout.
 - **SC-001**: 100% das linhas têm versão e origem ambas preenchidas ou
   ambas nulas. Medido em 2026-09-24 sobre `dataset/labels_v2.csv`: 0 de
   840 linhas com par inconsistente (614 com versão).
-- **SC-002**: a inferência é função só do path. Medido em 2026-09-24:
+- **SC-002**: a inferência de identidade e versão é função só do path
+  (vale também com FR-016 e FR-017). Medido em 2026-09-24:
   aplicada aos 840 `meta_path` de `features_v2.parquet`, reproduz
   `meta_brand`, `meta_model` e `meta_version` em 840 de 840 linhas.
 - **SC-003**: nenhuma versão atribuída sem regra do fabricante ou sufixo
@@ -287,11 +379,19 @@ diretório com versão, e extrair um path inexistente dentro do layout.
   `features_v2.parquet`: 614 de 840 linhas (73,1%) com versão, todas de
   origem `filename`, e 485 de 699 `firmware_id` com versão em ao menos um
   alias.
+- **SC-004** [Planejado, TickTick T11]: zero paths fora do layout aceitos
+  com `--label-from-path`, e a identidade dos 840 arquivos atuais continua
+  igual com a nova âncora.
+- **SC-005** [Planejado, TickTick T11]: 100% dos 23 arquivos `*webflash*`
+  marcados em `meta_third_party`, com a lista registrada no `TODO.md`, e
+  zero firmwares oficiais com versão marcados (os 47 com `OpenWrt` medidos
+  em 2026-09-25 continuam sem marca).
 
 ## Assumptions
 
 - O dataset é curado no layout `raw/<fabricante>/<modelo>[_versão]/`; a
-  identidade depende dessa organização, não do conteúdo do binário.
+  identidade depende dessa organização, não do conteúdo do binário (com
+  FR-016, a organização é relativa à raiz do dataset).
 - As regras de nome de arquivo cobrem as convenções observadas no dataset
   atual de cada fabricante; um formato novo cai em versão nula até ganhar
   regra.

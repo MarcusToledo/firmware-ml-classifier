@@ -66,8 +66,10 @@ Esquema previsto; nada disso existe no código atual.
 |`meta_unpack_status`|texto|`ok`, `sem_filesystem`, `falha`, `limite_tamanho`, `limite_arquivos`, `limite_tempo` ou `nao_executado`; com mais de um limite, vale o primeiro; `limite_tempo` exige rodar de novo|FR-016|
 |`meta_strings_source`|texto|`filesystem` com `meta_unpack_status=ok`; `blob` com `sem_filesystem`, `falha`, `limite_tamanho` ou `limite_arquivos`; `nao_executado` nas linhas sem varredura|FR-016|
 |`meta_unpack_files_cut`|int|número de arquivos extraídos cuja leitura parou em `max_bytes`; 0 sem desempacotamento|FR-016|
+|`meta_third_party`|texto ou nulo|`dd-wrt` para imagem de terceiros (nome `webflash` ou banner `DD-WRT`); gravado também sem `--label-from-path`. Requisito em `004/FR-017`|004/FR-017|
+|`meta_path` (mudança)|texto|relativo à raiz do dataset (`<fabricante>/<modelo>[_versão]/arquivo`), não mais absoluto. Requisito em `004/FR-016`|004/FR-016|
 
-As cinco são `meta_*`: não entram no vetor de features. Com FR-018
+As seis colunas novas são `meta_*`: não entram no vetor de features. Com FR-018
 (TickTick T07), as colunas `doc2vec_*` somem por padrão. Com FR-015 e
 FR-019, `max_bytes` passa a ser obrigatório, com 256 MiB, e o
 `firmware_id` cobre o arquivo inteiro para todos os arquivos atuais.

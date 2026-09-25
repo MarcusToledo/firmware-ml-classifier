@@ -5,7 +5,9 @@
 **Nota**: tasks retroativas. O código já existe em `master`; cada task
 `[x]` registra uma verificação feita em 2026-09-24 (FR → módulo → teste ou
 cenário conferido). Tasks `[ ]` são lacunas de teste ainda abertas,
-espelhadas no `TODO.md`.
+espelhadas no `TODO.md`. FR-011 a FR-015 são `[Proposto, TickTick T06]` e
+não têm task: ganham tasks só quando o pesquisador promover a T06 a
+Planejado.
 
 ## Format: `[ID] [Story] Descrição`
 

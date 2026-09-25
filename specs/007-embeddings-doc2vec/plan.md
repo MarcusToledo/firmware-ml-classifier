@@ -4,7 +4,7 @@
 
 **Input**: Feature specification from `/specs/007-embeddings-doc2vec/spec.md`
 
-**Note**: plano retroativo. Descreve o código que já existe em `master`; não há Phase 0 (`research.md`), `contracts/` nem `quickstart.md`. O `tasks.md` é retroativo: registra a verificação de cada FR e cenário e as lacunas de teste.
+**Note**: plano retroativo. Descreve o código que já existe em `master`; não há Phase 0 (`research.md`), `contracts/` nem `quickstart.md`. O `tasks.md` é retroativo: registra a verificação de cada FR e cenário e as lacunas de teste. FR-011 a FR-015 são `[Proposto, TickTick T06]`: aparecem na matriz sem módulo previsto e não têm task (regra do escopo restante para FR Proposto).
 
 ## Summary
 
@@ -54,7 +54,7 @@ strings limitadas pela configuração de extração (`max_bytes` de 5 MiB,
 |IV. Modelos simples|Não se aplica|O Doc2Vec é transformador de features, não classificador|
 |V. Reprodutibilidade|Violação herdada|Parâmetros versionados e `workers=1` no treino (`tests/test_doc2vec.py::test_train_doc2vec_enforces_workers_one`), mas a inferência depende da ordem de chamada e de `PYTHONHASHSEED`, e o modelo não guarda a partição de treino (`src/features/doc2vec.py::infer_embedding`; `.docs/brainstorming/parecer-doc2vec-oracle.md`). Ver Complexity Tracking|
 |VI. Firmware não confiável|Passa parcialmente|Leitura com `max_bytes`; arquivo vazio e sem tokens pulado com warning no treino; ausência de modelo visível em `meta_doc2vec_used` (`pipeline/feature_extraction.py::extract_features_from_path`). Documento sem tokens gera vetor zero com `meta_doc2vec_used=True`, sem marca na linha|
-|VII. Integridade científica|Passa|Todo FR tem módulo e teste abaixo ou aparece em "Sem verificação". `tests/test_doc2vec.py::test_infer_embedding_deterministic_same_seed_changes_with_different_seed` não é citado como evidência de FR: passa pelo motivo errado (spec, Edge Cases)|
+|VII. Integridade científica|Passa|Todo FR Implementado tem módulo e teste abaixo ou aparece em "Sem verificação"; FR-011 a FR-015 são Proposto, sem compromisso de implementação. `tests/test_doc2vec.py::test_infer_embedding_deterministic_same_seed_changes_with_different_seed` não é citado como evidência de FR: passa pelo motivo errado (spec, Edge Cases)|
 
 ## Project Structure
 
@@ -104,6 +104,11 @@ requisito desta spec aparecem na tabela abaixo com o módulo real.
 |FR-008|US2|`src/features/doc2vec.py::infer_embedding`; `src/feature_extraction.py::extract_features`, `combine_features`|`tests/test_doc2vec.py::test_infer_embedding_empty_tokens_returns_zero_finite_vector`, `tests/test_doc2vec.py::test_infer_embedding_oov_tokens_finite` (parcial)|
 |FR-009|US2|`pipeline/feature_extraction.py::extract_features_from_path`, `_build_error_result`|`tests/test_pipeline_extraction.py::test_extract_features_from_path_valid_file` (parcial)|
 |FR-010|US3|`scripts/inspect_tokens.py::main`, `extract_tokens`|—|
+|FR-011 [Proposto, TickTick T06]|—|—|— (Proposto: sem task)|
+|FR-012 [Proposto, TickTick T06]|—|—|— (Proposto: sem task)|
+|FR-013 [Proposto, TickTick T06]|—|—|— (Proposto: sem task)|
+|FR-014 [Proposto, TickTick T06]|—|—|— (Proposto: sem task)|
+|FR-015 [Proposto, TickTick T06]|—|—|— (Proposto: sem task)|
 
 ### Sem verificação
 
@@ -143,5 +148,5 @@ Nenhum.
 
 |Violação|Por que existe|Alternativa|
 |---|---|---|
-|Princípio III: o Doc2Vec é ajustado sobre toda a entrada, sem partição de treino nem fold|Herdada do código em `master` (`scripts/train_doc2vec.py::main`); o treino do classificador e os splits ainda não existem|Treino por fold registrado na T06 (Proposto); até lá, `doc2vec_*` fica fora do modelo reportado (princípio I; T07 desliga por padrão)|
-|Princípio V: inferência depende da ordem de chamada e de `PYTHONHASHSEED`; `doc2vec.seed` não a afeta; o modelo não guarda a partição de treino|Herdada do código em `master` (`src/features/doc2vec.py::infer_embedding`, `set_global_seed`)|Reiniciar `model.random` antes de cada inferência e exigir `PYTHONHASHSEED`, registrados na T06 (Proposto)|
+|Princípio III: o Doc2Vec é ajustado sobre toda a entrada, sem partição de treino nem fold|Herdada do código em `master` (`scripts/train_doc2vec.py::main`). A violação só tem efeito se `doc2vec_*` entrar num modelo; `001/FR-018` (Planejado, TickTick T07) desliga o Doc2Vec por padrão, o princípio I o mantém fora do modelo reportado, e as specs de preparação (008) e de avaliação (011) terão FR Planejado que exclui `doc2vec_*` e o braço Doc2Vec da ablation enquanto a T06 for Proposto (decisão do pesquisador no analyze de 2026-09-25)|FR-011 e FR-013 [Proposto, TickTick T06]; devem ser promovidos a Planejado antes de qualquer uso de `doc2vec_*` num modelo|
+|Princípio V: inferência depende da ordem de chamada e de `PYTHONHASHSEED`; `doc2vec.seed` não a afeta; o modelo não guarda a partição de treino|Herdada do código em `master` (`src/features/doc2vec.py::infer_embedding`, `set_global_seed`); mesmo alcance da linha acima|FR-012 e FR-013 [Proposto, TickTick T06]; mesma condição de promoção|

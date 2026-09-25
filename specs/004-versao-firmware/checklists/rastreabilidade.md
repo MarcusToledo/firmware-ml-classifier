@@ -30,9 +30,16 @@
 
 ## Requisitos não funcionais e conflitos
 
-- [ ] CHK014 A especificação define um resultado seguro e observável para arquivo direto em `raw/<fabricante>/`, em vez de apenas registrar o fallback silencioso como limitação? [Conflict, Gap, Spec §FR-001, Spec §Edge Cases] — pendente: TODO.md 004/princípio VI
-- [ ] CHK015 A especificação exige sinalização quando um segmento `raw` acima do dataset desvia a identidade inferida? [Conflict, Gap, Spec §FR-001, Spec §Edge Cases] — pendente: TODO.md 004/FR-001
-- [ ] CHK016 A auditabilidade define como registrar divergência entre a versão do diretório e a versão inferível do arquivo? [Gap, Spec §FR-005, Spec §Edge Cases] — pendente: TODO.md 004/FR-005
+- [x] CHK014 A especificação define um resultado seguro e observável para arquivo direto em `raw/<fabricante>/`, em vez de apenas registrar o fallback silencioso como limitação? [Conflict, Gap, Spec §FR-001, Spec §Edge Cases] — definido em FR-015 (Planejado, T11); o código atual segue em Edge Cases
+- [x] CHK015 A especificação exige sinalização quando um segmento `raw` acima do dataset desvia a identidade inferida? [Conflict, Gap, Spec §FR-001, Spec §Edge Cases] — resolvido por FR-016 (Planejado, T11): a identidade passa a ser relativa à raiz do dataset
+- [ ] CHK016 A auditabilidade define como registrar divergência entre a versão do diretório e a versão inferível do arquivo? [Gap, Spec §FR-005, Spec §Edge Cases] — pendente: FR-018 é Proposto (sem compromisso de implementação)
+
+## Requisitos planejados (escopo restante, 2026-09-24)
+
+- [x] CHK017 Cada FR Planejado cita a TickTick de origem, tem linha prevista na matriz do `plan.md` e ao menos uma task na fase "Implementação planejada"; o FR Proposto está marcado sem task? [Traceability] [Spec §FR-015–FR-018]
+- [x] CHK018 O efeito de FR-016 e FR-017 sobre outras specs (`meta_path` relativo em `001/FR-009` e no data-model da 001, `path` do JSONL da 002, reinferência em `005/FR-004` com recusa de `meta_path` absoluto; `meta_third_party` no data-model da 001) está explícito e tem task? [Consistency] [Spec §FR-016] [Spec §FR-017]
+- [x] CHK020 A detecção de terceiros tem critério objetivo sem falso positivo medido (nome `webflash` ou banner `DD-WRT`; `OpenWrt` sozinho não marca) e não quebra a reinferência da 005? [Clarity] [Spec §FR-017] [Spec §SC-005]
+- [x] CHK019 Cada FR Planejado tem cenário observável em User Story 5 citado por uma task de teste? [Coverage] [Spec §US5.1–US5.4]
 
 ## Notes
 

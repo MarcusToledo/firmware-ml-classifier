@@ -46,5 +46,8 @@
   sufixo de build e escape de URL são mantidos.
 - "Success criteria are technology-agnostic": SC-001 a SC-003 citam colunas
   e artefatos do contrato, não tecnologia.
-- Spec retroativa (Status Implementado): todos os FRs levam a tag
-  `[Implementado]`; limitações conhecidas ficam em Edge Cases, não em FRs.
+- (Histórico, vale para FR-001 a FR-014) Spec retroativa: os FRs levavam a
+  tag `[Implementado]`; limitações conhecidas ficavam em Edge Cases.
+- Status Misto (2026-09-24, escopo restante do TCC): FR-015 a FR-017 e
+  SC-004/SC-005 `[Planejado, TickTick T11]`; FR-018 `[Proposto, TickTick
+  T11]`. Os itens acima continuam passando para os FRs novos.

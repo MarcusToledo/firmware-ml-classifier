@@ -47,7 +47,9 @@
 - "Success criteria are technology-agnostic": SC-001 cita
   `meta_doc2vec_used` e `doc2vec_*`, que são colunas do contrato, não
   tecnologia.
-- Spec retroativa (Status Implementado): todos os FRs levam a tag
-  `[Implementado]`. Não determinismo da inferência, treino sem partição,
-  ausência do modelo e divergência de arquivos entre treino e extração
-  ficam em Edge Cases (T06, T07 e `TODO.md`), não em FRs.
+- (Histórico, vale para FR-001 a FR-010) Spec retroativa: os FRs levavam a
+  tag `[Implementado]`; não determinismo, treino sem partição, ausência do
+  modelo e divergência de arquivos ficavam em Edge Cases.
+- Status Misto (2026-09-24, escopo restante do TCC): FR-011 a FR-015 são
+  `[Proposto, TickTick T06]`, sem task. Os itens acima continuam passando
+  para os FRs novos.

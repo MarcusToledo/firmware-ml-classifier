@@ -37,10 +37,11 @@ semente e os `firmware_id` da partição de treino". Hoje:
   de treino, e aliases repetidos aparecem uma vez só nas tags (spec, Edge
   Cases).
 - A semente não basta para reproduzir a inferência: falta `PYTHONHASHSEED`
-  e o estado `model.random` muda a cada chamada (spec, Edge Cases; T06).
+  e o estado `model.random` muda a cada chamada (spec, Edge Cases; FR-012,
+  Proposto, T06).
 - Os limites que definem o documento não são gravados; uma extração com
   `feature.*` diferente infere vetores de documentos que o modelo não viu
-  nesse formato.
+  nesse formato. Os três pontos acima são FR-013 (Proposto, T06).
 
 ## Colunas `doc2vec_*` em `features.parquet`
 
@@ -49,7 +50,9 @@ semente e os `firmware_id` da partição de treino". Hoje:
 |`doc2vec_0` … `doc2vec_{n-1}`|float|vetor inferido do documento do firmware; `n` é a dimensão do modelo carregado|
 |`meta_doc2vec_used`|bool|`True` se havia modelo carregado e a leitura deu certo (`001/FR-009`)|
 
-Com a configuração versionada, `n = vector_size = 100`.
+Com a configuração versionada atual, `n = vector_size = 100`. Com
+`001/FR-018` (Planejado), a configuração versionada desliga o Doc2Vec e
+não há colunas `doc2vec_*`.
 
 ## Regras de validação
 

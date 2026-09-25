@@ -4,10 +4,11 @@
 
 **Nota**: tasks retroativas. O código já existe em `master`; cada task
 `[x]` registra uma verificação feita em 2026-09-24 (FR → módulo → teste ou
-cenário conferido). Tasks `[ ]` são lacunas de teste ainda abertas,
-espelhadas no `TODO.md`.
+cenário conferido). Tasks `[ ]` das fases 2 a 6 são lacunas de teste ainda
+abertas, espelhadas no `TODO.md`. A Phase 7 decompõe os FRs Planejado
+(TickTick T11); FR-018 é Proposto e não tem task.
 
-## Format: `[ID] [Story] Descrição`
+## Format: `[ID] [P?] [Story] Descrição`
 
 ## Phase 2: User Story 1 - Fabricante e modelo pelo diretório (Priority: P1)
 
@@ -64,6 +65,26 @@ espelhadas no `TODO.md`.
 - [ ] T031 [US2] FR-006 — fabricante com maiúsculas ou espaços antes da seleção da regra; teste sugerido em `tests/test_firmware_version.py`
 - [ ] T032 [US4] FR-014 — exceção levantada durante a extração e preservação da identidade por `_build_error_result`; teste sugerido em `tests/test_pipeline_extraction.py`
 
+## Phase 7: Implementação planejada (TickTick T11)
+
+**Goal**: Identidade só de paths no layout, relativa à raiz do dataset, e
+imagens de terceiros marcadas sem versão do fabricante.
+
+- [ ] T033 [US5] FR-016 — Inferir a identidade relativa à raiz (`--dataset-root` com precedência, senão o diretório de entrada; path fora da raiz com `--label-from-path` é erro) em `pipeline/feature_extraction.py::infer_brand_model_label_from_path`, gravar `meta_path` relativo em `extract_features_from_path` e aceitar `--dataset-root` em `scripts/extract_features.py::main`
+- [ ] T034 [US5] FR-016 — Reinferir sobre o `meta_path` relativo e recusar `meta_path` absoluto com instrução de reextrair, em `scripts/generate_labels.py::_label_rows` (`005-rotulagem-cve`, FR-004)
+- [ ] T035 [US5] FR-016 — Cenários US5.2 e US5.3: testes de raiz com `raw` acima, de precedência de `--dataset-root`, de arquivo único sem `--dataset-root` e de reinferência com path relativo em `tests/test_feature_extraction.py`, `tests/test_pipeline_cli.py` e `tests/test_generate_labels.py`
+- [ ] T036 [US5] FR-015 — Com `--label-from-path`, listar os paths fora do layout e falhar antes do lote em `pipeline/feature_extraction.py::extract_features_batch` e `scripts/extract_features.py::main`
+- [ ] T037 [US5] FR-015 — Cenário US5.1: teste de arquivo direto em `<raiz>/<fabricante>/` em `tests/test_pipeline_cli.py`
+- [ ] T038 [US5] FR-017 — Gravar `meta_third_party=dd-wrt` pelo nome `webflash` ou pelo banner `DD-WRT` (caixa exata) nas strings varridas pelos detectores, também sem `--label-from-path`, e não atribuir versão só à imagem marcada pelo nome, em `pipeline/feature_extraction.py::extract_features_from_path` e `infer_brand_model_label_from_path`
+- [ ] T039 [US5] FR-017 — Cenário US5.4: testes de `*webflash*`, de banner `DD-WRT` com versão mantida e de firmware oficial com `OpenWrt` sem marca em `tests/test_pipeline_extraction.py`
+- [ ] T040 [US5] FR-015, FR-016, FR-017 — Na reextração (`001-extracao-features`, T050), conferir que a identidade dos 840 arquivos não mudou (SC-004) e registrar no `TODO.md` a lista de arquivos com `meta_third_party`, com zero firmwares oficiais com versão marcados (SC-005)
+- [ ] T041 [US5] FR-016 — Migrar os testes e as verificações que dependem do segmento `raw` (FR-001, FR-002; `test_infer_path_no_raw_segment_returns_all_none` e os cenários US1 e US4 com `raw/...`) para o path relativo à raiz, em `tests/test_feature_extraction.py` e `tests/test_pipeline_cli.py`
+
 ## Dependencies & Execution Order
 
 - Lacunas são independentes entre si; cada uma só depende do módulo citado.
+- Phase 7: T033 → T036 (a checagem de layout usa a raiz) → T037; T033 →
+  T034 → T035 → T041; T038 → T039. T033, T036 e T038 editam
+  `pipeline/feature_extraction.py` e rodam em série. T038 usa as strings
+  varridas pelos detectores só depois de `001/T045`. T040 depende de todas
+  e de `001/T050`.

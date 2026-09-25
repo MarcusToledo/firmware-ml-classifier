@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-24
 
-**Status**: Implementado
+**Status**: Misto
 
 **Input**: User description: "Spec retroativa (Status Implementado) dos embeddings Doc2Vec: treino de um modelo com um documento de strings por firmware, parâmetros versionados, inferência de um vetor doc2vec_* por firmware na extração (zeros sem modelo) e inspeção de tokens. Variante experimental fora do modelo reportado (constituição, princípio I). Derivar só do código em master, testes, docs/PIPELINE.md e TODO.md."
 
@@ -12,14 +12,24 @@
 
 ### Session 2026-09-24
 
-- Varredura de ambiguidade (`/speckit.clarify`): sem ambiguidades
-  críticas. Por ser spec retroativa, cada FR descreve o comportamento do
-  código em `master`; as decisões em aberto (determinismo da inferência,
-  treino por partição, conjunto de arquivos do treino) já têm destino na
-  T06 (Proposto) e na T07, e ficam em Edge Cases. Nenhuma pergunta feita.
+- Varredura de ambiguidade (`/speckit.clarify`, histórico da spec
+  retroativa): sem ambiguidades críticas. Os FRs `[Implementado]` descrevem
+  o comportamento do código em `master`; as decisões em aberto
+  (determinismo da inferência, treino por partição, conjunto de arquivos do
+  treino) ficaram em Edge Cases. Nenhuma pergunta feita nessa varredura.
 - Terminologia: "documento" é o texto de strings de um firmware definido em
   `001/FR-006`; "token" é cada pedaço desse texto separado por espaço em
   branco; "vetor Doc2Vec" são as colunas `doc2vec_*` de uma linha.
+
+### Session 2026-09-24 (escopo restante, TickTick T06)
+
+- O pesquisador classificou a T06 inteira como Proposto (mapa de escopo
+  restante, PR-01): FR-011 a FR-015 são `[Proposto, TickTick T06]`, sem
+  task. A varredura não achou ambiguidade que mude a entrega do TCC; as
+  escolhas de implementação ficam para quando a T06 for promovida.
+- Com `001/FR-018` (Planejado, TickTick T07), o Doc2Vec fica desligado por
+  padrão: o modelo não é carregado, não há aviso de modelo ausente
+  (FR-007) e `meta_doc2vec_used=False` (FR-009).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -60,7 +70,8 @@ tem um vetor de documento por `firmware_id`, com `vector_size` posições.
 O pesquisador roda a extração e recebe, em cada linha de
 `features.parquet`, um vetor `doc2vec_0` … `doc2vec_{n-1}` inferido do
 documento do firmware. A banca vê em `meta_doc2vec_used` se o vetor veio
-de um modelo ou é zero.
+de um modelo ou é zero. Com `001/FR-018` (Planejado), isso só vale com o
+Doc2Vec ligado por chave explícita.
 
 **Why this priority**: é o único caminho pelo qual o embedding chega ao
 dataset; a banca precisa distinguir vetor inferido de vetor ausente.
@@ -119,51 +130,55 @@ contagem e 5 tokens.
   biblioteca não usa nenhuma delas. Os três fatos foram medidos pelo oracle
   (`.docs/brainstorming/parecer-doc2vec-oracle.md`). Com vários workers,
   cada um tem sua cópia do modelo, e o vetor passa a depender do
-  escalonamento [inferência do oracle pelo mecanismo; não medido]. Tratado
-  em T06 (Proposto).
+  escalonamento [inferência do oracle pelo mecanismo; não medido].
+  Correção Proposto: FR-012 (T06).
 - A verificação automatizada de determinismo da inferência passa pelo
   motivo errado: o terceiro vetor difere porque o estado interno avançou,
-  não por causa da semente diferente (ver `plan.md`). Tratado em T06.
+  não por causa da semente diferente (ver `plan.md`). Correção Proposto:
+  FR-012 (T06).
 - `models/doc2vec.model` não existe (nem a pasta `models/`). Em
   `features.parquet` e `features_v2.parquet`, as 100 colunas `doc2vec_*`
   são zero e `meta_doc2vec_used=False` em 840 de 840 linhas (medido em
-  2026-09-24; já registrado no `TODO.md`). Tratado em T07 (Doc2Vec
-  desligado por padrão, sem gravar `doc2vec_*`) e em T06.
+  2026-09-24; já registrado no `TODO.md`). Com `001/FR-018` (Planejado,
+  TickTick T07) o Doc2Vec fica desligado por padrão e sem `doc2vec_*`.
 - O treino não é por fold nem restrito à partição de treino: usa todos os
   arquivos da entrada. Isso conflita com o princípio III (transformador
   ajustado só no treino). Também não há artefato separado de embeddings
   alinhados a `firmware_id` nem registro da partição (requisitos do
-  `AGENTS.md`, "Doc2Vec Requirements"). Tratado em T06 (Proposto).
+  `AGENTS.md`, "Doc2Vec Requirements"). Correção Proposto: FR-011 e FR-013
+  (T06).
 - Treino e extração escolhem arquivos por regras diferentes. O treino
   aceita só as extensões `.bin`, `.img`, `.trx`, `.chk`, `.fw` e `.rom`; a
   extração aceita tudo fora da lista de exclusão de `001/FR-001`. Em
   `dataset/raw`, a extração vê 840 arquivos e o treino 774; os 66 restantes
   (sem extensão, sufixos de versão como `.17_ww`, `.bix`, `.hex`, `.7z`)
   recebem vetor de um modelo que não os viu no treino (medido em
-  2026-09-24). Registrado no `TODO.md`.
+  2026-09-24). Correção Proposto: FR-014 (T06).
 - O corpus de treino tem aliases repetidos. Os 774 candidatos ao treino
   têm 633 `firmware_id` distintos, e 215 linhas compartilham `firmware_id`
   com outra (medido em 2026-09-24 sobre `features_v2.parquet`, filtrando
   `meta_path` pelas extensões do treino). Cada cópia entra como documento
   com a mesma tag, então o mesmo conteúdo pesa mais no vocabulário e no
-  vetor do documento.
+  vetor do documento. Correção Proposto: FR-014 (T06).
 - A ordem do corpus é a ordem em que o sistema de arquivos devolve os
   arquivos, sem ordenação. O resultado do treino depende dessa ordem
   [inferência: o treino por SGD é sensível à ordem dos documentos; não
-  medido].
+  medido]. Correção Proposto: FR-014 (T06).
 - O modelo carregado na extração não é conferido contra a configuração. O
   número de colunas `doc2vec_*` segue o modelo, mas um documento sem tokens
   gera `vector_size` zeros da configuração: se os dois diferirem, as linhas
   terão números diferentes de colunas. A inferência usa `epochs`, `alpha` e
-  `min_alpha` da configuração de extração, não os do treino.
+  `min_alpha` da configuração de extração, não os do treino. Correção
+  Proposto: FR-015 (T06).
 - `meta_doc2vec_used=True` também quando o documento não tem tokens e o
   vetor é zero. A linha não distingue vetor inferido de vetor zero nesse
-  caso.
+  caso. Correção Proposto: FR-015 (T06).
 - Só `doc2vec.workers` é validado no treino. Os outros parâmetros passam
   apenas por conversão de tipo; a extração ignora `doc2vec.workers`.
+  Correção Proposto: FR-015 (T06).
 - O modelo gravado não registra os limites de leitura e de strings
   (`max_bytes`, `feature.*`) usados para montar o corpus, nem
-  `PYTHONHASHSEED`. Ver `data-model.md`.
+  `PYTHONHASHSEED`. Ver `data-model.md`. Correção Proposto: FR-013 (T06).
 - O documento cobre só as 2000 primeiras strings (`max_strings`), que são
   cabeçalho e ruído. Ver o item "Documento de strings" do `TODO.md`.
 - A inspeção de tokens só escreve no log; não gera artefato.
@@ -195,7 +210,8 @@ contagem e 5 tokens.
   repetíveis. Os parâmetros `doc2vec.*` DEVEM ter os padrões
   `vector_size` 100, `window` 5, `epochs` 20, `min_count` 2, `seed` 42,
   `workers` 1, `dm` 1, `alpha` 0.025 e `min_alpha` 0.0001, iguais na
-  configuração versionada e na ausência dela.
+  configuração versionada e na ausência dela. A chave `doc2vec.enabled`
+  (desligada por padrão) é definida por `001/FR-018` (Planejado).
 - **FR-005** [Implementado]: O treino DEVE recusar `doc2vec.workers`
   diferente de 1 com erro que cita `workers`, antes de treinar.
 - **FR-006** [Implementado]: O treino DEVE gravar o modelo em `--output`,
@@ -223,6 +239,25 @@ contagem e 5 tokens.
   os primeiros `--limit` tokens (padrão 50), parando após `--max-docs`
   firmwares (padrão 20). Firmware vazio DEVE ser pulado com warning e não
   conta no limite.
+- **FR-011** [Proposto, TickTick T06]: O treino DEVE usar só os documentos
+  da partição de treino (um modelo por fold da partição da spec de
+  partição, TickTick T03) e registrar os `firmware_id` usados.
+- **FR-012** [Proposto, TickTick T06]: A inferência DEVE ser determinística
+  entre processos: reiniciar o estado aleatório do modelo antes de cada
+  inferência e exigir `PYTHONHASHSEED` fixo, com teste entre processos.
+- **FR-013** [Proposto, TickTick T06]: O treino DEVE gravar ao lado do
+  modelo os parâmetros, os limites de leitura e de strings do corpus,
+  `PYTHONHASHSEED`, a semente e os `firmware_id` de treino, e um artefato de
+  embeddings alinhado a `firmware_id` em `models/`.
+- **FR-014** [Proposto, TickTick T06]: Treino e extração DEVEM escolher os
+  mesmos arquivos (regra de `001/FR-001`); o corpus DEVE ter um documento
+  por `firmware_id`, em ordem determinística. Quando implementado,
+  substitui a aceitação de tags repetidas de FR-003.
+- **FR-015** [Proposto, TickTick T06]: A extração DEVE conferir a dimensão
+  do modelo contra `doc2vec.vector_size`, inferir com os parâmetros do
+  treino, gravar `meta_doc2vec_used=False` para documento sem tokens e
+  validar todos os parâmetros `doc2vec.*`. Quando implementado, substitui
+  o caso "sem tokens" de FR-009.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -239,9 +274,10 @@ contagem e 5 tokens.
 
 ### Measurable Outcomes
 
-- **SC-001**: 100% das linhas de `features.parquet` com leitura bem-sucedida
-  têm `vector_size` colunas `doc2vec_*`. Sem modelo, 100% delas são zero
-  com `meta_doc2vec_used=False`: observado em 840 de 840 linhas de
+- **SC-001**: com o Doc2Vec ligado (`001/FR-018`), 100% das linhas de
+  `features.parquet` com leitura bem-sucedida têm `vector_size` colunas
+  `doc2vec_*`. Sem modelo, 100% delas são zero com
+  `meta_doc2vec_used=False`: observado em 840 de 840 linhas de
   `features.parquet` e `features_v2.parquet` (medido em 2026-09-24).
 - **SC-002**: 100% dos treinos com `doc2vec.workers` diferente de 1 falham
   antes de gravar modelo.
@@ -250,8 +286,9 @@ contagem e 5 tokens.
 
 ## Assumptions
 
-- O Doc2Vec é variante experimental. As colunas `doc2vec_*` estão no vetor
-  da `001-extracao-features` (`001/FR-008`), mas só entram no modelo reportado se
+- O Doc2Vec é variante experimental. As colunas `doc2vec_*` estão hoje no
+  vetor da `001-extracao-features` (`001/FR-008`); com `001/FR-018`
+  (Planejado) só aparecem com o Doc2Vec ligado. Só entram no modelo reportado se
   superarem na ablation uma representação simples (constituição, princípio
   I). O treino do classificador, onde essa exclusão será aplicada, ainda
   não existe.
