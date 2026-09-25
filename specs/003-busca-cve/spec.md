@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-24
 
-**Status**: Implementado
+**Status**: Misto
 
 **Input**: User description: "Spec retroativa (Status Implementado) da busca de CVEs na NVD por fabricante/modelo: pares únicos lidos do parquet de features, resolução de CPE oficial com virtualMatchString e fallback keywordSearch, normalização de fabricante, cache JSON versionado com CVEs, CVSS, severidade e configurations. Única etapa com rede. Derivar só do código em master, testes, docs/PIPELINE.md e TODO.md."
 
@@ -12,16 +12,43 @@
 
 ### Session 2026-09-24
 
-- Varredura de ambiguidade (`/speckit.clarify`): sem ambiguidades
-  críticas. Por ser spec retroativa, cada FR descreve o comportamento do
-  código em `master`; os pontos em aberto (`--output` padrão v1, entrada
-  antiga mantida com `--force` após falha, data da consulta não
-  registrada) são limitações registradas em Edge Cases, não escolhas de
-  spec. Nenhuma pergunta feita.
+- Varredura de ambiguidade (`/speckit.clarify`, histórico da spec
+  retroativa): sem ambiguidades críticas. Os FRs `[Implementado]` descrevem
+  o comportamento do código em `master`; os pontos em aberto na época
+  (`--output` padrão v1, entrada antiga mantida com `--force` após falha,
+  data da consulta não registrada) ficaram em Edge Cases. Nenhuma pergunta
+  feita nessa varredura.
 - Terminologia normalizada: "par" é o fabricante/modelo como aparece no
   parquet de features (minúsculas, sem espaços nas pontas), usado como
   chave do cache; "forma NVD" é o par depois da normalização usada nas
   consultas.
+
+### Session 2026-09-24 (escopo restante, TickTick T11)
+
+- Q: Com `--force`, o que fazer com a entrada antiga quando a nova
+  consulta falha, e qual o código de saída? → A: remover a entrada (o par
+  fica ausente e a rotulagem acusa, 005/FR-003); qualquer par com falha,
+  com ou sem `--force`, faz a execução terminar com código diferente de 0
+  (FR-013).
+- Q: Como registrar a data da consulta e o que fazer com as entradas sem
+  data? → A: `fetched_at` obrigatório em toda entrada nova (ISO 8601, UTC);
+  entrada sem data é tratada como esquema antigo; uma nova busca completa
+  gera o cache, também porque o `cvss_max` de FR-016 exige as métricas
+  brutas (FR-014).
+- Q: Qual o `--output` padrão? → A: `dataset/processed/cve_cache_v2.json`
+  (FR-015).
+- Q: Como calcular `cvss_max` com mais de uma métrica? → A: maior
+  `baseScore` entre as fontes (NVD e CNA) da versão CVSS preferida (3.1,
+  senão 3.0, senão 2); `severity` da métrica escolhida (FR-016).
+- Q: Como escolher o CPE de um par? → A: percorrer o dicionário inteiro,
+  preferir parte `o` e usar `h` só sem `o`; mais de um CPE distinto casando
+  é ambiguidade registrada na entrada, e o par cai na busca por texto
+  (FR-018).
+- Analyze (2026-09-24), decisões do pesquisador: entradas novas com
+  `schema_version: 3`, exigido também pela rotulagem (I1; FR-014 e
+  005/FR-026); CPEs distintos são tuplas (parte, fabricante, produto)
+  diferentes, depois de generalizar a versão (A1, FR-018); metadados da
+  execução ao lado do cache (C2, FR-021).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -141,6 +168,54 @@ falha HTTP num par e inspecionando o log e o cache.
 
 ---
 
+### User Story 5 - Cache datado, sem evidência falsa e com CPE inequívoco (Priority: P1) *(Planejado)*
+
+O pesquisador gera o cache num path canônico, com a data de cada consulta,
+sem entradas velhas mascarando falhas e com o CPE escolhido sem
+ambiguidade; a banca sabe de quando é o retrato da NVD por trás de cada
+rótulo.
+
+**Why this priority**: o rótulo depende do cache (constituição, princípio
+II). Sem data não há reprodução (princípio V); entrada velha após falha,
+CPE ambíguo e `cvss_max` subestimado mudam rótulos sem aviso (TickTick
+T11).
+
+**Independent Test**: simular respostas da NVD (falha, várias métricas,
+várias páginas de CPE, CPEs ambíguos) e conferir o cache e o código de
+saída.
+
+**Acceptance Scenarios**:
+
+1. **Given** um par já em cache e `--force`, **When** a nova consulta
+   falha, **Then** a entrada do par é removida e a execução termina com
+   código diferente de 0. **Given** uma falha sem `--force`, **Then** a
+   execução também termina com código diferente de 0.
+2. **Given** uma consulta com sucesso, **When** a entrada é gravada,
+   **Then** ela tem `schema_version: 3` e `fetched_at` em ISO 8601 UTC.
+   **Given** uma entrada em cache com `schema_version` diferente de 3 e sem
+   `--force`, **When** o par é visitado, **Then** a execução é
+   interrompida com erro de esquema antigo.
+3. **Given** uma execução sem `--output`, **When** o cache é gravado,
+   **Then** o arquivo é `dataset/processed/cve_cache_v2.json`.
+4. **Given** uma CVE com métrica v3.1 da NVD 7.5 e da CNA 9.8, **When** a
+   CVE é gravada, **Then** `cvss_max=9.8` e `severity=CRITICAL`.
+5. **Given** um parquet sem `--label-from-path` (0 pares), **When** a busca
+   roda, **Then** ela falha com código diferente de 0. **Given** linhas com
+   fabricante ou modelo nulo, **Then** o log informa quantas foram
+   descartadas.
+6. **Given** um dicionário de CPE com o produto na segunda página, **When**
+   o CPE é resolvido, **Then** ele é encontrado. **Given** um produto só com
+   CPE de parte `h`, **Then** o CPE `h` é usado. **Given** várias versões
+   do mesmo produto `o`, **Then** não há ambiguidade. **Given** dois
+   produtos `o` distintos que casam o par, **Then** a entrada registra os
+   candidatos em `cpe_candidates` e usa a busca por texto.
+7. **Given** uma execução que grava o cache, **When** ela termina, **Then**
+   `cve_cache_v2.meta.json` ao lado do cache registra os argumentos, o
+   caminho e o SHA256 de `--features`, o commit do código, o início e o
+   fim da execução e as contagens de pares e falhas.
+
+---
+
 ### Edge Cases
 
 - O fluxo da linha de comando (pulo de par em cache, validação de schema,
@@ -149,7 +224,7 @@ falha HTTP num par e inspecionando o log e o cache.
   `plan.md`.
 - A busca não está registrada como comando instalado em `pyproject.toml`
   (`[project.scripts]`), ao contrário de `extract-features` e
-  `generate-labels`; roda só como script.
+  `generate-labels`; roda só como script. Registrar é FR-020 (Proposto).
 - O `--output` padrão é `dataset/cve_cache.json`, o cache v1, de esquema
   agregado (`cvss_max`, `cve_count_*`, `cve_total`, sem `schema_version`;
   336 entradas, medido em 2026-09-24). O artefato em uso é
@@ -157,7 +232,8 @@ falha HTTP num par e inspecionando o log e o cache.
   interrompe a execução com erro de schema antigo no primeiro par já em
   cache; com `--force`, os pares do parquet são regravados no esquema v2 e
   as outras 26 entradas v1 ficam, e o arquivo passa a misturar esquemas. O
-  `README.md` também usa os caminhos v1.
+  `README.md` também usa os caminhos v1. A correção é FR-015 (Planejado):
+  padrão `dataset/processed/cve_cache_v2.json`.
 - Os 43 pares `tp_link/*` do cache v1 (`dataset/cve_cache.json`) foram
   buscados com o termo antigo, antes da correção do alias, e têm
   `cve_total=0`. No `dataset/cve_cache_v2.json` as 43 entradas já têm
@@ -175,28 +251,31 @@ falha HTTP num par e inspecionando o log e o cache.
   sucesso (código de saída 0); a falha aparece só no log e no resumo
   (`Failed`). A rotulagem acusa o par ausente como erro
   (005/FR-003). Com `--force`, porém, a entrada anterior do par
-  permanece no cache sem marca de que a nova consulta falhou.
+  permanece no cache sem marca de que a nova consulta falhou. A correção é
+  FR-013 (Planejado).
 - Não há nova tentativa nem espera extra para limite de taxa da NVD
   (HTTP 403/503): o par vira falha. Exceções fora de erro HTTP, de conexão
   ou timeout (ex.: resposta JSON inválida) interrompem a execução; o cache
-  é gravado antes de sair.
+  é gravado antes de sair. Nova tentativa é FR-019 (Proposto).
 - Um parquet extraído sem `--label-from-path` tem `meta_brand` e
   `meta_model` nulos (001/FR-010): a busca encontra 0 pares e termina sem
   erro, com o aviso só no log de nível info. Linhas com fabricante ou
-  modelo nulo são descartadas sem contagem no log.
+  modelo nulo são descartadas sem contagem no log. A correção é FR-017
+  (Planejado).
 - A resolução de CPE lê só a primeira página (até 2000 produtos) do
   dicionário, aceita só CPE de parte `o` (sistema operacional/firmware) e
   usa o primeiro que coincide. Par cujo produto na NVD é só `h`
-  (hardware) cai na busca por texto.
+  (hardware) cai na busca por texto. A correção é FR-018 (Planejado).
 - A busca por texto (`source="keyword"`) casa o texto da CVE e pode trazer
   CVE de outro produto. A filtragem é da rotulagem, pelas
   `configurations` (`005-rotulagem-cve`, 005/FR-006 e 005/FR-007).
 - `cvss_max` de cada CVE é o `baseScore` da primeira métrica da versão
   CVSS preferida, não o máximo entre as fontes (NVD e CNA). Métrica v2 sem
-  `baseSeverity` recebe `MEDIUM`.
+  `baseSeverity` recebe `MEDIUM`. A correção é FR-016 (Planejado).
 - As entradas não registram a data da consulta. A NVD muda com o tempo;
   reproduzir um rótulo exige o arquivo de cache, e não há como saber a
-  data do retrato da NVD que ele contém.
+  data do retrato da NVD que ele contém. A correção é FR-014 (Planejado),
+  com uma nova busca completa.
 
 ## Requirements *(mandatory)*
 
@@ -264,6 +343,50 @@ falha HTTP num par e inspecionando o log e o cache.
   progresso (`[FETCH]`, `[SKIP]`, `[FAIL]`) e, em sucesso, o número de CVEs
   e o maior `cvss_max`; e, ao fim, o resumo com pares buscados, em cache,
   com falha e o total de CVEs.
+- **FR-013** [Planejado, TickTick T11]: Com `--force`, quando a nova
+  consulta de um par falha, o sistema DEVE remover a entrada anterior do
+  par. Com qualquer par com falha, com ou sem `--force`, a execução DEVE
+  terminar com código diferente de 0, depois de processar os demais pares
+  e gravar o cache. Complementa FR-008 quando implementado.
+- **FR-014** [Planejado, TickTick T11]: Cada entrada nova ou substituída
+  DEVE ter `schema_version: 3` e `fetched_at`, a data e hora da consulta à
+  NVD em ISO 8601 (UTC). A validação de FR-007 DEVE tratar como esquema
+  antigo toda entrada com `schema_version` diferente de 3. Amplia os
+  campos e substitui a versão 2 de FR-006 e FR-007 quando implementado; a
+  rotulagem passa a exigir 3 (005/FR-026).
+- **FR-015** [Planejado, TickTick T11]: O `--output` padrão DEVE ser
+  `dataset/processed/cve_cache_v2.json`. Substitui o padrão de FR-006
+  quando implementado.
+- **FR-016** [Planejado, TickTick T11]: O `cvss_max` de cada CVE DEVE ser o
+  maior `baseScore` entre as métricas de todas as fontes (NVD e CNA) da
+  versão CVSS preferida (3.1, senão 3.0, senão 2), e `severity` DEVE vir da
+  métrica escolhida (v2 sem severidade: `MEDIUM`; sem métrica: `0.0` e
+  `NONE`). Substitui a regra "primeira métrica" de FR-005 quando
+  implementado.
+- **FR-017** [Planejado, TickTick T11]: Um parquet do qual saem 0 pares
+  DEVE fazer a execução falhar com código diferente de 0 e mensagem que
+  cite `--label-from-path`. O log DEVE informar quantas linhas foram
+  descartadas por fabricante ou modelo nulo ou vazio. Complementa FR-001
+  quando implementado.
+- **FR-018** [Planejado, TickTick T11]: A resolução de CPE DEVE percorrer
+  todas as páginas do dicionário, preferir CPE de parte `o` e usar parte
+  `h` só quando não há `o`. Dois CPEs são distintos quando a tupla (parte,
+  fabricante, produto) difere depois de generalizar a versão; versões do
+  mesmo produto e um par `o`/`h` do mesmo produto não são ambiguidade.
+  Mais de um CPE distinto na parte escolhida DEVE ser ambiguidade: o par
+  usa a busca por texto. Toda entrada DEVE ter `cpe_candidates` (lista dos
+  CPEs distintos com ambiguidade; vazia sem ela). Substitui a regra
+  "primeira página, só `o`, primeiro match" de FR-003 quando implementado.
+- **FR-019** [Proposto, TickTick T11]: O sistema DEVE tentar de novo, com
+  espera crescente, as respostas 403 e 503 da NVD, e tratar JSON inválido
+  ou resposta incompleta como falha do par, sem interromper a execução.
+- **FR-020** [Proposto, TickTick T11]: A busca DEVE estar registrada como
+  comando instalado (`fetch-cves`) em `pyproject.toml`.
+- **FR-021** [Planejado, TickTick T11]: Ao gravar o cache, o sistema DEVE
+  gravar ao lado, com o mesmo nome-base (`<nome>.meta.json`), os
+  argumentos da CLI, o caminho e o SHA256 de `--features`, o commit do
+  código, o início e o fim da execução e as contagens de pares buscados,
+  pulados e com falha. Com `--dry-run`, nada é gravado.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -271,9 +394,12 @@ falha HTTP num par e inspecionando o log e o cache.
   `meta_brand`/`meta_model` da tabela de features. Chave do cache. Não é
   feature (constituição, princípio III).
 - **Entrada do cache**: resultado da consulta de um par, com origem
-  (`source`), forma NVD, CPE resolvido e lista de CVEs.
+  (`source`), forma NVD, CPE resolvido e lista de CVEs. Planejado:
+  `schema_version: 3`, `fetched_at` e `cpe_candidates` (FR-014, FR-018).
 - **Registro de CVE**: `id`, `cvss_max`, `severity` e `configurations`
   originais da NVD, que a rotulagem avalia por versão.
+- **Metadados da busca** (Planejado, FR-021): `<nome>.meta.json` com
+  parâmetros, entrada, commit, tempos e contagens da execução.
 - **CPE generalizado**: nome CPE 2.3 oficial do firmware do par, com
   versão e campos seguintes em `*`.
 
@@ -292,6 +418,17 @@ falha HTTP num par e inspecionando o log e o cache.
 - **SC-003**: 100% das entradas registram a origem: `source="cpe"` com
   `cpe_name` preenchido ou `source="keyword"` com `cpe_name` nulo. Medido
   em 2026-09-24 no `dataset/cve_cache_v2.json`: 115 e 195 entradas.
+- **SC-004** [Planejado, TickTick T11]: 100% das entradas do cache novo
+  têm `fetched_at`; o cache novo vem de uma busca completa.
+- **SC-005** [Planejado, TickTick T11]: 100% das execuções com algum par
+  com falha terminam com código diferente de 0, e zero entradas anteriores
+  ficam no cache depois de falha com `--force`.
+- **SC-006** [Planejado, TickTick T11]: os testes de FR-016 e FR-018
+  (T046, T049) passam, e na busca completa (T050) 100% dos pares com
+  ambiguidade têm `cpe_candidates` não vazio.
+- **SC-007** [Planejado, TickTick T11]: rodar de novo a busca com os
+  argumentos e a entrada registrados em `cve_cache_v2.meta.json` consulta os
+  mesmos pares.
 
 ## Assumptions
 

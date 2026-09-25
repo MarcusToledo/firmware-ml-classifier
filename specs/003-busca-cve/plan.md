@@ -4,7 +4,7 @@
 
 **Input**: Feature specification from `/specs/003-busca-cve/spec.md`
 
-**Note**: plano retroativo. Descreve o código que já existe em `master`; não há Phase 0 (`research.md`), `contracts/` nem `quickstart.md`. O `tasks.md` é retroativo: registra a verificação de cada FR e cenário e as lacunas de teste.
+**Note**: plano retroativo. Descreve o código que já existe em `master`; não há Phase 0 (`research.md`), `contracts/` nem `quickstart.md`. O `tasks.md` é retroativo: registra a verificação de cada FR e cenário e as lacunas de teste. As linhas `[Planejado]` (FR-013 a FR-018, TickTick T11) descrevem módulo e teste previstos; o `tasks.md` as decompõe na fase "Implementação planejada". FR-019 e FR-020 são `[Proposto]` e não têm task.
 
 ## Summary
 
@@ -22,7 +22,9 @@ padrão (`urllib`, `json`); NVD API 2.0 (endpoints `cves/2.0` e
 `cpes/2.0`), única dependência de rede do pipeline
 
 **Storage**: arquivo JSON: `dataset/cve_cache_v2.json` (artefato em uso);
-`--output` padrão `dataset/cve_cache.json` (v1)
+`--output` padrão `dataset/cve_cache.json` (v1). Planejado:
+`dataset/processed/cve_cache_v2.json`, gerado por busca completa (FR-014,
+FR-015)
 
 **Testing**: pytest, com a NVD simulada por `unittest.mock.patch`
 
@@ -47,11 +49,11 @@ página; gravação do cache a cada 10 pares buscados
 |Princípio|Resultado|Evidência|
 |---|---|---|
 |I. Somente análise estática|Não se aplica|A etapa não lê binário; consulta só metadados na NVD|
-|II. Rótulo exclusivamente por CVE|Passa|Produz o cache do qual sai o rótulo; par com falha de rede não ganha entrada (`scripts/fetch_cves.py::main`), então a ausência chega à rotulagem como erro. Sem teste do ramo de falha (ver "Sem verificação")|
+|II. Rótulo exclusivamente por CVE|Passa parcialmente|Produz o cache do qual sai o rótulo; par com falha de rede não ganha entrada (`scripts/fetch_cves.py::main`), então a ausência chega à rotulagem como erro. Sem teste do ramo de falha (ver "Sem verificação"). Com `--force`, a entrada antiga sobrevive à falha: correção Planejado em FR-013|
 |III. Sem vazamento|Passa|`scripts/fetch_cves.py::main` lê só `meta_brand`/`meta_model` e escreve só o cache; nada volta ao vetor de features. Guarda do vetor em `tests/test_pipeline_extraction.py::test_classifier_features_exclude_cve_and_identity_fields` (001)|
 |IV. Modelos simples|Não se aplica|Sem modelo nesta etapa|
-|V. Reprodutibilidade|Passa parcialmente|Ordem de pares determinística (`tests/test_fetch_cves.py::test_extract_pairs_sorted`); parâmetros por CLI. Mas a entrada não registra a data da consulta à NVD, e o `--output` padrão (v1) não é o artefato em uso, sem registro versionado do comando que gerou o v2|
-|VI. Firmware não confiável|Passa parcialmente|Falha de rede por par vai para log de erro e o par fica fora do cache (`scripts/fetch_cves.py::main`). Com `--force`, a entrada anterior sobrevive à falha sem marca no artefato; parquet sem `meta_brand`/`meta_model` resulta em 0 pares sem erro|
+|V. Reprodutibilidade|Passa parcialmente|Ordem de pares determinística (`tests/test_fetch_cves.py::test_extract_pairs_sorted`); parâmetros por CLI. Mas a entrada não registra a data da consulta à NVD, o `--output` padrão (v1) não é o artefato em uso e não há registro versionado do comando que gerou o v2. Correção Planejado: FR-014 (data), FR-015 (path) e FR-021 (metadados da execução ao lado do cache). Ver Complexity Tracking|
+|VI. Firmware não confiável|Violação herdada|Falha de rede por par vai para log de erro e o par fica fora do cache (`scripts/fetch_cves.py::main`). Mas, com `--force`, a entrada anterior sobrevive à falha sem marca no artefato, e um parquet sem `meta_brand`/`meta_model` resulta em 0 pares sem erro, com linhas descartadas sem contagem. Correção Planejado: FR-013 e FR-017. Ver Complexity Tracking|
 |VII. Integridade científica|Passa|Todo FR tem módulo e teste abaixo ou aparece em "Sem verificação"; números medidos citam data e artefato|
 
 ## Project Structure
@@ -99,6 +101,15 @@ esta spec é dona só do módulo acima.
 |FR-010|US4|`scripts/fetch_cves.py::_build_headers`, `DEFAULT_DELAY_NO_KEY`, `DEFAULT_DELAY_WITH_KEY`, `main`|—|
 |FR-011|US1|`scripts/fetch_cves.py::main`|—|
 |FR-012|US4|`scripts/fetch_cves.py::main`|—|
+|FR-013 [Planejado, TickTick T11]|US5|previsto: `scripts/fetch_cves.py::main` (remoção da entrada com `--force` e código de saída)|previsto: `tests/test_fetch_cves.py` (US5.1, com a NVD simulada)|
+|FR-014 [Planejado, TickTick T11]|US5|previsto: `scripts/fetch_cves.py::fetch_cves_for_pair` (`schema_version: 3`, `fetched_at`), `main` (validação de esquema)|previsto: `tests/test_fetch_cves.py` (US5.2)|
+|FR-015 [Planejado, TickTick T11]|US5|previsto: `scripts/fetch_cves.py::main` (padrão de `--output`)|previsto: `tests/test_fetch_cves.py` (US5.3)|
+|FR-016 [Planejado, TickTick T11]|US5|previsto: `scripts/fetch_cves.py::extract_cvss`, `severity_bucket`|previsto: `tests/test_fetch_cves.py` (US5.4; teste novo com duas fontes na mesma versão)|
+|FR-017 [Planejado, TickTick T11]|US5|previsto: `scripts/fetch_cves.py::main` (falha com 0 pares), `extract_pairs` (contagem de descartes)|previsto: `tests/test_fetch_cves.py` (US5.5)|
+|FR-018 [Planejado, TickTick T11]|US5|previsto: `scripts/fetch_cves.py::resolve_cpe_name`, `_fetch_cpe_page` (paginação, parte `h`, tupla de distinção, `cpe_candidates`), `fetch_cves_for_pair`|previsto: `tests/test_fetch_cves.py` (US5.6)|
+|FR-019 [Proposto, TickTick T11]|—|—|— (Proposto: sem task)|
+|FR-020 [Proposto, TickTick T11]|—|—|— (Proposto: sem task)|
+|FR-021 [Planejado, TickTick T11]|US5|previsto: `scripts/fetch_cves.py::main`, `save_cache` (gravação de `<nome>.meta.json`)|previsto: `tests/test_fetch_cves.py` (US5.7)|
 
 ### Sem verificação
 
@@ -133,6 +144,8 @@ Ficam no módulo desta spec, mas o requisito pertence a outra:
 
 |Violação|Justificativa|Mitigação pendente|
 |---|---|---|
-|FR-006: o `--output` padrão aponta para o cache v1 e `--force` pode produzir um arquivo de esquemas mistos|O caminho padrão histórico foi mantido, enquanto o artefato v2 em uso tem outro nome|Alterar o padrão ou migrar o cache de forma atômica; defeito já registrado no `TODO.md` para 003/FR-006|
-|Princípio II: com `--force`, uma falha de rede preserva a entrada anterior sem indicar que a nova consulta falhou|A execução retomável evita perder evidência já gravada, mas o artefato pode aparentar uma consulta atual bem-sucedida|Registrar a falha no artefato ou invalidar a entrada anterior; defeito já registrado no `TODO.md` para 003/FR-008|
-|Princípio V: as entradas não registram a data da consulta à NVD|O código atual preserva o retrato da NVD, mas não permite datá-lo sem evidência externa|Persistir a data da consulta por entrada; defeito já registrado no `TODO.md` para 003/princípio V|
+|FR-006: o `--output` padrão aponta para o cache v1 e `--force` pode produzir um arquivo de esquemas mistos|O caminho padrão histórico foi mantido, enquanto o artefato v2 em uso tem outro nome|FR-015 [Planejado, TickTick T11]: padrão `dataset/processed/cve_cache_v2.json`|
+|Princípio II: com `--force`, uma falha de rede preserva a entrada anterior sem indicar que a nova consulta falhou|A execução retomável evita perder evidência já gravada, mas o artefato pode aparentar uma consulta atual bem-sucedida|FR-013 [Planejado, TickTick T11]: remover a entrada e sair com código ≠ 0|
+|Princípio V: as entradas não registram a data da consulta à NVD|O código atual preserva o retrato da NVD, mas não permite datá-lo sem evidência externa|FR-014 [Planejado, TickTick T11]: `fetched_at` obrigatório e busca completa|
+|Princípio VI: parquet sem `meta_brand`/`meta_model` gera 0 pares e a execução termina sem erro; linhas com identidade nula são descartadas sem contagem|Herdada de `scripts/fetch_cves.py::extract_pairs` e `main`. Achado no analyze de 2026-09-24 (C1)|FR-017 [Planejado, TickTick T11]: falhar com 0 pares e contar descartes|
+|Princípio V: não há registro versionado do comando e da entrada que geraram o cache|Herdada de `scripts/fetch_cves.py::main`. Achado no analyze de 2026-09-24 (C2)|FR-021 [Planejado, TickTick T11]: `<nome>.meta.json` ao lado do cache|

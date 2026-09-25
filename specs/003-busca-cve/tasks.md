@@ -4,10 +4,11 @@
 
 **Nota**: tasks retroativas. O código já existe em `master`; cada task
 `[x]` registra uma verificação feita em 2026-09-24 (FR → módulo → teste ou
-cenário conferido). Tasks `[ ]` são lacunas de teste ainda abertas,
-espelhadas no `TODO.md`.
+cenário conferido). Tasks `[ ]` das fases 1 a 5 são lacunas de teste ainda
+abertas, espelhadas no `TODO.md`. A Phase 6 decompõe os FRs Planejado
+(TickTick T11); FR-019 e FR-020 são Proposto e não têm task.
 
-## Format: `[ID] [Story] Descrição`
+## Format: `[ID] [P?] [Story] Descrição`
 
 ## Phase 1: User Story 1 - Cache de CVE por par, retomável (Priority: P1)
 
@@ -60,7 +61,7 @@ espelhadas no `TODO.md`.
 ## Phase 5: Lacunas de teste
 
 - [ ] T029 [US1] FR-001 — leitura seletiva de `meta_brand` e `meta_model` via `--features`; teste sugerido em `tests/test_fetch_cves.py`
-- [ ] T030 [US2] FR-003 — filtro de CPE de parte `o` e limite à primeira página do dicionário; teste sugerido em `tests/test_fetch_cves.py`
+- [ ] T030 [US2] FR-003 — filtro de CPE de parte `o` (o limite à primeira página deixa de valer com FR-018, T048); teste sugerido em `tests/test_fetch_cves.py`
 - [ ] T031 [US2] FR-004 — paginação de CVEs com mais de uma página; teste sugerido em `tests/test_fetch_cves.py`
 - [ ] T032 [US2] FR-005 — fallback `MEDIUM` para CVSS v2 sem `baseSeverity`; teste sugerido em `tests/test_fetch_cves.py`
 - [ ] T033 [US1] FR-006 — chave do par, forma NVD, persistência e preservação de outras entradas pelo CLI; teste sugerido em `tests/test_fetch_cves.py`
@@ -71,6 +72,31 @@ espelhadas no `TODO.md`.
 - [ ] T038 [US1] FR-011 — `--dry-run` sem leitura ou escrita do cache nem acesso à rede; teste sugerido em `tests/test_fetch_cves.py`
 - [ ] T039 [US4] FR-012 — logs de carregamento, progresso, falha, sucesso e resumo; teste sugerido em `tests/test_fetch_cves.py`
 
+## Phase 6: Implementação planejada (TickTick T11)
+
+**Goal**: Cache datado, sem entrada velha após falha, com `cvss_max` pelo
+maior score, CPE inequívoco, path canônico e falha explícita com 0 pares.
+
+- [ ] T040 [US5] FR-013 — Remover a entrada anterior do par quando a consulta com `--force` falha e terminar com código ≠ 0 quando algum par falhou, depois de gravar o cache, em `scripts/fetch_cves.py::main`
+- [ ] T041 [US5] FR-013 — Cenário US5.1: testes com a NVD simulada (falha com e sem `--force`, código de saída) em `tests/test_fetch_cves.py`
+- [ ] T042 [US5] FR-014 — Gravar `schema_version: 3` e `fetched_at` (ISO 8601, UTC) em `scripts/fetch_cves.py::fetch_cves_for_pair` e tratar como esquema antigo toda entrada com versão diferente de 3 em `main`
+- [ ] T043 [US5] FR-014 — Cenário US5.2: testes de `schema_version: 3`, `fetched_at` e de entrada v2 recusada em `tests/test_fetch_cves.py`
+- [ ] T044 [US5] FR-015 — Mudar o padrão de `--output` para `dataset/processed/cve_cache_v2.json` em `scripts/fetch_cves.py::main`, com teste do cenário US5.3 em `tests/test_fetch_cves.py`
+- [ ] T045 [US5] FR-016 — Maior `baseScore` entre as fontes da versão preferida e `severity` da métrica escolhida em `scripts/fetch_cves.py::extract_cvss`
+- [ ] T046 [US5] FR-016 — Cenário US5.4: acrescentar teste com duas fontes na mesma versão em `tests/test_fetch_cves.py`
+- [ ] T047 [US5] FR-017 — Falhar com 0 pares (mensagem com `--label-from-path`) em `scripts/fetch_cves.py::main` e contar no log as linhas descartadas por identidade nula em `extract_pairs` (que continua devolvendo lista vazia), com teste do cenário US5.5 em `tests/test_fetch_cves.py`
+- [ ] T048 [US5] FR-018 — Percorrer todas as páginas do dicionário de CPE, preferir `o`, usar `h` sem `o`, distinguir CPEs pela tupla (parte, fabricante, produto) e gravar `cpe_candidates` em toda entrada (caindo na busca por texto com ambiguidade), em `scripts/fetch_cves.py::resolve_cpe_name`, `_fetch_cpe_page` e `fetch_cves_for_pair`
+- [ ] T049 [US5] FR-018 — Cenário US5.6: testes de segunda página, parte `h`, versões do mesmo produto sem ambiguidade e ambiguidade real em `tests/test_fetch_cves.py`
+- [ ] T050 [US5] FR-013, FR-014, FR-015, FR-016, FR-017, FR-018, FR-021 — Rodar a busca completa sobre as features reextraídas (`001-extracao-features`, T050) gerando `dataset/processed/cve_cache_v2.json` e o `.meta.json`; medir SC-004 (100% com `fetched_at`) e SC-006 (pares com ambiguidade com `cpe_candidates` não vazio); registrar no `TODO.md` a data, o número de pares, de CVEs, de pares com `cpe_candidates` e com parte `h`, e as falhas
+- [ ] T051 [US5] FR-021 — Gravar `<nome>.meta.json` ao lado do cache (argumentos, caminho e SHA256 de `--features`, commit, início e fim, contagens), sem gravar com `--dry-run`, em `scripts/fetch_cves.py::main` e `save_cache`
+- [ ] T052 [US5] FR-021 — Cenário US5.7: teste do conteúdo dos metadados e de `--dry-run` sem gravação em `tests/test_fetch_cves.py`
+
 ## Dependencies & Execution Order
 
 - Lacunas são independentes entre si; cada uma só depende do módulo citado.
+- Phase 6: todas as implementações editam `scripts/fetch_cves.py` e todos
+  os testes `tests/test_fetch_cves.py`: nenhuma task desta fase roda em
+  paralelo. Ordem sugerida: T047, T044, T042, T045, T048, T040, T051, com
+  o teste de cada uma logo depois. T050 depende de todas e de `001/T050`
+  (pares da tabela reextraída); os rótulos da 005 (T056) são regerados
+  depois de T050, lendo o cache novo por `--cves`.

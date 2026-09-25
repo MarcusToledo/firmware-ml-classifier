@@ -173,7 +173,8 @@ diverge da versão do path e com linhas duplicadas.
    linha com `meta_path` nulo, **When** a tabela é carregada, **Then** a
    rotulagem falha antes de consultar o cache.
 5. **Given** uma entrada do cache sem `schema_version: 2` ou sem lista
-   `cves`, **When** ela é consultada, **Then** a rotulagem falha.
+   `cves`, **When** ela é consultada, **Then** a rotulagem falha. Com
+   FR-026 (Planejado), a versão exigida passa a ser 3.
 6. **Given** uma tabela de features cuja `meta_version_source` difere da
    origem reinferida de `meta_path`, **When** a rotulagem roda, **Then**
    ela falha citando o `firmware_id`, o `meta_path` e as duas origens.
@@ -297,8 +298,9 @@ rótulos e os metadados gravados.
 - O recall de `sem_cve_conhecida` depende do cache por modelo de
   `003-busca-cve` (`003/FR-006`): uma entrada vazia é evidência negativa
   válida, mesmo quando um modelo irmão tem CVEs. Os 43 pares `tp_link/*`
-  buscados antes da correção do alias de fabricante precisam de nova busca
-  antes de rótulos confiáveis (`TODO.md`).
+  do cache v1 foram buscados antes da correção do alias de fabricante; no
+  `cve_cache_v2.json` já têm a grafia corrigida, e a busca completa de
+  `003-busca-cve` (tarefa 003/T050) gera o cache novo de todos os pares.
 - A agregação usa `firmware_id`, que é o SHA256 só do prefixo lido
   (`001/FR-004`). Dois binários diferentes com o mesmo prefixo seriam
   tratados como aliases e receberiam o mesmo rótulo. Não há colisão no
@@ -457,6 +459,10 @@ rótulos e os metadados gravados.
 - **FR-025** [Proposto, TickTick T04]: Sem versão, a CVE sem
   `configurations` DEVE ser aplicável, depois de validar a regra numa
   amostra auditada manualmente contra advisories do fabricante.
+- **FR-026** [Planejado, TickTick T04]: A rotulagem DEVE aceitar só
+  entradas de cache com `schema_version: 3` (com `fetched_at`,
+  `003/FR-014`) e falhar, citando o par, com qualquer outra. Substitui a
+  exigência de versão 2 de FR-003 quando implementado.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -507,7 +513,8 @@ rótulos e os metadados gravados.
   a rotulagem falha.
 - O cache segue o formato `schema_version: 2` de `003-busca-cve`
   (`003/FR-006`), com cada CVE trazendo `id`, `cvss_max`, `severity` e
-  `configurations` (`003/FR-005`).
+  `configurations` (`003/FR-005`). Com `003/FR-014` e FR-026 (Planejado),
+  o formato exigido passa a ser `schema_version: 3`.
 - A versão e sua origem seguem a regra de `004-versao-firmware`
   (`004/FR-004`, `004/FR-005`).
 - O treino, ainda não implementado, junta rótulos e features por

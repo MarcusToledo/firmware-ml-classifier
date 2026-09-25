@@ -33,8 +33,16 @@
 ## Requisitos não funcionais
 
 - [x] CHK014 Os requisitos quantificam timeout, intervalo de persistência, atraso padrão, paginação e uso da chave de API para permitir reprodução objetiva? [Spec §FR-004, Spec §FR-009, Spec §FR-010]
-- [ ] CHK015 A falha de uma nova consulta com `--force` impede que evidência anterior pareça atual, conforme o princípio II? [Conflict, Spec §FR-008] — pendente: TODO.md 003/FR-008
-- [ ] CHK016 O cache registra informação suficiente para datar o retrato mutável da NVD, conforme o princípio V? [Gap, Spec §SC-001–SC-003] — pendente: TODO.md 003/princípio V
+- [ ] CHK015 A falha de uma nova consulta com `--force` impede que evidência anterior pareça atual, conforme o princípio II? [Conflict, Spec §FR-008] — pendente: FR-013 (Planejado, T11) remove a entrada e sai com código ≠ 0; satisfeito só depois da implementação
+- [ ] CHK016 O cache registra informação suficiente para datar o retrato mutável da NVD, conforme o princípio V? [Gap, Spec §SC-001–SC-003] — pendente: FR-014 (Planejado, T11) exige `fetched_at`; satisfeito só depois da implementação e da busca completa
+
+## Requisitos planejados (escopo restante, 2026-09-24)
+
+- [x] CHK017 Cada FR Planejado cita a TickTick de origem, tem linha prevista na matriz do `plan.md` e ao menos uma task na fase "Implementação planejada"; os FRs Proposto estão marcados sem task? [Traceability] [Spec §FR-013–FR-021]
+- [x] CHK018 Cada FR Planejado diz qual FR Implementado ele substitui, complementa ou amplia (FR-001, FR-003, FR-005, FR-006, FR-007, FR-008)? [Consistency] [Spec §FR-013–FR-018]
+- [x] CHK019 Cada FR Planejado tem cenário observável em User Story 5 citado por uma task de teste? [Coverage] [Spec §US5.1–US5.7]
+- [x] CHK020 O efeito das mudanças nos rótulos (nova busca completa, `schema_version: 3` exigido pela 005, `cvss_max` pelo maior score, CPE `h`) está explícito e ligado à regeneração da 005? [Dependencies] [Spec §FR-014] [Spec §FR-016] [Spec §FR-018] [005/FR-026]
+- [x] CHK021 A ambiguidade de CPE tem critério objetivo (tupla parte, fabricante, produto) que não transforma versões do mesmo produto em ambiguidade? [Clarity] [Spec §FR-018] [Spec §US5.6]
 
 ## Notes
 

@@ -121,6 +121,15 @@
       sequência alfabética). `libssl_version_age` (PR-09) fica como spec
       futura. Relatório em
       `.docs/brainstorming/validacao-rastreabilidade/002-planejado.md`.
+- [x] Task 4, etapa 5, spec 003 (Misto): FR-013 a FR-018 e FR-021
+      Planejado, FR-019 e FR-020 Proposto (TickTick T11); US5; clarify com
+      5 perguntas; Phase 6 (T040-T052, com busca completa na NVD em T050);
+      analyze com 1 CRITICAL (linha do princípio VI no Complexity Tracking)
+      e 3 HIGH decididos: `schema_version: 3` exigido também pela 005
+      (005/FR-026), CPE distinto pela tupla (parte, fabricante, produto),
+      metadados da busca (CR-29). PR-05 corrigido para a 005 (FR-024 regra
+      i Planejado, FR-025 regra ii Proposto, TickTick T04). Relatório em
+      `.docs/brainstorming/validacao-rastreabilidade/003-planejado.md`.
 
 ### Pending
 - [ ] T07: limpar os campos de feature não utilizados (Doc2Vec desligado por

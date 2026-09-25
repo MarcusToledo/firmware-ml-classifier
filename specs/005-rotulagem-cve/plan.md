@@ -4,7 +4,7 @@
 
 **Input**: Feature specification from `/specs/005-rotulagem-cve/spec.md`
 
-**Note**: plano retroativo. Descreve o código que já existe em `master`; não há Phase 0 (`research.md`), `contracts/` nem `quickstart.md`. O `tasks.md` é retroativo: registra a verificação de cada FR e cenário e as lacunas de teste. As linhas `[Planejado]` (FR-018 a FR-024, TickTick T04) descrevem módulo e teste previstos; o `tasks.md` as decompõe na fase "Implementação planejada". FR-025 é `[Proposto]` e não tem task.
+**Note**: plano retroativo. Descreve o código que já existe em `master`; não há Phase 0 (`research.md`), `contracts/` nem `quickstart.md`. O `tasks.md` é retroativo: registra a verificação de cada FR e cenário e as lacunas de teste. As linhas `[Planejado]` (FR-018 a FR-024 e FR-026, TickTick T04) descrevem módulo e teste previstos; o `tasks.md` as decompõe na fase "Implementação planejada". FR-025 é `[Proposto]` e não tem task.
 
 ## Summary
 
@@ -124,6 +124,7 @@ specs são chamados aqui: `pipeline/feature_extraction.py::infer_brand_model_lab
 |FR-023 [Planejado, TickTick T04]|US6|previsto: `scripts/generate_labels.py::_aggregate_firmware_label`|previsto: `tests/test_generate_labels.py` (aliases com versões diferentes)|
 |FR-024 [Planejado, TickTick T04]|US2|previsto: `src/labeling/cve_labels.py::applicable_cves_for_version` (regra de produto-alvo antes do atalho sem versão), `_evaluate_cve`|previsto: `tests/test_cve_labels.py` (US2.7; ajusta `::test_missing_version_is_indeterminate` para CVE que cita o produto-alvo)|
 |FR-025 [Proposto, TickTick T04]|—|—|— (Proposto: sem task)|
+|FR-026 [Planejado, TickTick T04]|US4|previsto: `scripts/generate_labels.py::_lookup_cve_entry` (exige `schema_version: 3`)|previsto: `tests/test_generate_labels.py` (US4.5 com versão 3; fixtures de cache migradas para 3)|
 
 ### Sem verificação
 

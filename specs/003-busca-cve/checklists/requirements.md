@@ -46,7 +46,11 @@
   CPE, CVSS e NVD são mantidos.
 - "Success criteria are technology-agnostic": SC-001 a SC-003 citam campos
   e artefatos do contrato, não tecnologia.
-- Spec retroativa (Status Implementado): todos os FRs levam a tag
-  `[Implementado]`; limitações conhecidas ficam em Edge Cases, não em FRs.
+- (Histórico, vale para FR-001 a FR-012) Spec retroativa: os FRs levavam a
+  tag `[Implementado]`; limitações conhecidas ficavam em Edge Cases.
+- Status Misto (2026-09-24, escopo restante do TCC): FR-013 a FR-018,
+  FR-021 e SC-004 a SC-007 `[Planejado, TickTick T11]`; FR-019 e FR-020
+  `[Proposto, TickTick T11]`. Os itens acima continuam passando para os
+  FRs novos.
 - User Story 4 não tem teste automatizado; os cenários vêm do código e as
   partes sem teste estão em "Sem verificação" no `plan.md`.

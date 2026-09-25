@@ -40,6 +40,30 @@ misturar os dois esquemas.
 - A mesma CVE pode aparecer em várias entradas; não há deduplicação entre
   pares.
 
+## Planejado (TickTick T11)
+
+Esquema previsto; nada disso existe no código atual.
+
+|Campo|Tipo|Significado|FR|
+|---|---|---|---|
+|`schema_version`|int|`3` em toda entrada nova ou substituída; outro valor é esquema antigo na busca (FR-007) e na rotulagem (005/FR-026)|FR-014|
+|`fetched_at`|texto (ISO 8601, UTC)|data e hora da consulta à NVD; obrigatório com `schema_version: 3`|FR-014|
+|`cpe_candidates`|lista de texto|sempre presente; CPEs distintos (tupla parte, fabricante, produto) quando houve ambiguidade, e então `source=keyword`; vazia sem ambiguidade|FR-018|
+|`cpe_name`|texto ou nulo|passa a aceitar parte `h` quando não há `o`|FR-018|
+|`cvss_max` (por CVE)|float|maior `baseScore` entre as fontes (NVD e CNA) da versão CVSS preferida; `severity` da métrica escolhida|FR-016|
+
+### `<nome>.meta.json` (FR-021)
+
+Ao lado do cache (no padrão, `dataset/processed/cve_cache_v2.meta.json`):
+argumentos da CLI, caminho e SHA256 de `--features`, commit do código,
+início e fim da execução e contagens de pares buscados, pulados e com
+falha. Não é gravado com `--dry-run`.
+
+Com FR-013, falha com `--force` remove a entrada anterior do par. O cache
+novo fica em `dataset/processed/cve_cache_v2.json` (FR-015) e vem de uma
+busca completa; `005-rotulagem-cve` o lê por `--cves` e exige
+`schema_version: 3` (005/FR-026).
+
 ## Artefatos existentes
 
 Medido em 2026-09-24, só leitura.

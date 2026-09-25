@@ -103,6 +103,8 @@ conferida e aliases com CVEs por alias.
 - [ ] T057 [US6] FR-018 — Verificar SC-007: rodar de novo a rotulagem com os caminhos e SHA256 registrados em `dataset/processed/labels_v2.meta.json` e comparar tabela e JSONL (0 diferenças), registrando o resultado no `TODO.md`
 - [ ] T058 [US2] FR-024 — Sem versão, aplicar a regra de produto-alvo de FR-006 antes de marcar a CVE indeterminada em `src/labeling/cve_labels.py::applicable_cves_for_version`
 - [ ] T059 [US2] FR-024 — Cenário US2.7: teste de CVE que só cita outros produtos para firmware sem versão, ajustando `test_missing_version_is_indeterminate`, em `tests/test_cve_labels.py`
+- [ ] T060 [US4] FR-026 — Exigir `schema_version: 3` em `scripts/generate_labels.py::_lookup_cve_entry`
+- [ ] T061 [US4] FR-026 — Migrar as fixtures de cache para `schema_version: 3` com `fetched_at` e testar a recusa da versão 2 em `tests/test_generate_labels.py`
 
 Fora do Spec Kit: o item "Documentar a limitação na metodologia" da
 TickTick T04 é texto do TCC (decisão PR-10 do mapa de escopo restante).
@@ -115,5 +117,6 @@ TickTick T04 é texto do TCC (decisão PR-10 do mapa de escopo restante).
   T055 editam o mesmo arquivo de teste e não rodam em paralelo; T052 vem
   antes, porque atualiza as fixtures usadas pelas outras. T054 depende de
   T053. T058 → T059 (T050 e T059 editam `tests/test_cve_labels.py`, em
-  série). T056 depende de T047-T055, T058, `001/T050` e `003/T050`; T057
-  depende de T056.
+  série). T060 → T061 (T061 edita `tests/test_generate_labels.py` junto de
+  T048, T052 e T055, em série). T056 depende de T047-T055, T058, T060,
+  `001/T050` e `003/T050`; T057 depende de T056.
