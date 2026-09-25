@@ -105,6 +105,14 @@
       constantes dos sub-scores vão para o YAML (FR-014, CR-27, item novo na
       T11). Relatório em
       `.docs/brainstorming/validacao-rastreabilidade/006-planejado.md`.
+- [x] Task 4, etapa 5, spec 001 (Misto): FR-014 a FR-016 e FR-019
+      Planejado (TickTick T11), FR-017 Proposto, FR-018 Planejado (TickTick
+      T07); US5; clarify com 5 perguntas; Phase 7 (T038-T052); analyze com 1
+      CRITICAL e 4 HIGH, todos decididos pelo pesquisador: `max_bytes`
+      obrigatório (FR-019, CR-28), binwalk ≥ 2.3.4 isolado (CVE-2022-4510),
+      strings em streaming, detectores sem o limite do documento, timeout
+      como falha. Relatório em
+      `.docs/brainstorming/validacao-rastreabilidade/001-planejado.md`.
 
 ### Pending
 - [ ] T07: limpar os campos de feature não utilizados (Doc2Vec desligado por

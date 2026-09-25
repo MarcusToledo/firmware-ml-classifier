@@ -42,5 +42,9 @@
   técnicos como SHA256 e entropia de Shannon são mantidos.
 - "Success criteria are technology-agnostic": SC-003 cita
   `meta_read_ok`, que é coluna do contrato, não tecnologia.
-- Spec retroativa (Status Implementado): todos os FRs levam a tag
-  `[Implementado]`; limitações conhecidas ficam em Edge Cases, não em FRs.
+- (Histórico, vale para FR-001 a FR-013) Spec retroativa: os FRs levavam a
+  tag `[Implementado]`; limitações conhecidas ficavam em Edge Cases.
+- Status Misto (2026-09-24, escopo restante do TCC): FR-014 a FR-016 e
+  FR-019 `[Planejado, TickTick T11]`, FR-017 `[Proposto, TickTick T11]` e
+  FR-018 `[Planejado, TickTick T07]`, com SC-004 a SC-007. Os itens acima
+  continuam passando para os FRs novos.

@@ -34,7 +34,17 @@
 
 - [x] CHK014 Cada FR implementado está ligado a user story, módulo, evidência de teste e, quando parcial, a uma lacuna única? [Traceability] [Spec §FR-001]
 - [x] CHK015 A lacuna de determinismo entre processos está explicitamente registrada sem alegar evidência inexistente? [Gap] [Spec §FR-012]
-- [ ] CHK016 O requisito de fallback do Binwalk é compatível com a exigência de tornar falhas de firmware visíveis no artefato ou na exceção? [Conflict] [Spec §FR-007] — pendente: TODO.md 001/FR-007
+- [ ] CHK016 O requisito de fallback do Binwalk é compatível com a exigência de tornar falhas de firmware visíveis no artefato ou na exceção? [Conflict] [Spec §FR-007] — pendente: FR-014 (Planejado, T11) define Binwalk obrigatório e `meta_binwalk_status`; satisfeito só depois da implementação
+
+## Requisitos planejados (escopo restante, 2026-09-24)
+
+- [x] CHK017 Cada FR Planejado cita a TickTick de origem, tem linha prevista na matriz do `plan.md` e ao menos uma task na fase "Implementação planejada"; o FR Proposto está marcado sem task? [Traceability] [Spec §FR-014–FR-019]
+- [x] CHK018 Os valores do clarify e do analyze (256 MiB, 2 GiB, 100 mil arquivos, 300 s, binwalk ≥ 2.3.4) e os valores de `meta_binwalk_status`, `meta_unpack_status`, `meta_strings_source` e `meta_unpack_files_cut` (inclusive `nao_executado`) estão definidos sem ambiguidade entre spec e data-model? [Clarity] [Spec §FR-014–FR-016]
+- [x] CHK019 As substituições de comportamento Implementado (FR-002 e FR-003 sobre `max_bytes`; FR-004 valor; FR-007 sem Binwalk; FR-009 metadados; US4.2) estão explícitas nos FRs Planejado? [Consistency] [Spec §FR-002] [Spec §FR-003] [Spec §FR-004] [Spec §FR-007] [Spec §FR-009] [Spec §FR-014–FR-016] [Spec §FR-019]
+- [x] CHK020 O desempacotamento tem requisitos de segurança observáveis (sem execução, versão mínima do extrator, `HOME` isolado, sem privilégio, sem seguir symlinks, sem escrita fora do diretório, limites totais e por arquivo, limpeza)? [Non-Functional] [Spec §FR-014] [Spec §FR-016] [Spec §US5.4–US5.6]
+- [x] CHK021 Cada cenário Planejado (US3.4-US3.6, US4.3, US5.1-US5.6) é citado por uma task de teste? [Traceability] [Spec §User Scenarios & Testing]
+- [x] CHK022 Os limites de tempo não tornam a saída dependente da carga da máquina (timeout é falha que exige rodar de novo) e o risco está no Complexity Tracking? [Non-Functional] [Spec §FR-014] [Spec §FR-016] [Spec §SC-007] [princípio V]
+- [x] CHK023 A memória da extração não cresce com o tamanho do arquivo nem do filesystem extraído (strings em streaming; dedupe só no documento)? [Non-Functional] [Spec §FR-015] [Spec §FR-016] [Spec §SC-005] [princípio VI]
 
 ## Notes
 

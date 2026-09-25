@@ -7,6 +7,9 @@
 **Note**: plano retroativo. Descreve o código que já existe em `master`; não
 há Phase 0 (`research.md`), `contracts/` nem `quickstart.md`. O `tasks.md` é
 retroativo: registra a verificação de cada FR e cenário e as lacunas de teste.
+As linhas `[Planejado]` (FR-014 a FR-016 e FR-019 com TickTick T11; FR-018
+com TickTick T07) descrevem módulo e teste previstos; o `tasks.md` as decompõe na
+fase "Implementação planejada". FR-017 é `[Proposto]` e não tem task.
 
 ## Summary
 
@@ -21,7 +24,12 @@ sem executar o binário. O fluxo e o papel da etapa no pipeline estão em
 **Language/Version**: Python ≥ 3.9
 
 **Primary Dependencies**: numpy, pandas, pyarrow, PyYAML, gensim (só via
-`007-embeddings-doc2vec`), CLI externa `binwalk` (opcional)
+`007-embeddings-doc2vec`), CLI externa `binwalk` (opcional hoje;
+planejado: obrigatório na versão 2.3.4 ou posterior, FR-014). Planejado
+para FR-016: extratores que o `binwalk -e` chama (`unsquashfs`,
+`sasquatch`, `jefferson`, `ubi_reader`, `7z`), com versão conferida antes
+do lote; a lista final é fixada na implementação (T044) e registrada no
+log
 
 **Storage**: arquivos: `dataset/processed/*.parquet` / `.csv`
 
@@ -36,7 +44,14 @@ sem executar o binário. O fluxo e o papel da etapa no pipeline estão em
 médio por arquivo
 
 **Constraints**: `max_bytes` de 5 MiB em `configs/feature_extraction.yaml`;
-timeout do Binwalk de 60 s
+timeout do Binwalk de 60 s. Planejado: `max_bytes` obrigatório, 256 MiB,
+com leitura em blocos das estatísticas, do SHA256 e das strings (FR-015,
+FR-019); Binwalk obrigatório (FR-014); desempacotamento isolado (`HOME`
+temporário, sem privilégio) e limitado a 2 GiB, 100 mil arquivos e 300 s,
+com leitura de cada arquivo extraído até `max_bytes` (FR-016). Os limites
+de tamanho e de número de arquivos são conferidos durante a extração, por
+varredura periódica do diretório temporário, e o processo do extrator é
+encerrado ao passar deles
 
 **Scale/Scope**: 840 arquivos em `dataset/raw`
 
@@ -46,12 +61,12 @@ timeout do Binwalk de 60 s
 
 |Princípio|Resultado|Evidência|
 |---|---|---|
-|I. Somente análise estática|Passa|Só leitura de bytes e Binwalk em modo assinatura (`binwalk <arquivo>`, sem `-e`), sem execução do binário|
+|I. Somente análise estática|Passa|Só leitura de bytes e Binwalk em modo assinatura (`binwalk <arquivo>`, sem `-e`), sem execução do binário. Planejado (FR-016): desempacotar com `binwalk -e` e ler os arquivos extraídos é análise estática permitida pelo princípio I. O `binwalk` 2.3.3 instalado é vulnerável à CVE-2022-4510 (escrita fora do destino e execução de plugin): FR-014 exige 2.3.4 ou posterior e FR-016 roda o extrator com `HOME` temporário, sem plugins do usuário e sem privilégio; T046 testa path traversal passando pelo extrator|
 |II. Rótulo exclusivamente por CVE|Não se aplica|A extração não rotula; `meta_label` é metadado de path, não rótulo de treino|
 |III. Sem vazamento|Passa|Guarda em `tests/test_pipeline_extraction.py::test_classifier_features_exclude_cve_and_identity_fields`; modo inferência em `tests/test_pipeline_cli.py::test_cli_without_label_from_path_zeroes_version`|
 |IV. Modelos simples|Não se aplica|Sem modelo nesta etapa|
-|V. Reprodutibilidade|Passa parcialmente|Config versionada e overrides na CLI existem. O determinismo entre processos não tem teste; lacuna registrada para a subtask 3|
-|VI. Firmware não confiável|Violação herdada|`max_bytes` e lote tolerante a falhas existem, mas Binwalk ausente (log debug) ou encerrado com código de erro (sem log) resulta em features estruturais vazias sem registro no artefato. Ver Complexity Tracking|
+|V. Reprodutibilidade|Passa parcialmente|Config versionada e overrides na CLI existem. O determinismo entre processos não tem teste; lacuna registrada para a subtask 3. Planejado: limites de leitura e de desempacotamento na config versionada (FR-015, FR-016, FR-019); ordem lexicográfica de path (FR-016); timeout do Binwalk ou do desempacotamento é falha que exige rodar de novo, para que a saída não dependa da carga da máquina (FR-014, FR-016; ver Complexity Tracking)|
+|VI. Firmware não confiável|Violação herdada|Lote tolerante a falhas existe, mas (a) Binwalk ausente (log debug) ou encerrado com código de erro (sem log) resulta em features estruturais vazias sem registro no artefato, e (b) sem YAML, com `--config` inexistente ou com `max_bytes=null`, a leitura não tem limite. Correção Planejado: FR-014 e FR-019. O desempacotamento planejado (FR-016) tem limites de tamanho, arquivos, tempo e leitura por arquivo, não segue symlinks, isola o extrator e registra o estado; as strings são lidas em streaming (FR-015). Ver Complexity Tracking|
 |VII. Integridade científica|Passa|Todo FR tem módulo e teste abaixo ou aparece em "Sem verificação"; números medidos citam data e artefato|
 
 ## Project Structure
@@ -119,6 +134,12 @@ módulos acima.
 |FR-011|US2|`pipeline/feature_extraction.py::extract_features_from_path`|`test_pipeline_extraction.py::test_classifier_features_exclude_cve_and_identity_fields`|
 |FR-012|US1, US3|`pipeline/feature_extraction.py::extract_features_batch`|`test_pipeline_extraction.py::test_extract_features_batch_continues_on_error`, `test_pipeline_extraction.py::test_extract_features_batch_sequential_mode`, `test_pipeline_extraction.py::test_extract_features_batch_preserves_order_with_multiple_workers`, `test_pipeline_extraction.py::test_extract_features_batch_empty_list_returns_empty` (parcial)|
 |FR-013|US1|`scripts/extract_features.py::main`|`test_pipeline_cli.py::test_cli_reports_elapsed_time`, `test_pipeline_cli.py::test_cli_basic_file` (parcial)|
+|FR-014 [Planejado, TickTick T11]|US3|previsto: `pipeline/feature_extraction.py::_extract_binwalk_descriptions`, `extract_features_batch` (Binwalk e versão conferidos antes do lote), `_build_error_result` (`nao_executado`); `scripts/extract_features.py::main` (código de saída com `timeout`)|previsto: `tests/test_pipeline_extraction.py` (erro, timeout e `nao_executado`), `tests/test_pipeline_cli.py` (Binwalk ausente ou antigo falha antes do lote; timeout sai com código ≠ 0)|
+|FR-015 [Planejado, TickTick T11]|US5|previsto: `src/io_utils.py` (leitura em blocos), `src/features/statistics.py` (acumuladores incrementais), `src/features/strings.py` (strings em streaming), `pipeline/feature_extraction.py::extract_features_from_path` e `_build_error_result`; `configs/feature_extraction.yaml` (`max_bytes`)|previsto: `tests/test_statistics.py` (igualdade entre cálculo em blocos e em memória), `tests/test_strings.py` (strings em streaming iguais às em memória), `tests/test_pipeline_extraction.py` (`meta_file_size`; memória de pico com `tracemalloc`)|
+|FR-016 [Planejado, TickTick T11]|US5|previsto: módulo novo `src/features/unpack.py` (extratores, isolamento, limites, varredura periódica), `src/features/strings.py`, `pipeline/feature_extraction.py::extract_features_from_path` e `_build_error_result`; `configs/feature_extraction.yaml` (limites)|previsto: `tests/test_unpack.py` (limites, symlink, path traversal pelo extrator com fixture maliciosa, isolamento de `HOME`, limpeza do diretório, corte por arquivo), `tests/test_pipeline_extraction.py` (`meta_unpack_status`, `meta_strings_source`, fallback para `blob`, `limite_tempo` sem fallback)|
+|FR-017 [Proposto, TickTick T11]|—|—|— (Proposto: sem task)|
+|FR-018 [Planejado, TickTick T07]|US4|previsto: `pipeline/feature_extraction.py::load_pipeline_config` (padrão desligado também sem YAML), `extract_features_batch` (não carrega o modelo), `extract_features_from_path`; `src/feature_extraction.py::combine_features`; `configs/feature_extraction.yaml` (`doc2vec.enabled`)|previsto: `tests/test_pipeline_extraction.py` (sem `doc2vec_*`, sem carga do modelo e `meta_doc2vec_used=False` com o padrão; com o Doc2Vec ligado, colunas presentes)|
+|FR-019 [Planejado, TickTick T11]|US3|previsto: `pipeline/feature_extraction.py::load_pipeline_config` (padrão 256 MiB, rejeição de nulo e não positivo, `--config` inexistente)|previsto: `tests/test_pipeline_config.py` (padrão sem YAML; nulo, zero e config inexistente falham)|
 
 ### Sem verificação
 
@@ -187,4 +208,6 @@ Ficam nos módulos desta spec, mas o requisito pertence a outra:
 
 |Violação|Por que existe|Alternativa|
 |---|---|---|
-|Princípio VI: Binwalk ausente (log debug) ou encerrado com código de erro (sem log) resulta em features estruturais vazias, sem coluna `meta_*` que registre a falha|Herdada do código em `master` (`_extract_binwalk_descriptions`)|Correção pendente registrada no `TODO.md`|
+|Princípio VI: Binwalk ausente (log debug) ou encerrado com código de erro (sem log) resulta em features estruturais vazias, sem coluna `meta_*` que registre a falha|Herdada do código em `master` (`_extract_binwalk_descriptions`)|FR-014 [Planejado, TickTick T11]: Binwalk obrigatório e `meta_binwalk_status`|
+|Princípio VI: sem YAML, com `--config` inexistente ou com `max_bytes=null`, a leitura não tem limite|Herdada de `pipeline/feature_extraction.py::load_pipeline_config` (padrão nulo; `path.exists()` falso é ignorado). Achado no analyze de 2026-09-24 (D1)|FR-019 [Planejado, TickTick T11]: `max_bytes` obrigatório, 256 MiB por padrão|
+|Princípio V (risco planejado): timeouts dependem da carga da máquina|Os limites de tempo de FR-014 e FR-016 existem para cumprir o princípio VI|Timeout é falha que exige rodar de novo, sem fallback; SC-007 exige 0 timeouts na reextração (T050)|

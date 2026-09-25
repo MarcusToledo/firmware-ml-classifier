@@ -55,6 +55,23 @@ para as etapas de busca de CVE e rotulagem.
   `cve_total`, `cve_count_*`) ou de identidade (`brand`, `model`,
   `version`, `version_source`) (FR-011).
 
+## Planejado (TickTick T11 e T07)
+
+Esquema previsto; nada disso existe no código atual.
+
+|Coluna|Tipo|Significado|FR|
+|---|---|---|---|
+|`meta_binwalk_status`|texto|`ok`, `erro`, `timeout` ou `nao_executado` (leitura falhou ou linha de exceção). Binwalk ausente ou anterior a 2.3.4 falha o lote antes de começar; `timeout` exige rodar de novo|FR-014|
+|`meta_file_size`|int|tamanho original do arquivo em bytes; cortado por `max_bytes` quando maior que `meta_bytes_used`|FR-015|
+|`meta_unpack_status`|texto|`ok`, `sem_filesystem`, `falha`, `limite_tamanho`, `limite_arquivos`, `limite_tempo` ou `nao_executado`; com mais de um limite, vale o primeiro; `limite_tempo` exige rodar de novo|FR-016|
+|`meta_strings_source`|texto|`filesystem` com `meta_unpack_status=ok`; `blob` com `sem_filesystem`, `falha`, `limite_tamanho` ou `limite_arquivos`; `nao_executado` nas linhas sem varredura|FR-016|
+|`meta_unpack_files_cut`|int|número de arquivos extraídos cuja leitura parou em `max_bytes`; 0 sem desempacotamento|FR-016|
+
+As cinco são `meta_*`: não entram no vetor de features. Com FR-018
+(TickTick T07), as colunas `doc2vec_*` somem por padrão. Com FR-015 e
+FR-019, `max_bytes` passa a ser obrigatório, com 256 MiB, e o
+`firmware_id` cobre o arquivo inteiro para todos os arquivos atuais.
+
 ## Artefatos existentes
 
 Os artefatos em `dataset/processed/` são anteriores às colunas de versão
