@@ -199,6 +199,10 @@
       existem no TickTick; diff contra `master` só em `specs/`,
       `TODO.md`, `AGENTS.md`, `pyproject.toml` e constituição; `pytest`
       com 377 testes passando.
+- [x] Task 4 concluída no TickTick (2026-09-25), com aceite confirmado
+      pelo pesquisador; PR #9 aberto
+      (https://github.com/MarcusToledo/firmware-ml-classifier/pull/9). O
+      aceite da T09 e da T10 passou a dizer "Status Planejado ou Misto".
 
 ### Pending
 - [ ] T07: limpar os campos de feature não utilizados. Especificado em
@@ -222,8 +226,6 @@
       strings, já implementados; `libssl_version_age` segue pendente.
 - [ ] O baseline `score_firmware` não é chamado por nenhum script; falta
       rodá-lo sobre o dataset para comparar com os modelos.
-- [ ] Task 4, etapa 7: verificar rastreabilidade, abrir PR e confirmar o
-      aceite com o pesquisador.
 - [ ] Gerar o System Design a partir dos `plan.md` de todas as specs,
       separando componentes implementados e planejados.
 - [ ] 001/FR-007: Binwalk ausente (log debug) ou encerrado com código de erro
