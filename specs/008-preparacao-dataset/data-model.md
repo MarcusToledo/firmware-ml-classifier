@@ -7,13 +7,14 @@ ordenadas por `firmware_id`.
 
 |Entrada|Origem|Colunas lidas|
 |---|---|---|
-|Tabela de features|`001-extracao-features` (`dataset/processed/features_v2.parquet`)|`firmware_id`, colunas de feature (inclusive de `012`), `meta_path`, `meta_brand`, `meta_model`, `meta_read_ok`, `meta_binwalk_status` (`001/FR-014`), `meta_unpack_status` (`001/FR-016`), `meta_third_party` (`004/FR-017`)|
+|Tabela de features|`001-extracao-features` (`dataset/processed/features_v2.parquet`)|`firmware_id`, colunas de feature (inclusive de `012`), `meta_path`, `meta_brand`, `meta_model`, `meta_read_ok`, `meta_binwalk_status` (`001/FR-014`), `meta_unpack_status` (`001/FR-016`), `meta_third_party` (`004/FR-017`), `meta_fs_status` (`012/FR-012`)|
 |Tabela de rótulos|`005/FR-018` (`dataset/processed/labels_v2.csv`)|`firmware_id`, `security_level`|
 |Metadados da rotulagem|`005/FR-018` (`labels_v2.meta.json`)|SHA256 de `--features`, conferido contra o da tabela de features (FR-001)|
 
 Colunas de feature são as que não começam com `meta_` e não são
-`firmware_id`. Ausência de `meta_binwalk_status`, `meta_unpack_status` ou
-`meta_third_party` é erro (FR-001), assim como `firmware_id` nulo (FR-002).
+`firmware_id`. Ausência de `meta_binwalk_status`, `meta_unpack_status`,
+`meta_third_party` ou `meta_fs_status` é erro (FR-001), assim como
+`firmware_id` nulo (FR-002).
 
 ## `training_table.parquet`
 

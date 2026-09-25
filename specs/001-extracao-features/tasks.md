@@ -101,6 +101,6 @@ Doc2Vec desligado por padrão.
   T045, T048 e T051 editam `pipeline/feature_extraction.py`: não rodam em
   paralelo entre si. T040, T047 e T049 editam
   `tests/test_pipeline_extraction.py`: em série. T050 depende de todas as
-  anteriores e da Phase 6 da `002-evidencias-seguranca` (detectores
-  corrigidos); os rótulos da 005 (T056) e a medição dos achados da 002
+  anteriores, da Phase 6 da `002-evidencias-seguranca` (detectores
+  corrigidos) e de 012/T013 (features do filesystem, reextração única); os rótulos da 005 (T056) e a medição dos achados da 002
   (T047) vêm depois de T050.

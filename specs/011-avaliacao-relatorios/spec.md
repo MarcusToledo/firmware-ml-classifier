@@ -279,8 +279,8 @@ V e VII).
   (`entropy`, `byte_mean`, `compress_ratio`), B (`n_filesystems`,
   `n_crypto_signatures`, `has_encrypted_sections`,
   `entropy_variance_across_sections`, `fs_type__*`, `compression_type__*`),
-  S (os 11 detectores de strings) e F (colunas da `012`). Braço que
-  depende de grupo sem colunas na tabela NÃO DEVE rodar, e o motivo DEVE
+  S (os 11 detectores de strings) e F (colunas `unpacked_*` da `012`).
+  Braço que depende de grupo sem colunas na tabela NÃO DEVE rodar, e o motivo DEVE
   ficar no relatório.
 - **FR-006** [Planejado, TickTick T10]: Enquanto a T06 (Doc2Vec) for
   Proposto, NENHUM braço DEVE conter `doc2vec_*` e não DEVE haver braço

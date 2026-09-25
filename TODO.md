@@ -183,6 +183,15 @@
       Complexity Tracking do esquema `random`), e a 010 passa a derivar
       `purpose: ablation`. Relatório em
       `.docs/brainstorming/validacao-rastreabilidade/011-planejado.md`.
+- [x] Task 4, etapa 6b, spec 012 (Planejado, TickTick T12): 4 US, FR-001
+      a FR-012; clarify com 5 perguntas (pyelftools `<0.33`; nulos com
+      `scikit-learn>=1.6`; proporções; arquitetura só em `meta_fs_arch`;
+      `src/features/filesystem.py`); colunas `unpacked_*` (19); 16 tasks;
+      analyze com 3 HIGH decididos (reextração única: 001/T050 depende de
+      012/T013; fonte da lista de funções corrigida, EMBA sem S11;
+      contagens do FR-009) e critérios do checksec 2.7.1, ELF estático à
+      parte, `meta_fs_status` (a 008 exclui `erro`). Relatório em
+      `.docs/brainstorming/validacao-rastreabilidade/012-planejado.md`.
 
 ### Pending
 - [ ] T07: limpar os campos de feature não utilizados. Especificado em
@@ -206,9 +215,6 @@
       strings, já implementados; `libssl_version_age` segue pendente.
 - [ ] O baseline `score_firmware` não é chamado por nenhum script; falta
       rodá-lo sobre o dataset para comparar com os modelos.
-- [ ] Task 4, etapa 6b: spec nova 012 (features do filesystem, T12).
-- [ ] Task 4, etapa 6b: spec 012 em andamento (clarify feito: pyelftools,
-      NaN com `scikit-learn>=1.6`, proporções, arquitetura só em `meta_*`).
 - [ ] Task 4, etapa 7: verificar rastreabilidade, abrir PR e confirmar o
       aceite com o pesquisador.
 - [ ] Gerar o System Design a partir dos `plan.md` de todas as specs,

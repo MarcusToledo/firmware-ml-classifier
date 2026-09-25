@@ -304,8 +304,9 @@ está no mapa.
   configuração versionada ou de override na linha de comando, e falhar
   citando o caminho quando uma delas não existe ou não tem as colunas
   exigidas. A tabela de features sem `meta_binwalk_status`
-  (`001/FR-014`), `meta_unpack_status` (`001/FR-016`) ou
-  `meta_third_party` (`004/FR-017`) DEVE falhar citando a coluna e a
+  (`001/FR-014`), `meta_unpack_status` (`001/FR-016`),
+  `meta_third_party` (`004/FR-017`) ou `meta_fs_status` (`012/FR-012`)
+  DEVE falhar citando a coluna e a
   instrução de extrair de novo. DEVE falhar citando os dois valores quando
   o SHA256 de `--features` registrado em `labels_v2.meta.json`
   (`005/FR-018`) difere do SHA256 da tabela de features lida.
@@ -316,7 +317,7 @@ está no mapa.
   algum não tem par na outra tabela; e listando `firmware_id` e colunas
   quando aliases de um `firmware_id` que não foi excluído (FR-005 a
   FR-007, avaliados antes) têm valores diferentes numa coluna de feature ou
-  em `security_level`.
+  em `security_level` (nulo contra nulo é igual).
 - **FR-003** [Planejado, TickTick T08]: O vetor de features DEVE conter
   só colunas de feature da tabela de `001-extracao-features`, inclusive as
   acrescentadas por `012` quando implementada, e as colunas derivadas por
@@ -339,7 +340,8 @@ está no mapa.
   (`004/FR-017`).
 - **FR-007** [Planejado, TickTick T08]: O sistema DEVE excluir da tabela
   os `firmware_id` com algum alias com falha de extração:
-  `meta_binwalk_status=erro` ou `meta_unpack_status=falha`. Com
+  `meta_binwalk_status=erro`, `meta_unpack_status=falha` ou
+  `meta_fs_status=erro` (`012/FR-012`). Com
   `meta_binwalk_status` `timeout` ou `nao_executado`, ou
   `meta_unpack_status` `limite_tempo` ou `nao_executado`, em algum alias,
   DEVE falhar sem gravar nada, listando os arquivos e pedindo nova
@@ -469,8 +471,8 @@ está no mapa.
   baselines, da `010`; métricas e relatórios, da `011`. A 008 entrega a
   tabela com todos os `firmware_id` elegíveis, sem partição.
 - As features do filesystem desempacotado (`012`, TickTick T12) chegam
-  como colunas da tabela de features; a forma final é confirmada no
-  clarify da `012`.
+  como colunas `unpacked_*` da tabela de features, nulas quando
+  indisponíveis (`012/FR-008`).
 - O filtro de variância ajustado na partição de treino (FR-009) e a
   codificação de qualquer outra coluna dependente de dados são da `010`.
 - Balanceamento de classes (class_weight, oversampling) é da `010`.

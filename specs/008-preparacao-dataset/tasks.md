@@ -15,7 +15,7 @@ implementa e o caminho. Testes vêm antes da implementação em cada fase.
 
 ## Phase 2: Foundational
 
-- [ ] T003 [US1] FR-001 — Testes de entrada ausente, de coluna exigida ausente, de tabela sem `meta_binwalk_status`, `meta_unpack_status` ou `meta_third_party` (erro com instrução de extrair de novo) e cenário US1.6 (SHA256 de `--features` em `labels_v2.meta.json` diferente) em `tests/test_training_table.py`
+- [ ] T003 [US1] FR-001 — Testes de entrada ausente, de coluna exigida ausente, de tabela sem `meta_binwalk_status`, `meta_unpack_status`, `meta_third_party` ou `meta_fs_status` (erro com instrução de extrair de novo) e cenário US1.6 (SHA256 de `--features` em `labels_v2.meta.json` diferente) em `tests/test_training_table.py`
 - [ ] T004 [US1] FR-001 — Ler e conferir as duas tabelas e o SHA256 registrado em `labels_v2.meta.json` em `src/dataset/training_table.py::load_inputs`
 
 ## Phase 3: User Story 1 - Tabela de treino sem vazamento (Priority: P1)
@@ -31,7 +31,7 @@ implementa e o caminho. Testes vêm antes da implementação em cada fase.
 
 **Goal**: exclusões com todos os motivos e contagens por motivo e fabricante.
 
-- [ ] T009 [US2] FR-005, FR-006, FR-007 — Cenários US2.1, US2.2, US2.4 e US2.5: testes de exclusão por `indeterminado`, `terceiros` e `falha_extracao` (`erro`, `falha`), de interrupção por `timeout`, `limite_tempo` e `nao_executado`, de manutenção de `sem_filesystem`, `limite_tamanho` e `limite_arquivos`, e de alias com Binwalk em erro excluído sem falha por divergência em `tests/test_training_table.py`
+- [ ] T009 [US2] FR-005, FR-006, FR-007 — Cenários US2.1, US2.2, US2.4 e US2.5: testes de exclusão por `indeterminado`, `terceiros` e `falha_extracao` (`meta_binwalk_status=erro`, `meta_unpack_status=falha`, `meta_fs_status=erro`), de interrupção por `timeout`, `limite_tempo` e `nao_executado`, de manutenção de `sem_filesystem`, `limite_tamanho` e `limite_arquivos`, e de alias com Binwalk em erro excluído sem falha por divergência em `tests/test_training_table.py`
 - [ ] T010 [US2] FR-005, FR-006, FR-007 — Aplicar as exclusões por alias, antes do colapso, e a checagem de falha transitória em `src/dataset/training_table.py::apply_exclusions` e `check_transient_failures`
 - [ ] T011 [US2] FR-008 — Cenário US2.3: testes de vários motivos, de `firmware_id` com aliases de dois fabricantes, da invariante de cobertura e de falha com tabela vazia ou classe sem exemplo em `tests/test_training_table.py`
 - [ ] T012 [US2] FR-005, FR-008 — Montar o registro de exclusões, as contagens por motivo e fabricante, a proporção de `indeterminado` por fabricante e a falha por tabela vazia ou classe sem exemplo em `src/dataset/training_table.py::build_exclusions`

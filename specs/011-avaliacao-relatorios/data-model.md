@@ -5,7 +5,7 @@
 |Chave|Conteúdo|
 |---|---|
 |`matrix`|lista de (modelo, experimento, esquema) da matriz principal (FR-001)|
-|`groups`|E, B, S, F com as colunas (prefixo `*` permitido, ex.: `fs_type__*`)|
+|`groups`|E, B, S, F com as colunas (prefixo `*` permitido, ex.: `fs_type__*`; F = `unpacked_*` da `012`)|
 |`arms`|`completo`, `so_<grupo>`, `sem_<grupo>`, `sem_url_ip`|
 |`ablation_models`|`extra_trees`, `random_forest`; experimento `principal`; esquema `grouped`|
 |`bootstrap`|`n_resamples: 2000`, `seed: 0`, `ci: 0.95`|
