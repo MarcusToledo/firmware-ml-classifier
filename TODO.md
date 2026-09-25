@@ -143,11 +143,24 @@
       violações III/V, com FR Planejado exigido na 008 e na 011 que exclua
       `doc2vec_*` e o braço Doc2Vec enquanto a T06 for Proposto. Relatório
       em `.docs/brainstorming/validacao-rastreabilidade/007-proposto.md`.
+- [x] Task 4, etapa 5 concluída: FRs Planejado/Proposto nas specs donas
+      005, 006, 001, 002, 003, 004 e 007.
+- [x] Task 4, etapa 6, spec 008 (Planejado, TickTick T08 e T07): 5 US,
+      FR-001 a FR-017, SC-001 a SC-006; clarify com 15 perguntas (detectores
+      constantes ficam e o filtro de variância vai para a 010; one-hot de
+      lista fixa; proveniência em arquivo da 008; `tp_link` canônico;
+      validação do artefato e órfãos no lugar do `validate_dataset.py`);
+      plano com `src/dataset/`, `scripts/build_dataset.py`,
+      `configs/dataset.yaml` e modo novo do `reorganize_dataset.py`; 29
+      tasks; analyze com 2 HIGH decididos (`firmware_id` nulo interrompe;
+      `_`→`-` no modelo TP-Link com colisão resolvida à mão) e 6 MEDIUM
+      decididos. Relatório em
+      `.docs/brainstorming/validacao-rastreabilidade/008-planejado.md`.
 
 ### Pending
-- [ ] T07: limpar os campos de feature não utilizados (Doc2Vec desligado por
-      padrão sem gravar `doc2vec_*`; decidir os 5 detectores constantes;
-      codificar `fs_type` e `compression_type`).
+- [ ] T07: limpar os campos de feature não utilizados. Especificado em
+      `001/FR-018` e `008/FR-004`, `008/FR-009` a `008/FR-011`; o filtro de
+      variância ajustado no treino entra na 010.
 - [ ] 007/princípio III, 007/princípio V: pós-entrega mínima — Doc2Vec (T06,
       Proposto): reiniciar `model.random` antes de cada `infer_vector`, exigir
       `PYTHONHASHSEED`, treinar por fold e rever `tests/test_doc2vec.py`, que
@@ -167,9 +180,10 @@
 - [ ] O baseline `score_firmware` não é chamado por nenhum script; falta
       rodá-lo sobre o dataset para comparar com os modelos.
 - [ ] Task 4, etapa 6b: spec nova 012 (features do filesystem, T12).
-- [ ] Task 4, etapa 5: FRs Planejado/Proposto nas specs donas 005, 006, 001,
-      002, 003, 004 e 007.
-- [ ] Task 4, etapa 6: specs novas 008-011 (specify → analyze).
+- [ ] Task 4, etapa 6: specs novas 009, 010 e 011 (specify → analyze). A
+      010 precisa de FR do filtro de variância ajustado só no treino
+      (`008/FR-009`) e a 011 do FR que exclui o braço Doc2Vec enquanto a T06
+      for Proposto.
 - [ ] Task 4, etapa 7: verificar rastreabilidade, abrir PR e confirmar o
       aceite com o pesquisador.
 - [ ] Gerar o System Design a partir dos `plan.md` de todas as specs,
