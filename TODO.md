@@ -90,6 +90,9 @@
       Novas: spec 012 (features do filesystem) e TickTick T12
       (`6ab5b93f8f086a6e165ecb2a`); T11 com 19 itens (001-004, 006) e T04
       com 3 itens novos (005). Itens do roadmap superados marcados abaixo.
+- [x] Emenda PATCH da constituição 1.0.1 (CF-g, aprovada): dependências só
+      em `pyproject.toml`; `AGENTS.md` instala com `pip install -e ".[dev]"`;
+      descrição do `pyproject.toml` deixa de dizer "por fabricante" (CF-i).
 
 ### Pending
 - [ ] T07: limpar os campos de feature não utilizados (Doc2Vec desligado por
@@ -113,8 +116,6 @@
       strings, já implementados; `libssl_version_age` segue pendente.
 - [ ] O baseline `score_firmware` não é chamado por nenhum script; falta
       rodá-lo sobre o dataset para comparar com os modelos.
-- [ ] Emenda PATCH da constituição (CF-g): dependências só em
-      `pyproject.toml`; `AGENTS.md` sem `requirements.txt`.
 - [ ] Task 4, etapa 6b: spec nova 012 (features do filesystem, T12).
 - [ ] Task 4, etapa 5: FRs Planejado/Proposto nas specs donas 005, 006, 001,
       002, 003, 004 e 007.

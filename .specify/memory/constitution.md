@@ -116,7 +116,7 @@ funcionalidade.
 
 ## Restrições Técnicas
 
-- Python ≥ 3.9; dependências declaradas em `pyproject.toml` e `requirements.txt`.
+- Python ≥ 3.9; dependências declaradas em `pyproject.toml`.
 - pytest é o executor de testes obrigatório.
 - Dependências externas mínimas. A consulta à NVD (`scripts/fetch_cves.py`) é a única
   etapa que usa rede; as etapas seguintes leem o cache local.
@@ -169,4 +169,4 @@ funcionalidade.
   com justificativa na tabela Complexity Tracking. `/speckit.analyze` trata conflito
   com princípio como severidade crítica.
 
-**Version**: 1.0.0 | **Ratified**: 2026-09-24 | **Last Amended**: 2026-09-24
+**Version**: 1.0.1 | **Ratified**: 2026-09-24 | **Last Amended**: 2026-09-24

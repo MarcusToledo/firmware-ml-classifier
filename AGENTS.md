@@ -35,7 +35,7 @@ the single source for these rules. Amend it only via
 
 ## Build, Lint, Test
 - Install dependencies:
-  - `python -m pip install -r requirements.txt`
+  - `python -m pip install -e ".[dev]"`
 - Run all tests:
   - `python -m pytest`
 - Run a single test (preferred format):
