@@ -64,3 +64,10 @@ dataset/labels.csv
 .idea/
 
 .playwright-mcp/
+
+# Internal docs (local only; canonical copy in the private notes vault)
+/specs
+/.specify
+/TODO.md
+/.docs
+/.omp
