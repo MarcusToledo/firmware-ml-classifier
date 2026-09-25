@@ -17,7 +17,7 @@ Registro imutável; todos os campos são texto.
 |`context`|explicação curta do match (ex.: `key=value assignment: 'password=admin'`)|
 |`confidence`|`low`, `medium` ou `high`; fixo por detector|
 |`detector`|nome do detector (tabela abaixo)|
-|`detector_version`|`1.0` em todos os detectores|
+|`detector_version`|`1.0` em todos os detectores. Planejado (FR-017, TickTick T11): versão própria por detector, incrementada a cada mudança de regra|
 
 ## Detectores
 
@@ -37,7 +37,11 @@ Registro imutável; todos os campos são texto.
 |`crypto_signatures`|`crypto_signature`|`medium`|descrições do Binwalk|por descrição|`n_crypto_signatures`|
 |`encrypted_sections`|`encrypted_section`|`medium`|descrições do Binwalk|por descrição|`has_encrypted_sections`|
 
-Regras de cada detector: spec, FR-003 a FR-013.
+Regras de cada detector: spec, FR-003 a FR-013. Planejado (TickTick T11):
+FR-018 (`debug_account`), FR-019 (`api_tokens`), FR-020 (`hardcoded_ips` e
+`public_ips`), FR-021 (`encrypted_sections`), FR-022
+(`outdated_dropbear`), FR-023 e FR-024 (`hardcoded_passwords`) mudam as
+regras; tipos, confianças, contagens e colunas desta tabela não mudam.
 
 ## Linha de `findings.jsonl`
 

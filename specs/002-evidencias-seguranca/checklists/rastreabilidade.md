@@ -35,9 +35,17 @@
 
 ## Non-Functional Requirements
 
-- [ ] CHK014 O requisito de `detector_version` permite identificar de forma inequívoca a regra que produziu cada artefato? [Conflict, Spec §FR-002, Constituição princípio V] — pendente: TODO.md 002/FR-002
-- [ ] CHK015 O requisito torna distinguíveis “Binwalk indisponível/com erro” e “varredura sem evidência criptográfica”? [Conflict, Spec §FR-001, Constituição princípio VI] — pendente: TODO.md 001/FR-007
+- [ ] CHK014 O requisito de `detector_version` permite identificar de forma inequívoca a regra que produziu cada artefato? [Conflict, Spec §FR-002, Constituição princípio V] — pendente: FR-017 (Planejado, T11) define versão por detector com teste de guarda; satisfeito só depois da implementação
+- [ ] CHK015 O requisito torna distinguíveis “Binwalk indisponível/com erro” e “varredura sem evidência criptográfica”? [Conflict, Spec §FR-001, Constituição princípio VI] — pendente: `001/FR-014` (Planejado, T11); satisfeito só depois da implementação
 - [x] CHK016 Os critérios mensuráveis citam artefato, população, data da medição e exceções relevantes, sem apresentar resultado não executado? [Spec §SC-001–SC-003]
+
+## Planned Requirements (escopo restante, 2026-09-24)
+
+- [x] CHK017 Cada FR Planejado cita a TickTick de origem, tem linha prevista na matriz do `plan.md` e ao menos uma task na fase "Implementação planejada"? [Traceability, Spec §FR-017–FR-024]
+- [x] CHK018 Cada correção de detector tem um caso falso e um caso verdadeiro observáveis em User Story 4, citados por uma task de teste? [Coverage, Spec §US4.1–US4.8]
+- [x] CHK019 Cada FR Planejado diz qual FR Implementado ele substitui, restringe ou amplia? [Consistency, Spec §FR-002, §FR-003, §FR-005, §FR-006, §FR-008, §FR-009, §FR-011, §FR-013]
+- [x] CHK020 As regras novas são objetivas (listas de palavras, tokenização, tamanhos, caracteres, limiar de entropia, prefixos com borda e caixa definidas) e sem adjetivos vagos? A lista inicial de contexto de rede de FR-020 fica no plano e é versionada. [Clarity, Spec §FR-018–FR-024]
+- [x] CHK021 Os exemplos dos cenários US4 foram conferidos contra as regras escritas, e os resíduos medidos em `findings_v2.jsonl` estão nos Edge Cases? [Measurability, Spec §US4, Spec §Edge Cases]
 
 ## Notes
 

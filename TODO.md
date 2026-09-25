@@ -113,6 +113,14 @@
       strings em streaming, detectores sem o limite do documento, timeout
       como falha. Relatório em
       `.docs/brainstorming/validacao-rastreabilidade/001-planejado.md`.
+- [x] Task 4, etapa 5, spec 002 (Misto): FR-017 a FR-024 Planejado
+      (TickTick T11), US4 com casos falsos e verdadeiros medidos, clarify com
+      5 perguntas, Phase 6 (T037-T049) e analyze (3 HIGH decididos: IPv4 com
+      contexto de rede, prefixos definidos, SC-004 por detector; porte
+      completo do #4 com `ccf31e4`; `api_tokens` com entropia ≥ 4,3 e sem
+      sequência alfabética). `libssl_version_age` (PR-09) fica como spec
+      futura. Relatório em
+      `.docs/brainstorming/validacao-rastreabilidade/002-planejado.md`.
 
 ### Pending
 - [ ] T07: limpar os campos de feature não utilizados (Doc2Vec desligado por

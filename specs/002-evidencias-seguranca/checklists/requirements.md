@@ -46,6 +46,9 @@
   técnicos como IPv4, RFC 1918 e expressões de versão são mantidos.
 - "Success criteria are technology-agnostic": SC-001 e SC-002 citam colunas
   e campos do contrato e o artefato medido, não tecnologia.
-- Spec retroativa (Status Implementado): todos os FRs levam a tag
-  `[Implementado]`; falsos positivos, detectores constantes e a execução
-  dupla dos detectores ficam em Edge Cases, não em FRs.
+- (Histórico, vale para FR-001 a FR-016) Spec retroativa: os FRs levavam a
+  tag `[Implementado]`; falsos positivos, detectores constantes e a
+  execução dupla dos detectores ficavam em Edge Cases.
+- Status Misto (2026-09-24, escopo restante do TCC): FR-017 a FR-023 e
+  SC-004/SC-005 são `[Planejado, TickTick T11]`. Os itens acima continuam
+  passando para os FRs novos.

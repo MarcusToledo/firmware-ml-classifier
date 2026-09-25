@@ -89,7 +89,7 @@ Doc2Vec desligado por padrão.
 - [ ] T047 [US5] FR-015, FR-016 — Cenários US5.1 a US5.3: testes de `meta_file_size`, memória de pico com `tracemalloc` num arquivo maior que vários blocos, `meta_unpack_status`, `meta_strings_source`, fallback para `blob` e `limite_tempo` sem fallback em `tests/test_pipeline_extraction.py`
 - [ ] T048 [US4] FR-018 — Chave `doc2vec.enabled` falsa por padrão (com e sem YAML); desligada, não carregar o modelo, não emitir aviso de modelo ausente, gravar `meta_doc2vec_used=False` e não gerar colunas `doc2vec_*`, em `configs/feature_extraction.yaml`, `pipeline/feature_extraction.py::load_pipeline_config`, `extract_features_batch`, `extract_features_from_path` e `src/feature_extraction.py::combine_features`
 - [ ] T049 [US4] FR-018 — Cenário US4.3: testes com o padrão (sem `doc2vec_*`, sem carga do modelo) e com o Doc2Vec ligado em `tests/test_pipeline_extraction.py`
-- [ ] T050 [US5] FR-014, FR-015, FR-016, FR-018, FR-019 — Reextrair `dataset/processed/features_v2.parquet` com `--label-from-path`; medir a distribuição de `meta_binwalk_status`, `meta_unpack_status`, `meta_strings_source` e `meta_unpack_files_cut`, o número de timeouts (SC-007: 0) e a fração de arquivos regulares extraídos que contribuem com strings; registrar colunas antes/depois no `TODO.md`
+- [ ] T050 [US5] FR-014, FR-015, FR-016, FR-018, FR-019 — Reextrair `dataset/processed/features_v2.parquet` com `--label-from-path` e `--findings-output dataset/processed/findings_v2.jsonl`; medir a distribuição de `meta_binwalk_status`, `meta_unpack_status`, `meta_strings_source` e `meta_unpack_files_cut`, o número de timeouts (SC-007: 0) e a fração de arquivos regulares extraídos que contribuem com strings; registrar colunas antes/depois no `TODO.md`
 - [ ] T051 [US3] FR-019 — `max_bytes` obrigatório: padrão 256 MiB sem YAML; erro para nulo, não positivo e `--config` inexistente, em `pipeline/feature_extraction.py::load_pipeline_config`
 - [ ] T052 [P] [US3] FR-019 — Cenário US3.6: testes do padrão e das rejeições em `tests/test_pipeline_config.py`
 
@@ -101,5 +101,6 @@ Doc2Vec desligado por padrão.
   T045, T048 e T051 editam `pipeline/feature_extraction.py`: não rodam em
   paralelo entre si. T040, T047 e T049 editam
   `tests/test_pipeline_extraction.py`: em série. T050 depende de todas as
-  anteriores; os rótulos da 005 (T056) e os achados da 002 (T047) são
-  regerados depois de T050.
+  anteriores e da Phase 6 da `002-evidencias-seguranca` (detectores
+  corrigidos); os rótulos da 005 (T056) e a medição dos achados da 002
+  (T047) vêm depois de T050.
