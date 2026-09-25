@@ -68,9 +68,11 @@ Decisões do pesquisador (clarify e plano, 2026-09-25).
 
 ## R9. `purpose`
 
-- **Decisão**: `reportado` só para o Extra Trees em `grouped`; `baseline`
-  para Random Forest (baseline de ML, constituição IV), majoritário e
-  `score_firmware`; `diagnostico` para identidade e todo `random`.
+- **Decisão**: `reportado` só para o Extra Trees em `grouped` com colunas
+  completas; `baseline` para Random Forest (baseline de ML, constituição
+  IV), majoritário e `score_firmware`; `ablation` para braços com colunas
+  não completas (decisão do analyze da `011`); `diagnostico` para
+  identidade e todo `random`.
 - **Justificativa**: impede que número de partição não agrupada ou de
   identidade apareça como resultado (constituição III).
 

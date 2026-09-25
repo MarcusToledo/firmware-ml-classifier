@@ -28,7 +28,7 @@ Uma linha por (repetição, fold, `firmware_id` do teste).
 |---|---|
 |`run_id`|SHA256 de modelo, experimento, esquema, colunas ordenadas, configuração efetiva, configuração da `006` (só `score_firmware`) e SHA256 de todas as entradas; sem commit|
 |`model`|`extra_trees`, `random_forest`, `majoritario`, `identidade`, `score_firmware`|
-|`purpose`|`reportado` (Extra Trees, `grouped`), `baseline` (Random Forest, majoritário, `score_firmware`, em `grouped`) ou `diagnostico` (identidade e todo `random`)|
+|`purpose`|`reportado` (Extra Trees, `grouped`, colunas completas), `baseline` (Random Forest, majoritário, `score_firmware`, em `grouped`, colunas completas), `ablation` (ET ou RF em `grouped` com colunas não completas) ou `diagnostico` (identidade e todo `random`)|
 |`config`|configuração efetiva, com overrides e regra do alvo|
 |`experiment`, `scheme`|`principal`/`binario`; `grouped`/`random`|
 |`columns`|conjunto de colunas pedido|

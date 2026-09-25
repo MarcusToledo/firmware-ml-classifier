@@ -234,8 +234,12 @@ um.
   Os metadados vão para `models/runs/<run_id>/run.meta.json`, com a
   configuração efetiva (overrides e regra do alvo) e `purpose`. `purpose`
   DEVE ser `diagnostico` no baseline de identidade e em todo esquema
-  `random`, `baseline` no Random Forest, no majoritário e no
-  `score_firmware`, e `reportado` só no Extra Trees no esquema `grouped`.
+  `random`, `ablation` em toda execução de Extra Trees ou Random Forest em
+  `grouped` com conjunto de colunas diferente do completo, `baseline` no
+  Random Forest, no majoritário e no `score_firmware` com colunas
+  completas, e `reportado` só no Extra Trees em `grouped` com colunas
+  completas. O cálculo do `run_id` DEVE ser exposto como função pública
+  para a `011`.
   O `run_id` DEVE ser o hash SHA256 de modelo, experimento, esquema,
   colunas ordenadas, configuração efetiva, configuração da `006` (no
   `score_firmware`) e SHA256 de todas as entradas. Se o diretório já

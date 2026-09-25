@@ -173,6 +173,16 @@
       `predict_proba` em threads não é determinístico com folhas impuras;
       campo `purpose` com `random` como diagnóstico). Relatório em
       `.docs/brainstorming/validacao-rastreabilidade/010-planejado.md`.
+- [x] Task 4, etapa 6, spec 011 (Misto, TickTick T10, T05 e T03): 6 US,
+      FR-001 a FR-012 Planejado, FR-013 (probe de fabricante) e FR-014
+      (leave-one-vendor-out) Proposto; clarify com 11 perguntas (métricas
+      por repetição sobre OOF; bootstrap pareado por grupo, 2000, sem
+      p-valor; braços E/B/S/F e `sem_url_ip`; permutação no teste; sem
+      braço Doc2Vec); 21 tasks; analyze com 4 HIGH decididos (SHA256 de
+      folds por esquema; `purpose` em toda tabela; IC da importância;
+      Complexity Tracking do esquema `random`), e a 010 passa a derivar
+      `purpose: ablation`. Relatório em
+      `.docs/brainstorming/validacao-rastreabilidade/011-planejado.md`.
 
 ### Pending
 - [ ] T07: limpar os campos de feature não utilizados. Especificado em
@@ -197,8 +207,8 @@
 - [ ] O baseline `score_firmware` não é chamado por nenhum script; falta
       rodá-lo sobre o dataset para comparar com os modelos.
 - [ ] Task 4, etapa 6b: spec nova 012 (features do filesystem, T12).
-- [ ] Task 4, etapa 6: spec nova 011 (specify → analyze), com o FR que
-      exclui o braço Doc2Vec enquanto a T06 for Proposto.
+- [ ] Task 4, etapa 6b: spec 012 em andamento (clarify feito: pyelftools,
+      NaN com `scikit-learn>=1.6`, proporções, arquitetura só em `meta_*`).
 - [ ] Task 4, etapa 7: verificar rastreabilidade, abrir PR e confirmar o
       aceite com o pesquisador.
 - [ ] Gerar o System Design a partir dos `plan.md` de todas as specs,

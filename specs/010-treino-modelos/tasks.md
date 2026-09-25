@@ -26,7 +26,7 @@ Proposto e não tem task. Testes antes da implementação em cada fase.
 - [ ] T008 [US1] FR-002, FR-003, FR-011 — `Pipeline` com `VarianceThreshold(0.0)` e `ExtraTreesClassifier` em `src/models/training.py::build_pipeline`
 - [ ] T009 [US1] FR-005, FR-006 — Cenário US1.4: testes de conjunto de colunas por parâmetro, de esquema `random` e de probabilidades com todas as classes quando uma falta no treino em `tests/test_training.py`
 - [ ] T010 [US1] FR-005, FR-006 — Laço por (repetição, fold) e predições em `src/models/training.py::train_run`
-- [ ] T011 [US1] FR-006, FR-007 — Testes de `run_id` estável e distinto por modelo, de diretório existente que falha sem `--force`, de `purpose` por modelo e esquema (inclusive `random` → `diagnostico`), de configuração efetiva, de modelos gravados só no braço principal e de metadados por fold (colunas, hiperparâmetros, seed, `firmware_id` de treino, SHA256) em `tests/test_training.py`
+- [ ] T011 [US1] FR-006, FR-007 — Testes de `run_id` estável e distinto por modelo, de diretório existente que falha sem `--force`, de `purpose` por modelo, esquema e conjunto de colunas (inclusive `random` → `diagnostico` e colunas não completas → `ablation`), de configuração efetiva, de modelos gravados só no braço principal e de metadados por fold (colunas, hiperparâmetros, seed, `firmware_id` de treino, SHA256) em `tests/test_training.py`
 - [ ] T012 [US1] FR-006, FR-007 — `src/models/training.py::run_id`, `purpose_for` e `write_run`
 
 ## Phase 4: User Story 2 - Random Forest como baseline de ML (Priority: P1)
