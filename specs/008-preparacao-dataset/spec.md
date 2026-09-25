@@ -387,7 +387,8 @@ está no mapa.
 - **FR-014** [Planejado, TickTick T08]: O sistema DEVE gravar, fora do
   vetor, em `dataset/processed/training_table_provenance.jsonl`, uma linha
   por `firmware_id` da tabela e do registro de exclusões, ordenada por
-  `firmware_id`, com os aliases (`meta_path`, fabricante e modelo). É a
+  `firmware_id`, com `in_table` (verdadeiro para os da tabela) e os aliases
+  (`meta_path`, fabricante e modelo). É a
   fonte da partição agrupada (`009`), do baseline de identidade (`010`) e
   da avaliação por fabricante (`011`); o SHA256 do arquivo vai para os
   metadados.

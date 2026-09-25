@@ -44,7 +44,7 @@ Uma linha por `firmware_id` da tabela e das exclusões (FR-014):
 
 ```json
 {"firmware_id": "…", "in_table": true,
- "aliases": [{"meta_path": "tp_link/archer_c7/…", "vendor": "tp_link", "model": "archer_c7"}]}
+ "aliases": [{"meta_path": "tp_link/archer-c7/…", "vendor": "tp_link", "model": "archer-c7"}]}
 ```
 
 Aliases ordenados por `meta_path`.
