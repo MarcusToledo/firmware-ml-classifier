@@ -181,6 +181,12 @@ contagem e 5 tokens.
   `PYTHONHASHSEED`. Ver `data-model.md`. Correção Proposto: FR-013 (T06).
 - O documento cobre só as 2000 primeiras strings (`max_strings`), que são
   cabeçalho e ruído. Ver o item "Documento de strings" do `TODO.md`.
+- Quando `001/FR-016` (Planejado) for implementado, o documento de strings
+  da extração passa a vir do filesystem desempacotado, enquanto o treino
+  (`scripts/train_doc2vec.py::build_documents`) e a inspeção continuam
+  lendo o arquivo bruto: os documentos de treino e de inferência divergem.
+  Decisão do pesquisador (2026-09-25): só registrar aqui, porque o Doc2Vec
+  fica desligado por padrão (`001/FR-018`) e a T06 é Proposto.
 - A inspeção de tokens só escreve no log; não gera artefato.
 
 ## Requirements *(mandatory)*
