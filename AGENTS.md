@@ -32,10 +32,14 @@ the single source for these rules. Amend it only via
   - Store outputs under `reports/`.
 - reproducibility-agent
   - Enforce fixed seeds, deterministic pipelines, and artifact tracking.
+- docs-keeper (project subagent in `.omp/agents/docs-keeper.md`)
+  - Keep specs, constitution, and `TODO.md` consistent with the code on
+    `master`; these files are local and unversioned (see the constitution).
+  - Never edit code; never commit.
 
 ## Build, Lint, Test
 - Install dependencies:
-  - `python -m pip install -r requirements.txt`
+  - `python -m pip install -e ".[dev]"`
 - Run all tests:
   - `python -m pytest`
 - Run a single test (preferred format):

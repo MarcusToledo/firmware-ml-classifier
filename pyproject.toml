@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "firmware-ml-classifier"
 version = "0.1.0"
-description = "Classificação de firmware por fabricante usando ML"
+description = "Classificação de firmware por vulnerabilidade conhecida (CVE) usando ML"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [

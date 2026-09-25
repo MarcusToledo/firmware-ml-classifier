@@ -309,7 +309,7 @@ sem versão (`version_source` nulo).
   amostra auditada manualmente contra advisories do fabricante, fora do
   escopo atual.
 
-### Pendências conhecidas (ver `TODO.md`)
+### Pendências conhecidas
 
 - `models/doc2vec.model` não existe ainda. As 100 colunas `doc2vec_*`
   estão zeradas até rodar `train-doc2vec`.
