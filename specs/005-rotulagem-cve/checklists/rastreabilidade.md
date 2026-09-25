@@ -40,10 +40,10 @@
 
 ## Planned Requirements (escopo restante, 2026-09-24)
 
-- [x] CHK017 Cada FR Planejado cita a TickTick de origem, tem linha prevista na matriz do `plan.md` e ao menos uma task na fase "Implementação planejada"? [Traceability, Spec §FR-018–FR-023]
+- [x] CHK017 Cada FR Planejado cita a TickTick de origem, tem linha prevista na matriz do `plan.md` e ao menos uma task na fase "Implementação planejada"; o FR Proposto (FR-025) está marcado sem task? [Traceability, Spec §FR-018–FR-025]
 - [x] CHK018 Os artefatos novos (`labels_v2.meta.json`, `labels_v2_aliases.jsonl`, colunas `label_strategy` e `alias_count`) têm nome, local e conteúdo definidos? [Clarity, Spec §FR-018, Spec §FR-021, Spec §FR-022, Spec §Clarifications]
 - [x] CHK019 A substituição da regra "CPE sem base numérica → não aplicável" (FR-010) por FR-019 está explícita, sem dois FRs normativos contraditórios no mesmo estado? [Consistency, Spec §FR-010, Spec §FR-019]
-- [x] CHK020 Cada FR Planejado com efeito observável tem cenário Given/When/Then marcado como Planejado? [Coverage, Spec §US2.6, Spec §US4.6, Spec §US6]
+- [x] CHK020 Cada FR Planejado com efeito observável tem cenário Given/When/Then marcado como Planejado? [Coverage, Spec §US2.6, Spec §US2.7, Spec §US4.6, Spec §US4.7, Spec §US6]
 - [x] CHK021 Os critérios mensuráveis separam o que foi medido no código atual (SC-005) do que vale depois da implementação (SC-006, SC-007)? [Measurability, Spec §SC-005–SC-007]
 
 ## Notes

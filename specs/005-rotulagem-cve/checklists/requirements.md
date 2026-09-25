@@ -52,7 +52,8 @@
   marcador. Hoje é FR-018 (Planejado).
 - (Histórico, spec retroativa) Todos os FRs levavam a tag `[Implementado]`;
   limitações conhecidas ficavam em Edge Cases, não em FRs.
-- Status Misto (2026-09-24, escopo restante do TCC): FR-018 a FR-023 e
-  SC-006/SC-007 são `[Planejado, TickTick T04]`. FR-018 resolve o local
-  canônico acima; FR-019 reverte a limitação de CPE sem base numérica. Os
-  itens acima continuam passando para os FRs novos.
+- Status Misto (2026-09-24, escopo restante do TCC): FR-018 a FR-024 e
+  SC-006/SC-007 são `[Planejado, TickTick T04]`; FR-025 é
+  `[Proposto, TickTick T04]`. FR-018 resolve o local canônico acima; FR-019
+  reverte a limitação de CPE sem base numérica. Os itens acima continuam
+  passando para os FRs novos.

@@ -110,6 +110,10 @@ as versões 1.9 e 2.0, e a mesma CVE para um firmware sem versão.
 6. **Given** a CPE exata `firmware_4.05.03`, sem base numérica inicial,
    **When** a versão do firmware é `4.05.03`, **Then** a CVE é
    indeterminada. *(Planejado, FR-019; hoje é não aplicável.)*
+7. **Given** um firmware sem versão e uma CVE cujas configurações são
+   todas legíveis e só citam outros produtos, **When** as CVEs são
+   avaliadas, **Then** a CVE é não aplicável, não indeterminada.
+   *(Planejado, FR-024; hoje é indeterminada.)*
 
 ---
 
@@ -268,8 +272,11 @@ rótulos e os metadados gravados.
   A exclusão fica com a preparação do dataset de treino (TickTick T08).
 - Firmware sem versão tem todas as CVEs da entrada como indeterminadas,
   inclusive as que só citam outros produtos ou não têm `configurations`.
-  Evidência independente de versão é Planejado na `004-versao-firmware`
-  (TickTick T11).
+  Descartar as que só citam outros produtos é FR-024 (Planejado); tratar
+  como aplicáveis as que não têm `configurations` é FR-025 (Proposto),
+  porque exige auditoria manual contra advisories do fabricante.
+  `docs/PIPELINE.md` estima 13 `firmware_id` resolvidos com as duas regras
+  (7 para `sem_cve_conhecida` e 6 para `cve_conhecida`).
 - CVE sem `configurations` é aplicável a qualquer versão (decisão
   conservadora). Uma CVE achada só por busca textual pode assim ser ligada
   a um modelo que ela não afeta. Registrado em `docs/PIPELINE.md`,
@@ -442,6 +449,14 @@ rótulos e os metadados gravados.
 - **FR-023** [Planejado, TickTick T04]: O sistema DEVE marcar no JSONL de
   FR-021 e contar no log os `firmware_id` cujos aliases têm versões
   diferentes; versão nula contra versão preenchida conta como diferente.
+- **FR-024** [Planejado, TickTick T04]: Sem versão, o sistema DEVE aplicar
+  às CVEs a regra de produto-alvo de FR-006 antes de marcá-las
+  indeterminadas: a CVE cujas configurações são todas legíveis e nenhuma
+  cita o produto-alvo DEVE ser não aplicável. Restringe FR-005 quando
+  implementado.
+- **FR-025** [Proposto, TickTick T04]: Sem versão, a CVE sem
+  `configurations` DEVE ser aplicável, depois de validar a regra numa
+  amostra auditada manualmente contra advisories do fabricante.
 
 ### Key Entities *(include if feature involves data)*
 

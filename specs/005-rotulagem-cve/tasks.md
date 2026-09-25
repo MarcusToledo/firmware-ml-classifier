@@ -99,8 +99,10 @@ conferida e aliases com CVEs por alias.
 - [ ] T053 [US6] FR-021, FR-023 — Guardar por alias os IDs ordenados das CVEs aplicáveis e indeterminadas em `_aggregate_firmware_label`, gravar `<nome>_aliases.jsonl` ao lado da tabela (ordem de primeira ocorrência, `versions_differ`) e registrar as contagens no log, também com `--dry-run`, em `scripts/generate_labels.py`
 - [ ] T054 [US6] FR-022 — Acrescentar `label_strategy` e `alias_count` depois das 9 colunas em `scripts/generate_labels.py::_result_to_record`
 - [ ] T055 [US6] FR-021, FR-022, FR-023 — Testes do JSONL (chaves, ordem, `versions_differ`), das colunas novas e das contagens no log em `tests/test_generate_labels.py`
-- [ ] T056 [US6] FR-018, FR-019, FR-020, FR-021, FR-022, FR-023 — Regerar `dataset/processed/labels_v2.csv` a partir de features reextraídas pelo código atual (que já grava `meta_version_source`) e registrar a nova distribuição no `TODO.md`; regerar de novo quando `001/FR-015` (leitura completa) for implementado
+- [ ] T056 [US6] FR-018, FR-019, FR-020, FR-021, FR-022, FR-023, FR-024 — Regerar `dataset/processed/labels_v2.csv` com as features reextraídas (`001/T050`) e o cache novo (`003/T050`, `dataset/processed/cve_cache_v2.json`) e registrar a nova distribuição no `TODO.md`
 - [ ] T057 [US6] FR-018 — Verificar SC-007: rodar de novo a rotulagem com os caminhos e SHA256 registrados em `dataset/processed/labels_v2.meta.json` e comparar tabela e JSONL (0 diferenças), registrando o resultado no `TODO.md`
+- [ ] T058 [US2] FR-024 — Sem versão, aplicar a regra de produto-alvo de FR-006 antes de marcar a CVE indeterminada em `src/labeling/cve_labels.py::applicable_cves_for_version`
+- [ ] T059 [US2] FR-024 — Cenário US2.7: teste de CVE que só cita outros produtos para firmware sem versão, ajustando `test_missing_version_is_indeterminate`, em `tests/test_cve_labels.py`
 
 Fora do Spec Kit: o item "Documentar a limitação na metodologia" da
 TickTick T04 é texto do TCC (decisão PR-10 do mapa de escopo restante).
@@ -112,5 +114,6 @@ TickTick T04 é texto do TCC (decisão PR-10 do mapa de escopo restante).
   com T047, T050 com T049, T052 com T051, T055 com T053-T054). T048, T052 e
   T055 editam o mesmo arquivo de teste e não rodam em paralelo; T052 vem
   antes, porque atualiza as fixtures usadas pelas outras. T054 depende de
-  T053. T056 depende de T047-T055 e de reextrair as features; T057 depende
-  de T056.
+  T053. T058 → T059 (T050 e T059 editam `tests/test_cve_labels.py`, em
+  série). T056 depende de T047-T055, T058, `001/T050` e `003/T050`; T057
+  depende de T056.
