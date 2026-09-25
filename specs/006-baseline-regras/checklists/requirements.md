@@ -44,6 +44,9 @@
   sigmoide, média ponderada e NaN são mantidos.
 - "Success criteria are technology-agnostic": SC-001 a SC-004 falam de
   resultados (nível, score, hard rule, rótulo), não de tecnologia.
-- Spec retroativa (Status Implementado): todos os FRs levam a tag
-  `[Implementado]`; limitações conhecidas ficam em Edge Cases, não em FRs.
+- (Histórico, vale para FR-001 a FR-009) Spec retroativa: os FRs levavam a
+  tag `[Implementado]`; limitações conhecidas ficavam em Edge Cases.
 - Sem `data-model.md`: o baseline não persiste artefato.
+- Status Misto (2026-09-24, escopo restante do TCC): FR-010 a FR-014 e
+  SC-005 a SC-007 são `[Planejado, TickTick T11]`. Os itens acima continuam
+  passando para os FRs novos.

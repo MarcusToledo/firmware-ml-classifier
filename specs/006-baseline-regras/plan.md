@@ -4,7 +4,7 @@
 
 **Input**: Feature specification from `/specs/006-baseline-regras/spec.md`
 
-**Note**: plano retroativo. Descreve o código que já existe em `master`; não há Phase 0 (`research.md`), `contracts/` nem `quickstart.md`. O `tasks.md` é retroativo: registra a verificação de cada FR e cenário e as lacunas de teste.
+**Note**: plano retroativo. Descreve o código que já existe em `master`; não há Phase 0 (`research.md`), `contracts/` nem `quickstart.md`. O `tasks.md` é retroativo: registra a verificação de cada FR e cenário e as lacunas de teste. As linhas `[Planejado]` (FR-010 a FR-014, TickTick T11) descrevem módulo e teste previstos; o `tasks.md` as decompõe na fase "Implementação planejada".
 
 ## Summary
 
@@ -46,8 +46,8 @@ dataset hoje
 |II. Rótulo exclusivamente por CVE|Passa|Nenhum script chama `score_firmware`: por grep em `**/*.py`, `src.scoring` só é importado por `tests/test_scoring.py`; `scripts/generate_labels.py` não o importa e rotula via `005-rotulagem-cve`|
 |III. Sem vazamento|Passa|`tests/test_scoring.py::test_baseline_ignores_cve_fields`, `::test_baseline_has_no_cve_signal`; o baseline lê só as chaves listadas em FR-002 e FR-005|
 |IV. Modelos simples|Não se aplica|Regras fixas sem aprendizado; o princípio II prevê o baseline|
-|V. Reprodutibilidade|Passa parcialmente|Função pura, sem aleatoriedade (`tests/test_scoring.py::test_deterministic_same_inputs_same_result`); pesos, limiares e níveis das hard rules em `configs/scoring.yaml` (`::test_scoring_config_loads_without_cve_weight`). As constantes dos sub-scores ficam fixas em `src/scoring.py` (versionado), fora do YAML, e não há execução registrada via `logging`, porque nenhum script roda o baseline|
-|VI. Firmware não confiável|Não se aplica|O baseline não lê binário. O tratamento de NaN como sinal presente é risco latente, registrado em Edge Cases|
+|V. Reprodutibilidade|Desvio rastreado|Função pura, sem aleatoriedade (`tests/test_scoring.py::test_deterministic_same_inputs_same_result`); pesos, limiares e níveis das hard rules em `configs/scoring.yaml` (`::test_scoring_config_loads_without_cve_weight`). As constantes dos sub-scores ficam fixas em `src/scoring.py`, fora do YAML: desvio registrado no Complexity Tracking, correção Planejado em FR-014. O registro da execução via `logging` fica com quem roda o baseline (spec de treino, TickTick T09)|
+|VI. Firmware não confiável|Violação herdada|O baseline não lê binário, mas valor ausente conta como sinal presente (NaN) ou derruba o cálculo (`pd.NA`), e configuração inválida é aceita sem aviso: correção Planejado em FR-010 e FR-012. Ver Complexity Tracking|
 |VII. Integridade científica|Passa|Todo FR tem módulo e teste abaixo ou aparece em "Sem verificação"; nenhum desempenho do baseline é afirmado; números medidos citam data e artefato|
 
 ## Project Structure
@@ -58,7 +58,7 @@ dataset hoje
 specs/006-baseline-regras/
 ├── spec.md                       # /speckit.specify + /speckit.clarify
 ├── plan.md                       # este arquivo
-├── tasks.md                      # verificação retroativa
+├── tasks.md                      # verificação retroativa e implementação planejada
 └── checklists/
     ├── requirements.md           # checklist de qualidade da spec
     └── rastreabilidade.md        # checklist de rastreabilidade e testabilidade
@@ -97,6 +97,11 @@ importados de `src/labeling/cve_labels.py`, módulo de
 |FR-007|US2|nenhum chamador de `src/scoring.py::score_firmware` no pipeline|—|
 |FR-008|US1, US4|`src/scoring.py::load_scoring_config`, `ScoringConfig`, `ThresholdConfig`, `WeightConfig`, `HardRuleConfig`; `configs/scoring.yaml`|`test_scoring.py::test_scoring_config_loads_without_cve_weight` (parcial)|
 |FR-009|US1|`src/scoring.py::score_firmware`|`test_scoring.py::test_deterministic_same_inputs_same_result` (parcial)|
+|FR-010 [Planejado, TickTick T11]|US1|previsto: `src/scoring.py::_score_stats`, `_score_strings`, `_score_binwalk`, `score_firmware`, `SignalResult` (contagem de ausentes)|previsto: `tests/test_scoring.py` (`None`, NaN e `pd.NA` em cada grupo e em cada flag)|
+|FR-011 [Planejado, TickTick T11]|US3|previsto: `src/scoring.py::score_firmware` (hard rules antes do retorno antecipado)|previsto: `tests/test_scoring.py` (só `has_telnetd`, soma de pesos 0 com grupo presente, mínimos diferentes)|
+|FR-012 [Planejado, TickTick T11]|US4|previsto: `src/scoring.py::load_scoring_config`, `ThresholdConfig`, `WeightConfig`, `HardRuleConfig`|previsto: `tests/test_scoring.py` (uma rejeição por categoria de FR-012)|
+|FR-013 [Planejado, TickTick T11]|US3|previsto: `src/scoring.py::score_firmware`, `ScoringResult` (`hard_rules_triggered`)|previsto: `tests/test_scoring.py` (duas regras disparadas, uma sem elevar)|
+|FR-014 [Planejado, TickTick T11]|US4|previsto: `src/scoring.py::load_scoring_config` (subseção nova com as constantes), `_score_stats`, `_score_strings`, `_score_binwalk`; `configs/scoring.yaml`|previsto: `tests/test_scoring.py` (padrões iguais aos atuais; constante alterada no YAML muda o sub-score)|
 
 ### Sem verificação
 
@@ -105,8 +110,8 @@ Partes de FR sem teste que as exercite:
 - FR-002: valores exatos das faixas e constantes (os testes só comparam
   maior/menor); `count_hardcoded_ips`, `entropy_variance_across_sections`
   e `compression_type` não aparecem em nenhum teste.
-- FR-003: soma de pesos 0 com grupo presente e o consequente retorno antes
-  da avaliação das hard rules.
+- FR-003: soma de pesos 0 com grupo presente e o score 0 resultante (o
+  retorno antes das hard rules deixa de valer com FR-011).
 - FR-004: inclusão exata dos valores de fronteira nos níveis definidos por
   `low` e `high`.
 - FR-005: a regra `hardcoded_passwords`; o teste existente já obtém score
@@ -127,8 +132,9 @@ Nenhum.
 
 ## Complexity Tracking
 
-|Requisito|Desvio observado no código atual|Tratamento|
+|Princípio/Requisito|Desvio observado no código atual|Tratamento|
 |---|---|---|
-|006/FR-003|NaN conta como valor presente e pode maximizar sub-scores ou ativar flags.|Defeito já registrado no `TODO.md`; a spec preserva o comportamento observado em Edge Cases.|
-|006/FR-005|Sem grupo presente ou com soma de pesos 0, o retorno antecipado impede a avaliação das hard rules.|Defeito já registrado no `TODO.md`; FR-003 e FR-005 documentam a precedência atual.|
-|006/FR-008|Pesos, limiares e níveis mínimos inválidos não são validados; YAML vazio produz `AttributeError` genérico.|Defeito já registrado no `TODO.md`; a validação fica fora desta mudança documental.|
+|VI; 006/FR-003|Valor ausente conta como presente (NaN) e pode maximizar sub-scores ou ativar flags; `pd.NA` derruba o cálculo.|Correção Planejado: FR-010 [TickTick T11]. A spec preserva o comportamento observado em Edge Cases até a implementação.|
+|VI; 006/FR-005|Sem grupo presente ou com soma de pesos 0, o retorno antecipado impede a avaliação das hard rules.|Correção Planejado: FR-011 [TickTick T11]; FR-003 e FR-005 documentam a precedência atual.|
+|VI; 006/FR-008|Pesos, limiares e níveis mínimos inválidos não são validados; YAML vazio produz `AttributeError` genérico; YAML sem `scoring` carrega padrões sem aviso.|Correção Planejado: FR-012 [TickTick T11].|
+|V; 006/FR-002|Constantes dos sub-scores fixas em `src/scoring.py`, fora da configuração versionada.|Correção Planejado: FR-014 [TickTick T11].|

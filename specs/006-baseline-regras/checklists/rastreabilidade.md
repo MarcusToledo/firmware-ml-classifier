@@ -33,10 +33,17 @@
 ## Consistência, rastreabilidade e requisitos não funcionais
 
 - [x] CHK016 Cada FR implementado aparece uma vez na matriz e numa task da primeira user story associada, com lacuna explícita quando a cobertura é parcial? [Rastreabilidade] [Spec §FR-001–FR-009]
-- [x] CHK017 Cada cenário Given/When/Then possui identificador `USk.n`, evidência executada e task correspondente? [Rastreabilidade] [Spec §User Scenarios & Testing]
-- [ ] CHK018 Os domínios numéricos aceitos e o tratamento exigido para NaN estão definidos como contrato seguro e verificável? [Completude] [Gap] [Spec §FR-001] [Spec §FR-002] [Spec §FR-003] — pendente: TODO.md 006/FR-003
-- [ ] CHK019 A validade de pesos, limiares, níveis mínimos e YAML vazio tem regras de rejeição claras e mensuráveis? [Completude] [Gap] [Spec §FR-008] — pendente: TODO.md 006/FR-008
+- [x] CHK017 Cada cenário Given/When/Then Implementado possui identificador `USk.n`, evidência executada e task correspondente? Os cenários Planejado (US1.8, US3.7, US3.8, US4.6) são citados pelas tasks de teste da Phase 6. [Rastreabilidade] [Spec §User Scenarios & Testing]
+- [x] CHK018 Os domínios numéricos aceitos e o tratamento exigido para NaN estão definidos como contrato seguro e verificável? [Completude] [Gap] [Spec §FR-001] [Spec §FR-002] [Spec §FR-003] — definido em FR-010 (Planejado, T11) e SC-005; o código atual segue em Edge Cases
+- [x] CHK019 A validade de pesos, limiares, níveis mínimos e YAML vazio tem regras de rejeição claras e mensuráveis? [Completude] [Gap] [Spec §FR-008] — definida em FR-012 (Planejado, T11) e SC-006
 - [x] CHK020 A aplicabilidade dos princípios V e VI está delimitada: configuração versionada e determinismo são exigidos, enquanto leitura limitada do binário pertence à extração? [Assumption] [Spec §FR-008] [Spec §FR-009]
+
+## Requisitos planejados (escopo restante, 2026-09-24)
+
+- [x] CHK021 Cada FR Planejado cita a TickTick de origem, tem linha prevista na matriz do `plan.md` e ao menos uma task na fase "Implementação planejada"? [Rastreabilidade] [Spec §FR-010–FR-014]
+- [x] CHK022 A precedência nova de FR-011 sobre o retorno antecipado de FR-003/FR-005 está explícita, com score e nível definidos para o caso sem grupo? [Consistência] [Spec §FR-003] [Spec §FR-005] [Spec §FR-011]
+- [x] CHK023 `hard_rules_triggered` e `hard_rule_applied` têm significados distintos e não contraditórios? [Clareza] [Spec §FR-005] [Spec §FR-013]
+- [x] CHK024 Cada FR Planejado tem cenário Given/When/Then marcado como Planejado? [Cobertura de cenários] [Spec §US1.8] [Spec §US3.7] [Spec §US3.8] [Spec §US4.6]
 
 ## Notas
 

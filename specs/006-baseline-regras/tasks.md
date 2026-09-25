@@ -4,10 +4,11 @@
 
 **Nota**: tasks retroativas. O código já existe em `master`; cada task
 `[x]` registra uma verificação feita em 2026-09-24 (FR → módulo → teste ou
-cenário conferido). Tasks `[ ]` são lacunas de teste ainda abertas,
-espelhadas no `TODO.md`.
+cenário conferido). Tasks `[ ]` das fases 1 a 5 são lacunas de teste ainda
+abertas, espelhadas no `TODO.md`. A Phase 6 decompõe os FRs Planejado
+(TickTick T11).
 
-## Format: `[ID] [Story] Descrição`
+## Format: `[ID] [P?] [Story] Descrição`
 
 ## Phase 1: User Story 1 - Previsão determinística para comparação (Priority: P1)
 
@@ -63,7 +64,7 @@ espelhadas no `TODO.md`.
 ## Phase 5: Lacunas de teste
 
 - [ ] T032 [US1] FR-002 — faltam valores exatos das fórmulas e cobertura de `count_hardcoded_ips`, `entropy_variance_across_sections` e `compression_type`; teste sugerido em `tests/test_scoring.py`
-- [ ] T033 [US1] FR-003 — falta soma de pesos 0 com grupo presente e retorno antes das hard rules; teste sugerido em `tests/test_scoring.py`
+- [ ] T033 [US1] FR-003 — falta soma de pesos 0 com grupo presente e o score 0 resultante (sem testar o retorno antes das hard rules, que FR-011 remove); teste sugerido em `tests/test_scoring.py`
 - [ ] T034 [US1] FR-004 — faltam as fronteiras inclusivas exatas de `low` e `high`; teste sugerido em `tests/test_scoring.py`
 - [ ] T035 [US3] FR-005 — faltam a hard rule `hardcoded_passwords`, mínimo `cve_critica` configurado e última regra aplicada; teste sugerido em `tests/test_scoring.py`
 - [ ] T036 [US2] FR-006 — falta provar que campos de identidade não alteram o resultado; teste sugerido em `tests/test_scoring.py`
@@ -71,6 +72,28 @@ espelhadas no `TODO.md`.
 - [ ] T038 [US1] FR-008 — faltam valores exatos do YAML, defaults parciais e rejeição de chave desconhecida; teste sugerido em `tests/test_scoring.py`
 - [ ] T039 [US1] FR-009 — faltam detalhamento, hard rule e determinismo entre processos; teste sugerido em `tests/test_scoring.py`
 
+## Phase 6: Implementação planejada (TickTick T11)
+
+**Goal**: valor ausente como ausência de sinal, hard rules também no
+retorno antecipado, configuração validada, registro de todas as regras
+disparadas e constantes dos sub-scores no YAML.
+
+- [ ] T040 [US1] FR-010 — Tratar `None`, NaN e `pd.NA` como ausentes e contar os ausentes ignorados por grupo no detalhamento, em `src/scoring.py::_score_stats`, `_score_strings`, `_score_binwalk`, `score_firmware` e `SignalResult`
+- [ ] T041 [US1] FR-010 — Cenário US1.8: testes de `None`, NaN e `pd.NA` em cada grupo, em cada flag e em contagens em `tests/test_scoring.py`
+- [ ] T042 [US3] FR-011 — Avaliar as hard rules antes do retorno antecipado, com score 0 e o mais grave entre os mínimos das regras disparadas, em `src/scoring.py::score_firmware`; atualizar o texto de FR-003, FR-005 e do Edge Case correspondente em `specs/006-baseline-regras/spec.md`
+- [ ] T043 [US3] FR-011 — Cenário US3.7: testes de só `has_telnetd`, de soma de pesos 0 com grupo presente e de mínimos diferentes em `tests/test_scoring.py`
+- [ ] T044 [US4] FR-012 — Validar níveis mínimos, `0 ≤ low < high ≤ 1`, pesos `≥ 0` com soma `> 0`, YAML vazio, seção `scoring` ausente e chave desconhecida, com arquivo e chave na mensagem, em `src/scoring.py::load_scoring_config`
+- [ ] T045 [US4] FR-012 — Cenário US4.6: uma rejeição por categoria de FR-012 em `tests/test_scoring.py`
+- [ ] T046 [US3] FR-013 — Acrescentar `hard_rules_triggered` a `ScoringResult` e preenchê-lo na ordem de avaliação em `src/scoring.py::score_firmware`
+- [ ] T047 [US3] FR-013 — Cenário US3.8: teste com duas regras disparadas, uma sem elevar o nível, em `tests/test_scoring.py`
+- [ ] T048 [US4] FR-014 — Levar as constantes dos sub-scores de FR-002 a uma subseção de `configs/scoring.yaml`, carregá-las e validá-las em `src/scoring.py::load_scoring_config` e usá-las em `_score_stats`, `_score_strings` e `_score_binwalk`
+- [ ] T049 [US4] FR-014 — Testes de padrões iguais aos valores atuais e de constante alterada no YAML mudando o sub-score em `tests/test_scoring.py`
+
 ## Dependencies & Execution Order
 
 - Lacunas são independentes entre si; cada uma só depende do módulo citado.
+- Phase 6: cada teste pode ser escrito antes da sua implementação. As
+  implementações editam o mesmo `src/scoring.py` e os testes o mesmo
+  `tests/test_scoring.py`: nenhuma task desta fase roda em paralelo.
+  Ordem sugerida: T044 → T048 (configuração), depois T040 → T042 → T046
+  (`score_firmware`).

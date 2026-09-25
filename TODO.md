@@ -99,6 +99,12 @@
       auxiliares derivados de `--output`). Relatório em
       `.docs/brainstorming/validacao-rastreabilidade/005-planejado.md`.
       Clarify em lotes de até 5 perguntas por sessão (aprovado).
+- [x] Task 4, etapa 5, spec 006 (Misto): FR-010 a FR-014 Planejado
+      (TickTick T11), clarify com 4 perguntas, matriz, checklist, Phase 6
+      (T040-T049) e analyze (0 CRITICAL, 0 HIGH). Decidido no analyze:
+      constantes dos sub-scores vão para o YAML (FR-014, CR-27, item novo na
+      T11). Relatório em
+      `.docs/brainstorming/validacao-rastreabilidade/006-planejado.md`.
 
 ### Pending
 - [ ] T07: limpar os campos de feature não utilizados (Doc2Vec desligado por
