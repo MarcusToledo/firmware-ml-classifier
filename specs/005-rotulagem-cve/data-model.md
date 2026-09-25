@@ -35,6 +35,58 @@ dessas colunas pode entrar no vetor de features; do arquivo, o treino usa só
   indeterminadas mudariam a classe, não a ausência de aplicáveis.
 - `version` e `version_source` são ambos nulos ou ambos preenchidos.
 
+## Planejado (TickTick T04)
+
+Esquema previsto; nada disso existe no código atual.
+
+### Colunas novas do registro de rótulo (FR-022)
+
+|Coluna|Tipo|Origem|
+|---|---|---|
+|`label_strategy`|texto|`alias_unico` (um alias) ou `agregacao_conservadora` (regra C com mais de um alias)|
+|`alias_count`|int ≥ 1|número de aliases do `firmware_id`|
+
+As duas vêm depois das 9 colunas atuais. Como as demais, não entram no
+vetor de features.
+
+### `<nome>.meta.json` (FR-018)
+
+Ao lado da tabela, com o mesmo nome-base (no padrão,
+`dataset/processed/labels_v2.meta.json`). Não é gravado com `--dry-run`.
+
+|Chave|Tipo|Conteúdo|
+|---|---|---|
+|`critical_cvss`|float em [0, 10]|valor de `--critical-cvss` usado|
+|`features_path`|texto|caminho de `--features`|
+|`features_sha256`|texto (SHA256 hex)|hash do arquivo de features|
+|`cves_path`|texto|caminho de `--cves`|
+|`cves_sha256`|texto (SHA256 hex)|hash do cache de CVE|
+|`code_commit`|texto|commit do código que gerou a tabela|
+|`generated_at`|texto (ISO 8601, UTC)|data e hora da execução; único campo que muda entre execuções com as mesmas entradas|
+
+### `<nome>_aliases.jsonl` (FR-021, FR-023)
+
+Ao lado da tabela, com o mesmo nome-base (no padrão,
+`dataset/processed/labels_v2_aliases.jsonl`). Uma linha por `firmware_id`,
+na ordem da primeira ocorrência na tabela de entrada. Não é gravado com
+`--dry-run`.
+
+|Chave|Tipo|Conteúdo|
+|---|---|---|
+|`firmware_id`|texto (SHA256 hex)|identidade de conteúdo|
+|`label_strategy`|texto|igual à coluna do registro de rótulo|
+|`versions_differ`|bool|verdadeiro quando os aliases têm versões diferentes; nulo contra preenchido conta como diferente|
+|`aliases`|lista|um objeto por alias, na ordem da tabela de entrada|
+|`aliases[].meta_path`|texto|path do alias|
+|`aliases[].vendor`, `aliases[].model`, `aliases[].version`|texto ou nulo|cópias de `meta_brand`, `meta_model` e `meta_version`|
+|`aliases[].applicable_cves`|lista de texto|IDs ordenados das CVEs aplicáveis ao alias, antes da agregação|
+|`aliases[].indeterminate_cves`|lista de texto|IDs ordenados das CVEs indeterminadas do alias, antes da agregação|
+
+### Coluna nova de entrada (FR-020)
+
+A rotulagem passa a ler também `meta_version_source` da tabela de
+features; tabela sem a coluna é erro.
+
 ## Artefato existente
 
 Medido em 2026-09-24, somente leitura, sobre `dataset/labels_v2.csv`:
@@ -76,6 +128,7 @@ O `dataset/labels.csv` (v1) ainda existe e é o destino padrão de
 - Entrada: tabela de features de `001-extracao-features`
   (`dataset/processed/features_v2.parquet`), extraída com
   `--label-from-path`. Só `firmware_id`, `meta_path`, `meta_brand`,
-  `meta_model` e `meta_version` são lidas.
+  `meta_model` e `meta_version` são lidas; com FR-020 (Planejado), também
+  `meta_version_source`.
 - Entrada: cache de CVE de `003-busca-cve` (`dataset/cve_cache_v2.json`,
   `schema_version: 2`; `003/FR-006`).

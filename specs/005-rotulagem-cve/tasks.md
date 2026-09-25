@@ -4,10 +4,11 @@
 
 **Nota**: tasks retroativas. O código já existe em `master`; cada task
 `[x]` registra uma verificação feita em 2026-09-24 (FR → módulo → teste ou
-cenário conferido). Tasks `[ ]` são lacunas de teste ainda abertas,
-espelhadas no `TODO.md`.
+cenário conferido). Tasks `[ ]` das fases 2 a 7 são lacunas de teste ainda
+abertas, espelhadas no `TODO.md`. A Phase 8 decompõe os FRs Planejado
+(TickTick T04).
 
-## Format: `[ID] [Story] Descrição`
+## Format: `[ID] [P?] [Story] Descrição`
 
 ## Phase 2: User Story 1 - Rótulo de treino vindo só do cache de CVE (Priority: P1)
 
@@ -83,6 +84,33 @@ espelhadas no `TODO.md`.
 - [ ] T045 [US5] FR-016 — `--dry-run` sem cobertura permanente; teste sugerido em `tests/test_generate_labels.py`
 - [ ] T046 [US5] FR-017 — logs de contagem, distribuições e caminho gravado sem cobertura permanente; teste sugerido em `tests/test_generate_labels.py`
 
+## Phase 8: Implementação planejada (TickTick T04)
+
+**Goal**: Rótulo agregado auditável e reproduzível: path canônico com
+metadados, CPE sem base numérica indeterminada, `meta_version_source`
+conferida e aliases com CVEs por alias.
+
+- [ ] T047 [US6] FR-018 — Trocar o padrão de `--output` para `dataset/processed/labels_v2.csv` e gravar `<nome>.meta.json` ao lado da tabela (limiar, caminhos e SHA256 das entradas, commit, data), sem gravar com `--dry-run`, em `scripts/generate_labels.py::main`
+- [ ] T048 [US6] FR-018 — Testes do path padrão, dos auxiliares derivados de `--output`, das chaves dos metadados e de `--dry-run` sem auxiliares em `tests/test_generate_labels.py`
+- [ ] T049 [US2] FR-019 — Devolver CVE indeterminada para CPE exata sem base numérica e para CPE numérica contra firmware com sufixo na mesma base, depois da normalização de FR-009, em `src/labeling/cve_labels.py::_match_version`
+- [ ] T050 [P] [US2] FR-019 — Trocar `test_exact_cpe_without_parseable_base_keeps_known_limitation` por testes de CVE indeterminada (`firmware_4.05.03`; `1.2rc1` contra `1.2`) e ajustar `test_exact_numeric_cpe_does_not_match_firmware_suffix` em `tests/test_cve_labels.py`
+- [ ] T051 [US4] FR-020 — Ler `meta_version_source` (`ID_COLUMNS`, `_load_features`), conferir contra a origem reinferida logo depois de FR-004 em `_label_rows` (nulo contra valor falha) e falhar com a coluna ausente, em `scripts/generate_labels.py`
+- [ ] T052 [US4] FR-020 — Acrescentar `meta_version_source` a `_run_cli` e às fixtures dos testes de CLI existentes, e escrever os testes de origem divergente, nulo contra valor e coluna ausente em `tests/test_generate_labels.py`
+- [ ] T053 [US6] FR-021, FR-023 — Guardar por alias os IDs ordenados das CVEs aplicáveis e indeterminadas em `_aggregate_firmware_label`, gravar `<nome>_aliases.jsonl` ao lado da tabela (ordem de primeira ocorrência, `versions_differ`) e registrar as contagens no log, também com `--dry-run`, em `scripts/generate_labels.py`
+- [ ] T054 [US6] FR-022 — Acrescentar `label_strategy` e `alias_count` depois das 9 colunas em `scripts/generate_labels.py::_result_to_record`
+- [ ] T055 [US6] FR-021, FR-022, FR-023 — Testes do JSONL (chaves, ordem, `versions_differ`), das colunas novas e das contagens no log em `tests/test_generate_labels.py`
+- [ ] T056 [US6] FR-018, FR-019, FR-020, FR-021, FR-022, FR-023 — Regerar `dataset/processed/labels_v2.csv` a partir de features reextraídas pelo código atual (que já grava `meta_version_source`) e registrar a nova distribuição no `TODO.md`; regerar de novo quando `001/FR-015` (leitura completa) for implementado
+- [ ] T057 [US6] FR-018 — Verificar SC-007: rodar de novo a rotulagem com os caminhos e SHA256 registrados em `dataset/processed/labels_v2.meta.json` e comparar tabela e JSONL (0 diferenças), registrando o resultado no `TODO.md`
+
+Fora do Spec Kit: o item "Documentar a limitação na metodologia" da
+TickTick T04 é texto do TCC (decisão PR-10 do mapa de escopo restante).
+
 ## Dependencies & Execution Order
 
 - Lacunas são independentes entre si; cada uma só depende do módulo citado.
+- Phase 8: cada teste pode ser escrito antes da sua implementação (T048
+  com T047, T050 com T049, T052 com T051, T055 com T053-T054). T048, T052 e
+  T055 editam o mesmo arquivo de teste e não rodam em paralelo; T052 vem
+  antes, porque atualiza as fixtures usadas pelas outras. T054 depende de
+  T053. T056 depende de T047-T055 e de reextrair as features; T057 depende
+  de T056.

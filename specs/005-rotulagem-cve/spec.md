@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-24
 
-**Status**: Implementado
+**Status**: Misto
 
 **Input**: User description: "Spec retroativa (Status Implementado) da rotulagem por CVE: para cada firmware, CVEs do cache consultado por fabricante/modelo filtradas pela versão quando conhecida, separação entre aplicáveis e indeterminadas, agregação por firmware_id entre aliases, nível de segurança derivado de cve_total e cvss_max e tabela labels_v2.csv. Par ausente no cache é erro. Derivar só do código em master, testes, docs/PIPELINE.md e TODO.md."
 
@@ -12,20 +12,35 @@
 
 ### Session 2026-09-24
 
-- Varredura de ambiguidade (`/speckit.clarify`): sem ambiguidades críticas
-  no comportamento. Por ser spec retroativa, cada FR descreve o código em
-  `master`; as regras de versão, de agregação e de classe estão todas
-  decididas no código e cobertas por teste.
+- Varredura de ambiguidade (`/speckit.clarify`, histórico da spec
+  retroativa): sem ambiguidades críticas no comportamento. Os FRs
+  `[Implementado]` descrevem o código em `master`; as regras de versão, de
+  agregação e de classe estão decididas no código e cobertas por teste. Os
+  FRs `[Planejado]` vêm do escopo restante do TCC (TickTick T04).
 - Q: Onde a tabela de rótulos deve ficar por padrão? → A: em
   `dataset/processed/labels_v2.csv`, com registro do limiar
   `--critical-cvss` e das entradas (princípio V). Decisão do pesquisador,
-  ainda não implementada: nenhum FR muda; o desvio atual está em Edge
-  Cases e a correção no `TODO.md`.
+  ainda não implementada: FR-018 (Planejado); o desvio atual está em Edge
+  Cases.
 - Terminologia normalizada: uma CVE é **aplicável**, **indeterminada** ou
   **não aplicável** à versão do firmware; `indeterminado` é o estado do
   rótulo do firmware. **Alias** é cada linha da tabela de features que
   compartilha o mesmo `firmware_id` (mesmo binário sob outro path,
   fabricante ou modelo).
+- Q: Em que formato os metadados da execução da rotulagem devem ser
+  gravados? → A: JSON ao lado da tabela,
+  `dataset/processed/labels_v2.meta.json` (FR-018).
+- Q: Onde registrar os aliases e as CVEs de cada alias antes da
+  agregação? → A: JSONL separado, `dataset/processed/labels_v2_aliases.jsonl`,
+  uma linha por `firmware_id` (FR-021, FR-023).
+- Q: Onde gravar a estratégia de agregação e o número de aliases de cada
+  rótulo? → A: duas colunas no CSV, `label_strategy` e `alias_count`
+  (FR-022).
+- Q: O que fazer quando a tabela de features não tem
+  `meta_version_source`? → A: falhar pedindo a reextração das features
+  (FR-020).
+- Q: O artefato mantém o nome `labels_v2.csv` depois das mudanças? → A:
+  sim; os metadados da execução distinguem as gerações (FR-018).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -92,6 +107,9 @@ as versões 1.9 e 2.0, e a mesma CVE para um firmware sem versão.
    modelo-alvo com `versionEndExcluding=2.0`, **When** a versão é `1.0`,
    **Then** a CVE é aplicável, sem que a configuração do outro modelo a
    deixe indeterminada.
+6. **Given** a CPE exata `firmware_4.05.03`, sem base numérica inicial,
+   **When** a versão do firmware é `4.05.03`, **Then** a CVE é
+   indeterminada. *(Planejado, FR-019; hoje é não aplicável.)*
 
 ---
 
@@ -152,6 +170,14 @@ diverge da versão do path e com linhas duplicadas.
    rotulagem falha antes de consultar o cache.
 5. **Given** uma entrada do cache sem `schema_version: 2` ou sem lista
    `cves`, **When** ela é consultada, **Then** a rotulagem falha.
+6. **Given** uma tabela de features cuja `meta_version_source` difere da
+   origem reinferida de `meta_path`, **When** a rotulagem roda, **Then**
+   ela falha citando o `firmware_id`, o `meta_path` e as duas origens.
+   *(Planejado, FR-020.)*
+7. **Given** uma tabela de features sem a coluna `meta_version_source`
+   (caso do `features_v2.parquet` atual), **When** a rotulagem roda,
+   **Then** ela falha com a instrução de reextrair as features com
+   `--label-from-path`. *(Planejado, FR-020.)*
 
 ---
 
@@ -175,6 +201,48 @@ distribuição e que nenhum arquivo é gravado.
 
 ---
 
+### User Story 6 - Rótulo agregado auditável (Priority: P1) *(Planejado)*
+
+A banca audita, para cada `firmware_id`, quais aliases e quais CVEs
+sustentam o rótulo, e vê quando ele é uma inferência conservadora entre
+aliases. O pesquisador reproduz a tabela a partir dos parâmetros
+registrados junto dela.
+
+**Why this priority**: a agregação entre aliases (regra C) propaga CVEs de
+um modelo comercial para outro. Sem registrar os aliases e as CVEs de cada
+um, a banca não consegue conferir o rótulo (TickTick T04; constituição,
+princípios II e V).
+
+**Independent Test**: rotular dois aliases do mesmo `firmware_id`, com
+modelos e versões diferentes, sem `--output`, e conferir o artefato de
+rótulos e os metadados gravados.
+
+**Acceptance Scenarios**:
+
+1. **Given** um `firmware_id` com dois aliases de modelos diferentes,
+   **When** a rotulagem roda, **Then** o artefato lista os dois aliases
+   (`meta_path`, fabricante, modelo, versão) e as CVEs aplicáveis e
+   indeterminadas de cada um antes da agregação.
+2. **Given** o mesmo caso, **When** o registro de rótulo é gravado,
+   **Then** ele marca a estratégia como agregação conservadora entre
+   aliases, com o número de aliases; um `firmware_id` com um alias só é
+   marcado como alias único.
+3. **Given** dois aliases do mesmo `firmware_id` com versões diferentes,
+   **When** a rotulagem roda, **Then** a divergência de versão fica
+   registrada no artefato e contada no log.
+4. **Given** uma execução sem `--output`, **When** a rotulagem termina,
+   **Then** a tabela é gravada em `dataset/processed/labels_v2.csv`, junto
+   com `labels_v2.meta.json` (limiar, caminhos e SHA256 das entradas,
+   commit do código e data) e `labels_v2_aliases.jsonl`; com `--output`
+   explícito, os dois arquivos auxiliares acompanham a tabela no mesmo
+   diretório.
+5. **Given** um lote com aliases, **When** a rotulagem termina, **Then** o
+   log informa quantos `firmware_id` têm mais de um alias, quantos têm
+   aliases de mais de um modelo e quantos têm aliases com versões
+   diferentes, também com `--dry-run`.
+
+---
+
 ### Edge Cases
 
 - O `--output` padrão ainda é o v1, `dataset/labels.csv`. Gerar o
@@ -182,26 +250,26 @@ distribuição e que nenhum arquivo é gravado.
   execução sobrescreve o `labels.csv` antigo, que ainda existe no disco.
   Além disso, `dataset/labels_v2.csv` fica fora de `dataset/processed/`,
   local de tabelas finais do princípio V. O local canônico decidido é
-  `dataset/processed/labels_v2.csv` (ver Clarifications); a correção está
-  no `TODO.md`.
+  `dataset/processed/labels_v2.csv` (ver Clarifications); a correção é
+  FR-018 (Planejado).
 - O `features_v2.parquet` atual não tem `meta_version_source` (conferido
   em 2026-09-24). Por isso a rotulagem reinfere `version_source` a partir
   de `meta_path`, pela regra de `004-versao-firmware` (`004/FR-004`,
   `004/FR-005`), e só confere a versão contra `meta_version`.
   `meta_version_source`, quando existe no parquet, não é lido nem
-  conferido. Qualquer mudança na regra de versão exige reextrair as
-  features antes de regerar os rótulos; senão a checagem de coerência
-  falha.
+  conferido; ler e conferir é FR-020 (Planejado). Qualquer mudança na regra
+  de versão exige reextrair as features antes de regerar os rótulos; senão
+  a checagem de coerência falha.
 - `labels_v2.csv` mantém o estado `indeterminado` (137 de 840 linhas; 126
   de 699 `firmware_id`, medido em 2026-09-24). O treino futuro precisa
   excluí-lo e usar do arquivo só `security_level`, porque
   `version_source` nulo tende a coincidir com `indeterminado` (83 das 137
   linhas `indeterminado` têm `version_source` nulo, mesma medição).
-  Tratado no `TODO.md`, itens "Excluir registros `indeterminado` do
-  treino" e "Implementar `scripts/train.py`".
+  A exclusão fica com a preparação do dataset de treino (TickTick T08).
 - Firmware sem versão tem todas as CVEs da entrada como indeterminadas,
   inclusive as que só citam outros produtos ou não têm `configurations`.
-  Evidência independente de versão está no `TODO.md` como trabalho futuro.
+  Evidência independente de versão é Planejado na `004-versao-firmware`
+  (TickTick T11).
 - CVE sem `configurations` é aplicável a qualquer versão (decisão
   conservadora). Uma CVE achada só por busca textual pode assim ser ligada
   a um modelo que ela não afeta. Registrado em `docs/PIPELINE.md`,
@@ -209,11 +277,12 @@ distribuição e que nenhum arquivo é gravado.
   `TODO.md`.
 - Versão CPE exata sem base numérica inicial (ex.: `firmware_4.05.03`,
   erro de cadastro da NVD na Belkin) resulta em CVE não aplicável: a
-  incerteza vira evidência negativa. Decidido como limitação aceita no
-  `TODO.md`; `docs/PIPELINE.md` registra impacto nulo no dataset atual.
+  incerteza vira evidência negativa. O pesquisador reverteu em 2026-09-24
+  a decisão de aceitar a limitação: FR-019 (Planejado) torna a CVE
+  indeterminada. `docs/PIPELINE.md` registra impacto nulo no dataset atual.
   Firmware com sufixo (ex.: `1.2rc1`) contra CPE exata numérica (`1.2`)
   também resulta em não aplicável; `docs/PIPELINE.md` registra zero
-  ocorrência hoje.
+  ocorrência hoje. FR-019 (Planejado) também cobre esse caso.
 - Condições que os metadados não resolvem ficam indeterminadas: versão CPE
   `-` no produto-alvo, revisão de hardware específica, limites em data
   (ex.: `versionEndExcluding=2017-01-06`) e outro produto vulnerável numa
@@ -334,6 +403,45 @@ distribuição e que nenhum arquivo é gravado.
   firmwares e de entradas do cache, a distribuição de `security_level`
   nas quatro classes, a distribuição de `version_source` (`directory`,
   `filename`, nulo) e o caminho gravado.
+- **FR-018** [Planejado, TickTick T04]: Sem `--output`, o sistema DEVE
+  gravar a tabela em `dataset/processed/labels_v2.csv`. Ao lado da tabela,
+  no mesmo diretório e com o mesmo nome-base (`<nome>.meta.json`; no
+  padrão, `labels_v2.meta.json`), DEVE gravar os metadados da execução:
+  limiar `--critical-cvss`, caminhos e SHA256 das entradas `--features` e
+  `--cves`, commit do código e data da execução. A data é o único campo que
+  muda entre execuções com as mesmas entradas. Com `--dry-run`, os
+  metadados não são gravados. O nome `labels_v2.csv` se mantém depois das
+  mudanças desta spec.
+- **FR-019** [Planejado, TickTick T04]: Depois da normalização de FR-009,
+  uma versão CPE exata sem base numérica inicial (ex.: `firmware_4.05.03`)
+  DEVE tornar a CVE indeterminada, e uma CPE exata numérica (ex.: `1.2`)
+  diante de firmware com sufixo na mesma base (ex.: `1.2rc1`) também. Quando
+  implementado, substitui as regras "CPE sem base numérica → não aplicável"
+  e "CPE numérica contra firmware com sufixo → não aplicável" de FR-010.
+- **FR-020** [Planejado, TickTick T04]: O sistema DEVE ler
+  `meta_version_source` da tabela de features e, logo depois da checagem de
+  FR-004, falhar quando ela difere da origem reinferida de `meta_path`
+  (nulo contra nulo passa; nulo contra valor falha), citando `firmware_id`,
+  `meta_path` e as duas origens. Tabela sem a coluna `meta_version_source`
+  DEVE falhar com a instrução de reextrair as features com
+  `--label-from-path`. Quando implementado, amplia a lista de colunas lidas
+  de FR-001.
+- **FR-021** [Planejado, TickTick T04]: O sistema DEVE registrar num JSONL
+  ao lado da tabela, com o mesmo nome-base (`<nome>_aliases.jsonl`; no
+  padrão, `labels_v2_aliases.jsonl`), uma linha por `firmware_id`, na ordem
+  da primeira ocorrência na tabela de entrada, com os aliases (`meta_path`,
+  fabricante, modelo e versão) e, por alias, os IDs ordenados das CVEs
+  aplicáveis e indeterminadas antes da agregação. DEVE registrar em log
+  quantos `firmware_id` têm mais de um alias e quantos têm aliases de mais
+  de um modelo (modelo comparado em minúsculas, sem espaços nas pontas).
+  Com `--dry-run`, o JSONL não é gravado e o log continua.
+- **FR-022** [Planejado, TickTick T04]: Cada registro de rótulo DEVE ter as
+  colunas `label_strategy` (`alias_unico` ou `agregacao_conservadora`, esta
+  para a regra C de FR-012 com mais de um alias) e `alias_count`, depois das
+  9 colunas de FR-015.
+- **FR-023** [Planejado, TickTick T04]: O sistema DEVE marcar no JSONL de
+  FR-021 e contar no log os `firmware_id` cujos aliases têm versões
+  diferentes; versão nula contra versão preenchida conta como diferente.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -361,7 +469,8 @@ distribuição e que nenhum arquivo é gravado.
   `labels_v2.csv`. Medido em 2026-09-24: 699 `firmware_id`, 74 com mais de
   um alias, nenhum com rótulos diferentes.
 - **SC-004**: `labels_v2.csv` tem só as 9 colunas de FR-015, nenhuma de
-  feature.
+  feature. Com FR-022 implementado, são 11: as 9 mais `label_strategy` e
+  `alias_count`.
 - **SC-005**: a rotulagem do código atual sobre `features_v2.parquet` e
   `cve_cache_v2.json` reproduz `labels_v2.csv`: 840 linhas e 699
   `firmware_id`, com 0 diferenças em `security_level`, `cve_total`,
@@ -369,6 +478,12 @@ distribuição e que nenhum arquivo é gravado.
   gravar). A distribuição por `firmware_id` (423 `sem_cve_conhecida`, 49
   `cve_conhecida`, 101 `cve_critica`, 126 `indeterminado`) é a registrada
   no `TODO.md` e em `docs/PIPELINE.md`.
+- **SC-006** [Planejado, TickTick T04]: 100% dos `firmware_id` com mais de
+  um alias têm, no artefato, os aliases, as CVEs de cada alias e a
+  estratégia de agregação.
+- **SC-007** [Planejado, TickTick T04]: rodar de novo a rotulagem com os
+  parâmetros e as entradas registrados nos metadados (FR-018) reproduz a
+  tabela e o JSONL com 0 diferenças.
 
 ## Assumptions
 

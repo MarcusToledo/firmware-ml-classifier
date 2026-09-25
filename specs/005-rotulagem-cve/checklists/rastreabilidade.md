@@ -34,9 +34,17 @@
 
 ## Non-Functional Requirements
 
-- [ ] CHK014 O requisito de persistência define e satisfaz local canônico, parâmetros e entradas necessários para reproduzir o artefato em outro processo? [Conflict, Spec §FR-015, princípio V] — pendente: TODO.md 005/princípio V
+- [ ] CHK014 O requisito de persistência define e satisfaz local canônico, parâmetros e entradas necessários para reproduzir o artefato em outro processo? [Conflict, Spec §FR-015, princípio V] — pendente: definido em FR-018 (Planejado, T04); satisfeito só depois da implementação
 - [x] CHK015 Os requisitos tornam falhas de entrada observáveis antes da gravação e proíbem saída parcial silenciosa? [Spec §FR-002, Spec §FR-003, Spec §FR-004, Spec §FR-015, princípio VI]
-- [ ] CHK016 O tratamento especificado para CPE exata sem base numérica preserva a incerteza de modo compatível com a exigência de erro visível? [Conflict, Spec §FR-010, princípio VI] — pendente: limitação aceita pelo pesquisador (TODO.md, "CPE da Belkin": decidido não corrigir); ver Complexity Tracking
+- [ ] CHK016 O tratamento especificado para CPE exata sem base numérica preserva a incerteza de modo compatível com a exigência de erro visível? [Conflict, Spec §FR-010, princípio VI] — pendente: FR-019 (Planejado, T04) reverte a limitação; satisfeito só depois da implementação
+
+## Planned Requirements (escopo restante, 2026-09-24)
+
+- [x] CHK017 Cada FR Planejado cita a TickTick de origem, tem linha prevista na matriz do `plan.md` e ao menos uma task na fase "Implementação planejada"? [Traceability, Spec §FR-018–FR-023]
+- [x] CHK018 Os artefatos novos (`labels_v2.meta.json`, `labels_v2_aliases.jsonl`, colunas `label_strategy` e `alias_count`) têm nome, local e conteúdo definidos? [Clarity, Spec §FR-018, Spec §FR-021, Spec §FR-022, Spec §Clarifications]
+- [x] CHK019 A substituição da regra "CPE sem base numérica → não aplicável" (FR-010) por FR-019 está explícita, sem dois FRs normativos contraditórios no mesmo estado? [Consistency, Spec §FR-010, Spec §FR-019]
+- [x] CHK020 Cada FR Planejado com efeito observável tem cenário Given/When/Then marcado como Planejado? [Coverage, Spec §US2.6, Spec §US4.6, Spec §US6]
+- [x] CHK021 Os critérios mensuráveis separam o que foi medido no código atual (SC-005) do que vale depois da implementação (SC-006, SC-007)? [Measurability, Spec §SC-005–SC-007]
 
 ## Notes
 

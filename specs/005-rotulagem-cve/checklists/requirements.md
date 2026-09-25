@@ -46,8 +46,13 @@
   CPE, CVSS e lógica de três valores são mantidos.
 - "Success criteria are technology-agnostic": SC-003 a SC-005 citam
   `labels_v2.csv` e suas colunas, que são contrato, não tecnologia.
-- A pergunta sobre o local canônico da tabela de rótulos (`--output`
-  padrão v1 e `dataset/` fora de `dataset/processed/`) não altera nenhum
-  FR e está registrada em Edge Cases, sem marcador.
-- Spec retroativa (Status Implementado): todos os FRs levam a tag
-  `[Implementado]`; limitações conhecidas ficam em Edge Cases, não em FRs.
+- (Histórico, spec retroativa) A pergunta sobre o local canônico da tabela
+  de rótulos (`--output` padrão v1 e `dataset/` fora de
+  `dataset/processed/`) não alterava nenhum FR e ficou em Edge Cases, sem
+  marcador. Hoje é FR-018 (Planejado).
+- (Histórico, spec retroativa) Todos os FRs levavam a tag `[Implementado]`;
+  limitações conhecidas ficavam em Edge Cases, não em FRs.
+- Status Misto (2026-09-24, escopo restante do TCC): FR-018 a FR-023 e
+  SC-006/SC-007 são `[Planejado, TickTick T04]`. FR-018 resolve o local
+  canônico acima; FR-019 reverte a limitação de CPE sem base numérica. Os
+  itens acima continuam passando para os FRs novos.

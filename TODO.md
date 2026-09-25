@@ -93,6 +93,12 @@
 - [x] Emenda PATCH da constituição 1.0.1 (CF-g, aprovada): dependências só
       em `pyproject.toml`; `AGENTS.md` instala com `pip install -e ".[dev]"`;
       descrição do `pyproject.toml` deixa de dizer "por fabricante" (CF-i).
+- [x] Task 4, etapa 5, spec 005 (Misto): FR-018 a FR-023 Planejado
+      (TickTick T04), US6, clarify com 5 perguntas, matriz, checklist,
+      Phase 8 (T047-T057) e analyze (0 CRITICAL; HIGH A1 decidido: arquivos
+      auxiliares derivados de `--output`). Relatório em
+      `.docs/brainstorming/validacao-rastreabilidade/005-planejado.md`.
+      Clarify em lotes de até 5 perguntas por sessão (aprovado).
 
 ### Pending
 - [ ] T07: limpar os campos de feature não utilizados (Doc2Vec desligado por

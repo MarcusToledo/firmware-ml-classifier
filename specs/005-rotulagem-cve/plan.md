@@ -4,7 +4,7 @@
 
 **Input**: Feature specification from `/specs/005-rotulagem-cve/spec.md`
 
-**Note**: plano retroativo. Descreve o código que já existe em `master`; não há Phase 0 (`research.md`), `contracts/` nem `quickstart.md`. O `tasks.md` é retroativo: registra a verificação de cada FR e cenário e as lacunas de teste.
+**Note**: plano retroativo. Descreve o código que já existe em `master`; não há Phase 0 (`research.md`), `contracts/` nem `quickstart.md`. O `tasks.md` é retroativo: registra a verificação de cada FR e cenário e as lacunas de teste. As linhas `[Planejado]` (FR-018 a FR-023, TickTick T04) descrevem módulo e teste previstos; o `tasks.md` as decompõe na fase "Implementação planejada".
 
 ## Summary
 
@@ -36,7 +36,8 @@ e `dataset/cve_cache_v2.json`; grava `dataset/labels_v2.csv`
 
 **Constraints**: sem rede (lê só o cache local); limiar `--critical-cvss`
 padrão 9.0; `--output` padrão `dataset/labels.csv` (v1, ver Edge Cases da
-spec)
+spec); planejado: `dataset/processed/labels_v2.csv` com
+`labels_v2.meta.json` e `labels_v2_aliases.jsonl` (FR-018, FR-021)
 
 **Scale/Scope**: 840 linhas e 699 `firmware_id` em `features_v2.parquet`;
 310 entradas em `cve_cache_v2.json` (medido em 2026-09-24)
@@ -49,10 +50,10 @@ spec)
 |---|---|---|
 |I. Somente análise estática|Não se aplica|A rotulagem lê tabelas e o cache, nunca o binário|
 |II. Rótulo exclusivamente por CVE|Passa|Classe só de `cve_total`/`cvss_max` em `tests/test_cve_labels.py::test_label_depends_only_on_cve_fields`; par ausente é erro em `tests/test_generate_labels.py::test_lookup_missing_pair_fails_instead_of_becoming_negative`; nenhum módulo da rotulagem importa `src/scoring.py` (conferido por grep)|
-|III. Sem vazamento|Passa|`labels_v2.csv` não carrega features (`tests/test_generate_labels.py::test_cli_filters_version_before_aggregating_aliases` confere `entropy` fora da saída) e só as colunas de identificação são lidas (`scripts/generate_labels.py::ID_COLUMNS`). Excluir `vendor`, `model`, `version`, `version_source`, `cve_total` e `cvss_max` do treino fica para o treino futuro (`TODO.md`)|
+|III. Sem vazamento|Passa|`labels_v2.csv` não carrega features (`tests/test_generate_labels.py::test_cli_filters_version_before_aggregating_aliases` confere `entropy` fora da saída) e só as colunas de identificação são lidas (`scripts/generate_labels.py::ID_COLUMNS`). Excluir `vendor`, `model`, `version`, `version_source`, `cve_total`, `cvss_max`, `label_strategy` e `alias_count` do vetor fica com a preparação do dataset de treino (TickTick T08)|
 |IV. Modelos simples|Não se aplica|Sem modelo nesta etapa|
-|V. Reprodutibilidade|Passa parcialmente|Sem etapa aleatória; o código atual reproduz `labels_v2.csv` em 840/840 linhas (medido em 2026-09-24). Lacunas: sem teste de determinismo entre processos; `--output` padrão aponta para o v1; o artefato fica em `dataset/`, não em `dataset/processed/`, e não registra o limiar usado (pergunta ao pesquisador)|
-|VI. Firmware não confiável|Violação herdada|Erros de entrada interrompem a execução e `indeterminado` fica visível no artefato, mas CPE exata sem base numérica vira "não aplicável" sem registro (`src/labeling/cve_labels.py::_match_version`; `tests/test_cve_labels.py::test_exact_cpe_without_parseable_base_keeps_known_limitation`). Ver Complexity Tracking|
+|V. Reprodutibilidade|Passa parcialmente|Sem etapa aleatória; o código atual reproduz `labels_v2.csv` em 840/840 linhas (medido em 2026-09-24). Lacunas: sem teste de determinismo entre processos; `--output` padrão aponta para o v1; o artefato fica em `dataset/`, não em `dataset/processed/`, e não registra o limiar usado. Correção Planejado: FR-018 (path canônico e metadados com SHA256 das entradas e commit). Melhoria de auditoria, fora da violação: FR-021 a FR-023 (aliases e CVEs por alias)|
+|VI. Firmware não confiável|Violação herdada|Erros de entrada interrompem a execução e `indeterminado` fica visível no artefato, mas CPE exata sem base numérica, e CPE numérica contra firmware com sufixo, viram "não aplicável" sem registro (`src/labeling/cve_labels.py::_match_version`; `tests/test_cve_labels.py::test_exact_cpe_without_parseable_base_keeps_known_limitation`). Correção Planejado: FR-019 (indeterminada). Melhoria, fora da violação: FR-020 (`meta_version_source` conferido; coluna ausente é erro). Ver Complexity Tracking|
 |VII. Integridade científica|Passa|Todo FR tem módulo e teste abaixo ou aparece em "Sem verificação"; números medidos citam data e artefato|
 
 ## Project Structure
@@ -115,6 +116,12 @@ specs são chamados aqui: `pipeline/feature_extraction.py::infer_brand_model_lab
 |FR-015|US3|`scripts/generate_labels.py::_result_to_record`, `main`|`test_generate_labels.py::test_cli_filters_version_before_aggregating_aliases`, `::test_cli_missing_version_writes_indeterminate` (parcial)|
 |FR-016|US5|`scripts/generate_labels.py::main`|—|
 |FR-017|US5|`scripts/generate_labels.py::main`|—|
+|FR-018 [Planejado, TickTick T04]|US6|previsto: `scripts/generate_labels.py::main` (padrão de `--output`, `<nome>.meta.json` ao lado da tabela, SHA256 das entradas e commit)|previsto: `tests/test_generate_labels.py` (padrão do path, auxiliares derivados de `--output`, conteúdo dos metadados, `--dry-run` sem auxiliares)|
+|FR-019 [Planejado, TickTick T04]|US2|previsto: `src/labeling/cve_labels.py::_match_version`|previsto: `tests/test_cve_labels.py` (substitui `::test_exact_cpe_without_parseable_base_keeps_known_limitation`; caso `1.2rc1` contra `1.2`)|
+|FR-020 [Planejado, TickTick T04]|US4|previsto: `scripts/generate_labels.py::ID_COLUMNS`, `_load_features`, `_label_rows`|previsto: `tests/test_generate_labels.py` (divergência, nulo contra valor e coluna ausente)|
+|FR-021 [Planejado, TickTick T04]|US6|previsto: `scripts/generate_labels.py::_aggregate_firmware_label`, `main` (`<nome>_aliases.jsonl`)|previsto: `tests/test_generate_labels.py` (aliases e CVEs por alias, ordem, contagens no log)|
+|FR-022 [Planejado, TickTick T04]|US6|previsto: `scripts/generate_labels.py::_aggregate_firmware_label`, `_result_to_record`|previsto: `tests/test_generate_labels.py` (`label_strategy` e `alias_count`)|
+|FR-023 [Planejado, TickTick T04]|US6|previsto: `scripts/generate_labels.py::_aggregate_firmware_label`|previsto: `tests/test_generate_labels.py` (aliases com versões diferentes)|
 
 ### Sem verificação
 
@@ -139,5 +146,5 @@ aqui (FR-012); a 003 o lista na sua seção equivalente.
 
 |Violação|Por que existe|Alternativa|
 |---|---|---|
-|Princípio VI: CPE exata sem base numérica (ex.: `firmware_4.05.03`) vira "não aplicável" em vez de indeterminada, sem registro no artefato|Herdada de `src/labeling/cve_labels.py::_match_version`. O pesquisador decidiu não corrigir (`TODO.md`, CPE da Belkin); `docs/PIPELINE.md` registra impacto nulo no dataset atual|Devolver indeterminado nesse caso; rejeitada pelo pesquisador enquanto o impacto for nulo|
-|Princípio V: o destino padrão ainda é `dataset/labels.csv`, fora de `dataset/processed/`, e o artefato não registra limiar nem entradas|Herdada de `scripts/generate_labels.py::main`; já registrada no `TODO.md` e descrita nos Edge Cases da spec|Usar `dataset/processed/labels_v2.csv` e persistir os parâmetros de execução, conforme decisão do pesquisador|
+|Princípio VI: CPE exata sem base numérica (ex.: `firmware_4.05.03`), e CPE numérica contra firmware com sufixo (ex.: `1.2rc1` contra `1.2`), viram "não aplicável" em vez de indeterminada, sem registro no artefato|Herdada de `src/labeling/cve_labels.py::_match_version`. Aceita pelo pesquisador enquanto o impacto era nulo; decisão revertida em 2026-09-24 (escopo restante, CR-17 e analyze F4)|FR-019 [Planejado, TickTick T04]: devolver indeterminado|
+|Princípio V: o destino padrão ainda é `dataset/labels.csv`, fora de `dataset/processed/`, e o artefato não registra limiar nem entradas|Herdada de `scripts/generate_labels.py::main`; descrita nos Edge Cases da spec|FR-018 [Planejado, TickTick T04]: `dataset/processed/labels_v2.csv` e metadados ao lado|
