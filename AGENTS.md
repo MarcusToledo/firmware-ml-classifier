@@ -74,10 +74,27 @@ the single source for these rules. Amend it only via
 - Formatting:
   - 4-space indentation.
   - Target line length: 88 characters.
-  - Keep functions focused and under ~60 lines when possible.
   - Use consistent blank lines between logical blocks.
   - Avoid trailing whitespace; ensure a newline at EOF.
   - Prefer early returns to reduce nesting.
+- Function structure (applied gradually):
+  - Scope: functions you create or change in `src/`, `pipeline/`,
+    `scripts/`. Do not refactor untouched code just to comply; when a
+    change touches a function that breaks the rule, bring that function
+    into compliance in the same change.
+  - One responsibility per function; the name states what it does.
+  - pt-br docstring: first line is one sentence in the 3rd person present
+    ("Valida ...", "Retorna ..."); add a paragraph for raised exceptions,
+    non-obvious rules and tuple returns.
+  - Body (excluding docstring) at most 40 lines; target ruff limits:
+    complexity 8 (C901), 10 branches (PLR0912), 30 statements (PLR0915).
+  - Script `main()` only orchestrates: parse args, load, compute, log,
+    write; each step is its own function.
+  - Scripts import shared logic from `src/`, never private (`_name`)
+    functions from another script.
+  - No pass-through helpers; no new class where functions suffice, except
+    frozen dataclasses replacing nested tuples.
+  - Do not add `noqa` to dodge these limits; split the function.
 - Types:
   - Add type hints to all public functions and class methods.
   - Use `Path` for filesystem paths in public APIs.
