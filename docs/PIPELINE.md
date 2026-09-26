@@ -278,16 +278,22 @@ sem versão (`version_source` nulo).
   extensão numérica do projeto, não uma violação da especificação CPE.
   A guarda B para versões CPE exatas, pré-requisito dessa extração, já
   está implementada e não alterou nenhum rótulo do dataset atual.
-- A guarda B não resolve CPE cuja versão não começa por número. Na
+- CPE cuja versão não começa por número fica indeterminada. Na
   Belkin, a NVD registrou a versão como `firmware_4.05.03` (o texto
   `firmware_` dentro do campo `version`, erro de cadastro). Como a
   extração da base numérica começa no primeiro caractere, não há base para
-  comparar e o resultado é "não aplicável", mesmo que a versão pretendida
-  seja 4.05.03. O efeito hoje é nulo: o único firmware `f5d7231_4` do
-  dataset é a versão 5.01.11, que não casaria com 4.05.03 de qualquer
-  forma. Ainda assim, o comportamento trata incerteza como evidência
-  negativa. Casos parecidos no cache: `fw102b15`, `me_1.03`. Decidiu-se
-  não corrigir esse caso; a limitação fica documentada.
+  comparar. Antes o resultado era "não aplicável", o que tratava
+  incerteza como evidência negativa; agora a CVE é indeterminada para
+  qualquer versão do firmware. No `labels_v2.csv` atual isso muda um
+  rótulo: o `f5d7231_4` versão 5.01.11 (CVE-2007-3784) passa de
+  `sem_cve_conhecida` para `indeterminado`. Casos parecidos no cache:
+  `fw102b15`, `me_1.03`.
+- Sem versão, a CVE cujas configurações citam apenas outros produtos
+  deixou de ser indeterminada e passou a não aplicável, pela mesma regra
+  de produto-alvo usada com versão. Recalculado sobre o `labels_v2.csv`
+  atual, isso afeta 41 ocorrências alias×CVE em 8 `firmware_id` da ASUS;
+  7 deles passam de `indeterminado` para `sem_cve_conhecida`. A tabela
+  acima ainda reflete a geração de 2026-09-23, anterior às duas regras.
 - O campo `update` (parts[6]) agora é considerado (opção (b)): quando é
   literal (hotfix, beta, build com data) e a versão casa, o resultado é
   `None` (indeterminado), porque o nome do arquivo não informa o `update`.
