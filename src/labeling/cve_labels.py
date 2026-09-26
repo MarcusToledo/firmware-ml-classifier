@@ -197,16 +197,13 @@ def _match_version(
                     exact_version, target[0]
                 )
                 parsed = parse_version(normalized)
-                if (
-                    package_removed
-                    and parsed is not None
-                    and versions_equal(version, parsed)
-                ):
+                if parsed is None:
+                    return None
+                if package_removed and versions_equal(version, parsed):
                     return None
                 if (
                     _NUMERIC_VERSION_RE.fullmatch(version_raw)
                     and _NUMERIC_VERSION_RE.fullmatch(normalized)
-                    and parsed is not None
                     and version_in_range(
                         version,
                         VersionRange(
@@ -218,7 +215,6 @@ def _match_version(
                     pass
                 elif (
                     _NUMERIC_VERSION_RE.fullmatch(normalized) is None
-                    and parsed is not None
                     and versions_equal(version, parsed)
                 ):
                     # Sufixos (build Bxx, beta ou variante regional) mudam a
@@ -237,6 +233,12 @@ def _match_version(
                     ):
                         return None
                     return False
+                elif (
+                    _NUMERIC_VERSION_RE.fullmatch(normalized)
+                    and _NUMERIC_VERSION_RE.fullmatch(version_raw) is None
+                    and versions_equal(version, parsed)
+                ):
+                    return None
                 else:
                     return False
         elif exact_version == "-":
@@ -345,20 +347,29 @@ def _evaluate_cve(
     return _combine(config_results, "OR")
 
 
+def _cites_only_other_products(
+    cve: dict[str, Any], target: tuple[str, str] | None
+) -> bool:
+    configurations = cve.get("configurations", [])
+    return bool(configurations) and all(
+        _is_other_product(c, target) for c in configurations
+    )
+
+
 def applicable_cves_for_version(
     version_raw: str | None,
     cache_entry: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Retorna CVEs aplicaveis e indeterminadas, na ordem do cache."""
     cves = list(cache_entry.get("cves", []))
+    target = _target_parts(cache_entry)
     if not isinstance(version_raw, str) or not version_raw.strip():
-        return [], cves
+        return [], [cve for cve in cves if not _cites_only_other_products(cve, target)]
     version_raw = version_raw.strip()
     version = parse_version(version_raw)
     if version is None:
-        return [], cves
+        return [], [cve for cve in cves if not _cites_only_other_products(cve, target)]
 
-    target = _target_parts(cache_entry)
     applicable: list[dict[str, Any]] = []
     indeterminate: list[dict[str, Any]] = []
     for cve in cves:

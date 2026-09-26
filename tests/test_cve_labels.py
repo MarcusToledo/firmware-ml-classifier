@@ -182,12 +182,14 @@ def test_exact_cpe_build_suffix_does_not_match_extra_numeric_segment() -> None:
     assert applicable_cves_for_version("2.14.1", entry) == ([], [])
 
 
-def test_exact_numeric_cpe_does_not_match_firmware_suffix() -> None:
+def test_exact_numeric_cpe_is_indeterminate_for_suffixed_firmware_at_same_base(
+) -> None:
     criteria = "cpe:2.3:o:dlink:dir-300_firmware:1.2:*:*:*:*:*:*:*"
     cve = _cve([{"criteria": criteria}])
     entry = {"vendor": "d-link", "model": "DIR-300", "cves": [cve]}
 
-    assert applicable_cves_for_version("1.2rc1", entry) == ([], [])
+    assert applicable_cves_for_version("1.2rc1", entry) == ([], [cve])
+    assert applicable_cves_for_version("1.3rc1", entry) == ([], [])
 
 
 def test_exact_cpe_build_suffix_does_not_apply_to_different_base() -> None:
@@ -222,17 +224,13 @@ def test_exact_cpe_build_suffix_requires_separator_after_firmware_build() -> Non
     assert applicable_cves_for_version("2.14B0", entry) == ([], [])
 
 
-def test_exact_cpe_without_parseable_base_keeps_known_limitation() -> None:
-    """Protege CPE sem base parseavel e registra a limitacao conhecida.
-
-    O prefixo `firmware_` impede comparar versoes; o resultado nao afirma que
-    a CVE nao se aplica.
-    """
+def test_exact_cpe_without_numeric_base_is_indeterminate() -> None:
     criteria = "cpe:2.3:o:dlink:dir-300_firmware:firmware_4.05.03:*:*:*:*:*:*:*"
     cve = _cve([{"criteria": criteria}])
     entry = {"vendor": "d-link", "model": "DIR-300", "cves": [cve]}
 
-    assert applicable_cves_for_version("4.05.03", entry) == ([], [])
+    assert applicable_cves_for_version("4.05.03", entry) == ([], [cve])
+    assert applicable_cves_for_version("1.0", entry) == ([], [cve])
 
 
 def test_exact_cpe_build_and_region_suffix_is_indeterminate() -> None:
@@ -361,6 +359,43 @@ def test_build_suffix_in_bound_stays_indeterminate() -> None:
 
 def _and_config(*matches: dict) -> dict:
     return {"nodes": [{"operator": "AND", "cpeMatch": list(matches)}]}
+
+
+def test_missing_version_discards_cve_citing_only_other_products() -> None:
+    other = _cve([])
+    other["id"] = "CVE-OTHER"
+    other["configurations"] = [
+        _and_config(
+            {
+                "vulnerable": True,
+                "criteria": "cpe:2.3:o:dlink:dir-600_firmware:*:*:*:*:*:*:*:*",
+            },
+        )
+    ]
+    target_cve = _cve([])
+    target_cve["id"] = "CVE-TARGET"
+    target_cve["configurations"] = [
+        _and_config(
+            {
+                "vulnerable": True,
+                "criteria": "cpe:2.3:o:dlink:dir-300_firmware:*:*:*:*:*:*:*:*",
+            },
+        )
+    ]
+    no_config = _cve([])
+    no_config["id"] = "CVE-NO-CONFIG"
+    entry = {
+        "vendor": "d-link",
+        "model": "DIR-300",
+        "cves": [other, target_cve, no_config],
+    }
+
+    for version in (None, "  ", "ABTG"):
+        assert applicable_cves_for_version(version, entry) == (
+            [],
+            [target_cve, no_config],
+        )
+    assert applicable_cves_for_version(None, {"cves": [other]}) == ([], [other])
 
 
 def test_target_hardware_platform_without_revision_is_satisfied() -> None:
