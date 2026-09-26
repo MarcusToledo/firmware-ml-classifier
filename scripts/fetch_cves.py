@@ -21,6 +21,8 @@ from urllib.parse import quote as url_quote
 
 import pandas as pd
 
+from src.labeling.cve_labels import severity_bucket
+
 LOGGER = logging.getLogger(__name__)
 
 NVD_API_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
@@ -103,11 +105,6 @@ def extract_cvss(cve: dict[str, Any]) -> tuple[float, str]:
         return data["baseScore"], severity
 
     return 0.0, "NONE"
-
-
-def severity_bucket(severity: str) -> str:
-    """Normalize severity string to lowercase bucket name."""
-    return severity.upper() if severity else "NONE"
 
 
 # ---------------------------------------------------------------------------
@@ -229,37 +226,6 @@ def fetch_cves_for_pair(
         "model": normalize_model(model),
         "cpe_name": cpe_name,
         "cves": cves,
-    }
-
-
-def _aggregate_scores(scores: list[tuple[float, str]]) -> dict[str, Any]:
-    """Aggregate a list of (score, severity) tuples into summary stats."""
-    if not scores:
-        return {
-            "cvss_max": 0.0,
-            "cve_count_critical": 0,
-            "cve_count_high": 0,
-            "cve_count_medium": 0,
-            "cve_count_low": 0,
-            "cve_total": 0,
-        }
-
-    counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
-    max_score = 0.0
-
-    for score, sev in scores:
-        max_score = max(max_score, score)
-        bucket = severity_bucket(sev)
-        if bucket in counts:
-            counts[bucket] += 1
-
-    return {
-        "cvss_max": max_score,
-        "cve_count_critical": counts["CRITICAL"],
-        "cve_count_high": counts["HIGH"],
-        "cve_count_medium": counts["MEDIUM"],
-        "cve_count_low": counts["LOW"],
-        "cve_total": len(scores),
     }
 
 

@@ -6,6 +6,7 @@ from src.labeling.cve_labels import (
     LABEL_KNOWN_CVE,
     LABEL_NO_KNOWN_CVE,
     CveLabelThresholds,
+    aggregate_cve_scores,
     applicable_cves_for_version,
     label_from_cve_stats,
 )
@@ -546,3 +547,45 @@ def test_indeterminate_is_a_label_quality_state() -> None:
         LABEL_KNOWN_CVE,
         LABEL_CRITICAL_CVE,
     }
+
+
+# ---------------------------------------------------------------------------
+# aggregate_cve_scores
+# ---------------------------------------------------------------------------
+
+
+def test_aggregate_empty() -> None:
+    """Empty input should return all zeros."""
+    result = aggregate_cve_scores([])
+    assert result["cvss_max"] == 0.0
+    assert result["cve_total"] == 0
+    assert result["cve_count_critical"] == 0
+
+
+def test_aggregate_mixed_severities() -> None:
+    """Should correctly count severities and find max score."""
+    scores = [
+        (9.8, "CRITICAL"),
+        (7.5, "HIGH"),
+        (7.1, "HIGH"),
+        (4.3, "MEDIUM"),
+        (2.1, "LOW"),
+    ]
+    result = aggregate_cve_scores(scores)
+    assert result["cvss_max"] == 9.8
+    assert result["cve_total"] == 5
+    assert result["cve_count_critical"] == 1
+    assert result["cve_count_high"] == 2
+    assert result["cve_count_medium"] == 1
+    assert result["cve_count_low"] == 1
+
+
+def test_aggregate_none_severity_ignored() -> None:
+    """Scores with NONE severity shouldn't count in any bucket."""
+    scores = [(0.0, "NONE"), (0.0, "NONE")]
+    result = aggregate_cve_scores(scores)
+    assert result["cve_total"] == 2
+    assert result["cve_count_critical"] == 0
+    assert result["cve_count_high"] == 0
+    assert result["cve_count_medium"] == 0
+    assert result["cve_count_low"] == 0
