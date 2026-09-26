@@ -130,39 +130,49 @@ rótulo.
 - `src/labeling/version_match.py` compara segmentos numéricos e respeita
   limites inclusivos e exclusivos.
 - `src/labeling/cve_labels.py` avalia todas as CVEs e devolve duas listas:
-  aplicáveis e indeterminadas. Sem versão parseável, todas as CVEs da
-  entrada ficam indeterminadas; uma entrada vazia continua sendo
-  evidência de `sem_cve_conhecida`.
+  aplicáveis e indeterminadas. Sem versão parseável, uma CVE cujas
+  configurações citam apenas outros produtos é descartada; as demais,
+  inclusive as sem `configurations`, ficam indeterminadas. Uma entrada
+  vazia continua sendo evidência de `sem_cve_conhecida`.
 - A versão CPE exata e os limites `versionStart*`/`versionEnd*` são
   normalizados pela mesma convenção da extração: remove-se `v`/`V`
   inicial; ASUS troca `_` por `.`; Netgear remove o pacote após `_`, mas
   deixa o resultado indeterminado quando o firmware coincide com a base.
   Sufixos de build (`Bxx`, beta ou variante regional como `_ww`) não são
   cortados. Na versão CPE exata, o match por `casefold` continua aplicável.
+  CPE exata sem base numérica inicial (ex.: `firmware_4.05.03`) fica
+  indeterminada para qualquer versão do firmware.
   Se a CPE normalizada tem sufixo e sua base numérica, com padding de
   zeros, coincide com a versão do firmware, a guarda B devolve `None`
   quando o firmware não tem sufixo (build desconhecido). Para firmware
   com sufixo próprio, devolve `None` apenas quando a CPE é a versão
   completa do firmware seguida de separador e qualificador extra; build
-  conhecido diferente devolve `False`. Base numérica distinta também
-  devolve `False`.
+  conhecido diferente devolve `False`. CPE numérica contra firmware com
+  sufixo na mesma base (ex.: `1.2` contra `1.2rc1`) devolve `None`. Base
+  numérica distinta também devolve `False`.
 - `scripts/generate_labels.py` grava `version_source` logo após `version`
-  no `labels_v2.csv`. Como o `features_v2.parquet` atual foi extraído
-  antes de `meta_version_source`, o script reinfere a origem a partir de
-  `meta_path`. A escolha é consciente: versão e origem seguem a mesma
-  regra, e a checagem contra `meta_version` falha se o parquet estiver
-  desatualizado. Portanto, qualquer mudança nas regras de extração de
-  versão exige reextrair as features antes de regerar os rótulos.
-  `meta_version_source` no parquet serve para auditar a tabela de
-  features.
+  no `labels_v2.csv`. O script reinfere versão e origem a partir de
+  `meta_path` e falha se divergirem de `meta_version` ou
+  `meta_version_source`; tabela sem a coluna `meta_version_source` também
+  é recusada. Portanto, qualquer mudança nas regras de extração de
+  versão exige reextrair as features antes de regerar os rótulos. O cache
+  precisa de `schema_version: 3` e `fetched_at` em cada entrada.
 - O mesmo script une por ID as aplicáveis (`A`) e as indeterminadas (`U`)
   de todos os aliases do mesmo `firmware_id`. Calcula `inf = label(A)` e
   `sup = label(A ∪ U)`: usa `inf` quando os dois limites coincidem e
   `indeterminado` quando divergem. `cve_total` e `cvss_max` sempre
   descrevem apenas `A`, portanto são limites inferiores. Par
-  fabricante/modelo ausente no cache gera erro. O arquivo `labels.csv`
+  fabricante/modelo ausente no cache gera erro. O arquivo `labels_v2.csv`
   mantém o estado `indeterminado`, que deve ser excluído pelo futuro
-  código de treino.
+  código de treino. `label_strategy` (`alias_unico` ou
+  `agregacao_conservadora`) e `alias_count` registram a agregação.
+- Artefatos (padrão `dataset/processed/labels_v2.csv`): a tabela;
+  `labels_v2_aliases.jsonl`, uma linha por `firmware_id` com os aliases,
+  as CVEs aplicáveis e indeterminadas de cada um e `versions_differ`; e
+  `labels_v2.meta.json`, com limiar, caminhos e SHA256 das entradas,
+  `code_commit` (sufixo `-dirty` com tree modificada) e `generated_at`.
+  O log conta `firmware_id` com mais de um alias, com mais de um modelo e
+  com versões diferentes. `--dry-run` não grava nenhum dos três.
 
 ### 4. Classificação e baseline
 
@@ -268,16 +278,22 @@ sem versão (`version_source` nulo).
   extensão numérica do projeto, não uma violação da especificação CPE.
   A guarda B para versões CPE exatas, pré-requisito dessa extração, já
   está implementada e não alterou nenhum rótulo do dataset atual.
-- A guarda B não resolve CPE cuja versão não começa por número. Na
+- CPE cuja versão não começa por número fica indeterminada. Na
   Belkin, a NVD registrou a versão como `firmware_4.05.03` (o texto
   `firmware_` dentro do campo `version`, erro de cadastro). Como a
   extração da base numérica começa no primeiro caractere, não há base para
-  comparar e o resultado é "não aplicável", mesmo que a versão pretendida
-  seja 4.05.03. O efeito hoje é nulo: o único firmware `f5d7231_4` do
-  dataset é a versão 5.01.11, que não casaria com 4.05.03 de qualquer
-  forma. Ainda assim, o comportamento trata incerteza como evidência
-  negativa. Casos parecidos no cache: `fw102b15`, `me_1.03`. Decidiu-se
-  não corrigir esse caso; a limitação fica documentada.
+  comparar. Antes o resultado era "não aplicável", o que tratava
+  incerteza como evidência negativa; agora a CVE é indeterminada para
+  qualquer versão do firmware. No `labels_v2.csv` atual isso muda um
+  rótulo: o `f5d7231_4` versão 5.01.11 (CVE-2007-3784) passa de
+  `sem_cve_conhecida` para `indeterminado`. Casos parecidos no cache:
+  `fw102b15`, `me_1.03`.
+- Sem versão, a CVE cujas configurações citam apenas outros produtos
+  deixou de ser indeterminada e passou a não aplicável, pela mesma regra
+  de produto-alvo usada com versão. Recalculado sobre o `labels_v2.csv`
+  atual, isso afeta 41 ocorrências alias×CVE em 8 `firmware_id` da ASUS;
+  7 deles passam de `indeterminado` para `sem_cve_conhecida`. A tabela
+  acima ainda reflete a geração de 2026-09-23, anterior às duas regras.
 - O campo `update` (parts[6]) agora é considerado (opção (b)): quando é
   literal (hotfix, beta, build com data) e a versão casa, o resultado é
   `None` (indeterminado), porque o nome do arquivo não informa o `update`.
