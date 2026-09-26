@@ -51,8 +51,6 @@ def _invoke(monkeypatch: pytest.MonkeyPatch, *args: str) -> None:
     main()
 
 
-
-
 def _run_cli(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -62,8 +60,13 @@ def _run_cli(
     features, cache_path = _write_inputs(tmp_path, rows, cache)
     output = tmp_path / "labels.csv"
     _invoke(
-        monkeypatch, "--features", str(features), "--cves", str(cache_path),
-        "--output", str(output),
+        monkeypatch,
+        "--features",
+        str(features),
+        "--cves",
+        str(cache_path),
+        "--output",
+        str(output),
     )
     return pd.read_csv(output)
 
@@ -79,9 +82,14 @@ def test_lookup_normalizes_identity_and_rejects_old_cache() -> None:
     with pytest.raises(ValueError, match="schema"):
         _lookup_cve_entry(row, {"dlink/dir300": {**entry, "schema_version": 2}})
     with pytest.raises(ValueError, match="fetched_at.*dlink/dir300"):
-        _lookup_cve_entry(row, {"dlink/dir300": {
-            key: value for key, value in entry.items() if key != "fetched_at"
-        }})
+        _lookup_cve_entry(
+            row,
+            {
+                "dlink/dir300": {
+                    key: value for key, value in entry.items() if key != "fetched_at"
+                }
+            },
+        )
     with pytest.raises(ValueError, match="schema"):
         # Entrada com "cves" mas sem schema_version deve falhar igual a
         # fetch_cves.py, nao ser aceita silenciosamente como schema 2.
@@ -221,25 +229,27 @@ def test_cli_filters_version_before_aggregating_aliases(
         monkeypatch,
         rows,
         {
-            "dlink/dir300": _cache_entry([
-                {
-                    **_cve("CVE-OLD", 9.8),
-                    "configurations": [
-                        {
-                            "nodes": [
-                                {
-                                    "cpeMatch": [
-                                        {
-                                            "vulnerable": True,
-                                            "versionEndExcluding": "2.0",
-                                        }
-                                    ]
-                                }
-                            ]
-                        }
-                    ],
-                }
-            ]),
+            "dlink/dir300": _cache_entry(
+                [
+                    {
+                        **_cve("CVE-OLD", 9.8),
+                        "configurations": [
+                            {
+                                "nodes": [
+                                    {
+                                        "cpeMatch": [
+                                            {
+                                                "vulnerable": True,
+                                                "versionEndExcluding": "2.0",
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ],
+                    }
+                ]
+            ),
             "dlink/dir300b": _cache_entry([_cve("CVE-CURRENT")]),
         },
     )
@@ -265,9 +275,7 @@ def test_cli_missing_version_writes_indeterminate(
                 "meta_version_source": None,
             }
         ],
-        {
-            "dlink/dir300": _cache_entry([_cve("CVE-1", 9.8)])
-        },
+        {"dlink/dir300": _cache_entry([_cve("CVE-1", 9.8)])},
     )
     assert labels["security_level"].tolist() == [LABEL_INDETERMINATE]
     assert labels["version_source"].isna().tolist() == [True]
@@ -290,9 +298,7 @@ def test_cli_rejects_version_divergent_from_meta_path(
                     "meta_version_source": "directory",
                 }
             ],
-            {
-                "dlink/dir300": _cache_entry([])
-            },
+            {"dlink/dir300": _cache_entry([])},
         )
 
     message = str(exc_info.value)
@@ -319,9 +325,7 @@ def test_cli_rejects_missing_version_when_meta_path_has_version(
                     "meta_version_source": "directory",
                 }
             ],
-            {
-                "dlink/dir300": _cache_entry([])
-            },
+            {"dlink/dir300": _cache_entry([])},
         )
 
     message = str(exc_info.value)
@@ -431,19 +435,25 @@ def test_cli_rejects_missing_version_source_when_path_has_one(
 def test_cli_rejects_features_without_version_source_column(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, suffix: str
 ) -> None:
-    rows = [{
-        "firmware_id": "fw",
-        "meta_path": "/dataset/raw/dlink/dir300/fw_2.0.bin",
-        "meta_brand": "dlink",
-        "meta_model": "dir300",
-        "meta_version": "2.0",
-    }]
+    rows = [
+        {
+            "firmware_id": "fw",
+            "meta_path": "/dataset/raw/dlink/dir300/fw_2.0.bin",
+            "meta_brand": "dlink",
+            "meta_model": "dir300",
+            "meta_version": "2.0",
+        }
+    ]
     features, cache_path = _write_inputs(
         tmp_path, rows, {"dlink/dir300": _cache_entry([])}, suffix
     )
     with pytest.raises(ValueError) as exc_info:
         _invoke(
-            monkeypatch, "--features", str(features), "--cves", str(cache_path),
+            monkeypatch,
+            "--features",
+            str(features),
+            "--cves",
+            str(cache_path),
             "--dry-run",
         )
     assert "meta_version_source" in str(exc_info.value)
@@ -479,9 +489,13 @@ def _audit_inputs() -> tuple[list[dict], dict]:
     ]
     old = {
         **_cve("CVE-OLD", 9.8),
-        "configurations": [{"nodes": [{
-            "cpeMatch": [{"vulnerable": True, "versionEndExcluding": "2.0"}]
-        }]}],
+        "configurations": [
+            {
+                "nodes": [
+                    {"cpeMatch": [{"vulnerable": True, "versionEndExcluding": "2.0"}]}
+                ]
+            }
+        ],
     }
     cache = {
         "dlink/dir300": _cache_entry([old]),
@@ -498,19 +512,29 @@ def test_cli_records_aliases_strategy_and_per_alias_cves(
     rows, cache = _audit_inputs()
     labels = _run_cli(tmp_path, monkeypatch, rows, cache)
     assert labels.columns.tolist() == [
-        "firmware_id", "meta_path", "vendor", "model", "version",
-        "version_source", "security_level", "cve_total", "cvss_max",
-        "label_strategy", "alias_count",
+        "firmware_id",
+        "meta_path",
+        "vendor",
+        "model",
+        "version",
+        "version_source",
+        "security_level",
+        "cve_total",
+        "cvss_max",
+        "label_strategy",
+        "alias_count",
     ]
     assert labels["label_strategy"].tolist() == [
-        "agregacao_conservadora", "agregacao_conservadora", "alias_unico"
+        "agregacao_conservadora",
+        "agregacao_conservadora",
+        "alias_unico",
     ]
     assert labels["alias_count"].tolist() == [2, 2, 1]
     audit = [
         json.loads(line)
-        for line in (tmp_path / "labels_aliases.jsonl").read_text(
-            encoding="utf-8"
-        ).splitlines()
+        for line in (tmp_path / "labels_aliases.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
     ]
     assert [record["firmware_id"] for record in audit] == ["shared", "solo"]
     assert audit[0]["versions_differ"] is True
@@ -566,8 +590,13 @@ def test_cli_default_output_writes_table_and_auxiliaries(
     assert (output_dir / "labels_v2_aliases.jsonl").exists()
     meta = json.loads((output_dir / "labels_v2.meta.json").read_text("utf-8"))
     assert list(meta) == [
-        "critical_cvss", "features_path", "features_sha256", "cves_path",
-        "cves_sha256", "code_commit", "generated_at",
+        "critical_cvss",
+        "features_path",
+        "features_sha256",
+        "cves_path",
+        "cves_sha256",
+        "code_commit",
+        "generated_at",
     ]
     assert meta["features_sha256"] == hashlib.sha256(features.read_bytes()).hexdigest()
     assert meta["cves_sha256"] == hashlib.sha256(cache_path.read_bytes()).hexdigest()
@@ -582,8 +611,13 @@ def test_cli_explicit_output_places_auxiliaries_beside_table(
     features, cache_path = _write_inputs(tmp_path, rows, cache)
     output = tmp_path / "out/custom.csv"
     _invoke(
-        monkeypatch, "--features", str(features), "--cves", str(cache_path),
-        "--output", str(output),
+        monkeypatch,
+        "--features",
+        str(features),
+        "--cves",
+        str(cache_path),
+        "--output",
+        str(output),
     )
     assert (tmp_path / "out/custom.meta.json").exists()
     assert (tmp_path / "out/custom_aliases.jsonl").exists()
@@ -597,8 +631,14 @@ def test_cli_dry_run_writes_nothing_but_logs_alias_counts(
     features, cache_path = _write_inputs(tmp_path, rows, cache)
     output = tmp_path / "out/labels.csv"
     _invoke(
-        monkeypatch, "--features", str(features), "--cves", str(cache_path),
-        "--output", str(output), "--dry-run",
+        monkeypatch,
+        "--features",
+        str(features),
+        "--cves",
+        str(cache_path),
+        "--output",
+        str(output),
+        "--dry-run",
     )
     assert not output.parent.exists()
     assert "Aliases: 1 firmware_id com mais de um alias" in caplog.text
@@ -611,8 +651,13 @@ def test_cli_rerun_reproduces_outputs_except_generated_at(
     features, cache_path = _write_inputs(tmp_path, rows, cache)
     for name in ("run1", "run2"):
         _invoke(
-            monkeypatch, "--features", str(features), "--cves", str(cache_path),
-            "--output", str(tmp_path / name / "labels.csv"),
+            monkeypatch,
+            "--features",
+            str(features),
+            "--cves",
+            str(cache_path),
+            "--output",
+            str(tmp_path / name / "labels.csv"),
         )
     for name in ("labels.csv", "labels_aliases.jsonl"):
         assert (tmp_path / "run1" / name).read_bytes() == (

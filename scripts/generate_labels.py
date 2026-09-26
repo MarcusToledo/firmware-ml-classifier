@@ -33,7 +33,11 @@ from src.run_metadata import code_commit, file_sha256
 
 LOGGER = logging.getLogger(__name__)
 ID_COLUMNS = (
-    "firmware_id", "meta_path", "meta_brand", "meta_model", "meta_version",
+    "firmware_id",
+    "meta_path",
+    "meta_brand",
+    "meta_model",
+    "meta_version",
     "meta_version_source",
 )
 STRATEGY_SINGLE_ALIAS = "alias_unico"
@@ -146,7 +150,8 @@ def _load_features(path: Path) -> pd.DataFrame:
         frame = pd.read_parquet(path, columns=list(ID_COLUMNS))
     else:
         frame = pd.read_csv(
-            path, usecols=list(ID_COLUMNS),
+            path,
+            usecols=list(ID_COLUMNS),
             dtype={"meta_version": "string", "meta_version_source": "string"},
         )
     if frame.empty:
@@ -207,31 +212,37 @@ def _label_rows(
         label, stats = _aggregate_firmware_label(
             [results[index] for index in indexes], thresholds
         )
-        strategy = (
-            STRATEGY_SINGLE_ALIAS if len(indexes) == 1 else STRATEGY_CONSERVATIVE
-        )
+        strategy = STRATEGY_SINGLE_ALIAS if len(indexes) == 1 else STRATEGY_CONSERVATIVE
         aliases = []
         for index in indexes:
             row = rows[index]
             applicable, indeterminate = results[index]
-            aliases.append({
-                "meta_path": row["meta_path"],
-                "vendor": row["meta_brand"],
-                "model": row["meta_model"],
-                "version": _none_if_missing(row["meta_version"]),
-                "applicable_cves": sorted({_cve_id(c) for c in applicable}),
-                "indeterminate_cves": sorted({_cve_id(c) for c in indeterminate}),
-            })
-            records_by_index[index] = _result_to_record(
-                row, stats, label, path_metadata[index].version_source,
-                strategy, len(indexes),
+            aliases.append(
+                {
+                    "meta_path": row["meta_path"],
+                    "vendor": row["meta_brand"],
+                    "model": row["meta_model"],
+                    "version": _none_if_missing(row["meta_version"]),
+                    "applicable_cves": sorted({_cve_id(c) for c in applicable}),
+                    "indeterminate_cves": sorted({_cve_id(c) for c in indeterminate}),
+                }
             )
-        alias_records.append({
-            "firmware_id": firmware_id,
-            "label_strategy": strategy,
-            "versions_differ": len({alias["version"] for alias in aliases}) > 1,
-            "aliases": aliases,
-        })
+            records_by_index[index] = _result_to_record(
+                row,
+                stats,
+                label,
+                path_metadata[index].version_source,
+                strategy,
+                len(indexes),
+            )
+        alias_records.append(
+            {
+                "firmware_id": firmware_id,
+                "label_strategy": strategy,
+                "versions_differ": len({alias["version"] for alias in aliases}) > 1,
+                "aliases": aliases,
+            }
+        )
     return [records_by_index[index] for index in range(len(rows))], alias_records
 
 
@@ -295,7 +306,9 @@ def main() -> None:
     LOGGER.info(
         "Aliases: %d firmware_id com mais de um alias; %d com aliases de "
         "mais de um modelo; %d com aliases de versões diferentes",
-        multi_alias, multi_model, versions_differ,
+        multi_alias,
+        multi_model,
+        versions_differ,
     )
     if args.dry_run:
         return

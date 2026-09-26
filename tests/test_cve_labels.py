@@ -182,8 +182,9 @@ def test_exact_cpe_build_suffix_does_not_match_extra_numeric_segment() -> None:
     assert applicable_cves_for_version("2.14.1", entry) == ([], [])
 
 
-def test_exact_numeric_cpe_is_indeterminate_for_suffixed_firmware_at_same_base(
-) -> None:
+def test_exact_numeric_cpe_is_indeterminate_for_suffixed_firmware_at_same_base() -> (
+    None
+):
     criteria = "cpe:2.3:o:dlink:dir-300_firmware:1.2:*:*:*:*:*:*:*"
     cve = _cve([{"criteria": criteria}])
     entry = {"vendor": "d-link", "model": "DIR-300", "cves": [cve]}

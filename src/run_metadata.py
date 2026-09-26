@@ -20,12 +20,18 @@ def file_sha256(path: Path) -> str:
 def code_commit(repo: Path = REPO_ROOT) -> str:
     try:
         sha = subprocess.run(
-            ["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True,
-            text=True, check=True,
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=True,
         ).stdout.strip()
         status = subprocess.run(
             ["git", "status", "--porcelain", "--untracked-files=no"],
-            cwd=repo, capture_output=True, text=True, check=True,
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=True,
         ).stdout
     except (subprocess.CalledProcessError, FileNotFoundError) as exc:
         raise RuntimeError(

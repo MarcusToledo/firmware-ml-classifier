@@ -213,10 +213,9 @@ def _match_version(
                     )
                 ):
                     pass
-                elif (
-                    _NUMERIC_VERSION_RE.fullmatch(normalized) is None
-                    and versions_equal(version, parsed)
-                ):
+                elif _NUMERIC_VERSION_RE.fullmatch(
+                    normalized
+                ) is None and versions_equal(version, parsed):
                     # Sufixos (build Bxx, beta ou variante regional) mudam a
                     # release, e a NVD os embute em version. Sem build no
                     # firmware, nao da para excluir a CVE; com outro build
