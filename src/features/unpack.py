@@ -267,11 +267,14 @@ def _monitor(
     """Confere limites periodicamente e uma última vez após o extrator."""
     while True:
         finished = process.poll() is not None
+        elapsed = time.monotonic() - started
         total, count, _, _ = _inventory(root, strict=False)
-        status = _limit_status(total, count, time.monotonic() - started, limits)
+        status = _limit_status(total, count, elapsed if not finished else 0.0, limits)
         if status or finished:
             return status
-        time.sleep(_MONITOR_INTERVAL_SECONDS)
+        time.sleep(
+            min(_MONITOR_INTERVAL_SECONDS, max(0.0, limits.timeout_seconds - elapsed))
+        )
 
 
 def _final_status(

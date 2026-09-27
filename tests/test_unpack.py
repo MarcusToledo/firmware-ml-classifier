@@ -81,6 +81,13 @@ def sandboxes(monkeypatch: pytest.MonkeyPatch) -> list[Path]:
             STATUS_SIZE,
         ),
         ("sleep 3\n", UnpackLimits(100, 10, 0.1), STATUS_TIME),
+        (
+            _EXTRACT_DIR
+            + 'sleep 0.2; mkdir -p "$1/squashfs-root"; '
+            + 'echo x > "$1/squashfs-root/f"\n',
+            UnpackLimits(1000, 10, 0.4),
+            STATUS_OK,
+        ),
         ("exit 3\n", UnpackLimits(100, 10, 5), STATUS_FAILURE),
         (
             'while [ "$1" != "-C" ]; do shift; done; shift; echo hello > "$1/raw"\n',
@@ -100,7 +107,7 @@ def test_unpack_status_and_cleanup(
     toolchain = _script_toolchain(tmp_path, body)
     with unpack_firmware(tmp_path / "firmware.bin", limits, toolchain) as result:
         assert result.status == status
-        assert result.root is None
+        assert (result.root is None) == (status != STATUS_OK)
     assert len(sandboxes) == 1
     assert not sandboxes[0].exists()
 
