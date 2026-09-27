@@ -463,12 +463,12 @@ def _evaluate_cve(
 ) -> bool | None:
     """Avalia se a CVE se aplica à versão do firmware.
 
-    CVE sem configurations é aplicável; configurações só de outros produtos são
-    descartadas.
+    CVE sem configurations é indeterminada; configurações só de outros produtos
+    são descartadas.
     """
     configurations = cve.get("configurations", [])
     if not configurations:
-        return True
+        return None
     configurations = [c for c in configurations if not _is_other_product(c, target)]
     if not configurations:
         return False
