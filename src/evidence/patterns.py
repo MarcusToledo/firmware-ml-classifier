@@ -12,12 +12,11 @@ retornando a contagem/flag achatada usada como feature do classificador.
 from __future__ import annotations
 
 import ipaddress
-import math
 import re
-from collections import Counter
 from collections.abc import Iterator
 
 from src.evidence.findings import SecurityFinding
+from src.features.statistics import shannon_entropy
 
 CONFIDENCE_HIGH = "high"
 CONFIDENCE_MEDIUM = "medium"
@@ -551,14 +550,6 @@ _API_TOKEN_MAX_RUN = 5
 _TOKEN_CONTEXT_LENGTH = 12
 
 
-def _shannon_entropy_chars(s: str) -> float:
-    """Calcula a entropia de Shannon por caractere."""
-    frequencies = Counter(s)
-    return -sum(
-        (count / len(s)) * math.log2(count / len(s)) for count in frequencies.values()
-    )
-
-
 def _has_ascending_run(s: str, n: int) -> bool:
     """Detecta uma sequência crescente de códigos consecutivos."""
     run = 1
@@ -604,7 +595,7 @@ def find_api_tokens(strings: list[str]) -> list[SecurityFinding]:
                 re.search(r"[A-Z]", candidate)
                 and re.search(r"[a-z]", candidate)
                 and re.search(r"\d", candidate)
-                and _shannon_entropy_chars(candidate) >= _API_TOKEN_MIN_ENTROPY
+                and shannon_entropy(candidate.encode("ascii")) >= _API_TOKEN_MIN_ENTROPY
             ):
                 continue
             findings.append(

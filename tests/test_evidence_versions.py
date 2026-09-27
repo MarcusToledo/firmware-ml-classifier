@@ -92,7 +92,7 @@ _DETECTOR_PARTS: dict[str, list[object]] = {
         p._API_TOKEN_MIN_ENTROPY,
         p._API_TOKEN_MAX_RUN,
         p._TOKEN_CONTEXT_LENGTH,
-        p._shannon_entropy_chars,
+        p.shannon_entropy,
         p._has_ascending_run,
     ],
     b.DETECTOR_CRYPTO_SIGNATURES: [b.find_crypto_signatures, b._CRYPTO_RE],
@@ -142,7 +142,7 @@ _EXPECTED: dict[str, tuple[str, str]] = {
     ),
     p.DETECTOR_API_TOKENS: (
         "2.0",
-        "4a63875a692a90cb68d05c3949498c499b0a51b5518ca3977b306a2829394a7f",
+        "e5eb0a2cb38af411f54c907380f94f49a7157585f4050d4f67ffd6803845e165",
     ),
     b.DETECTOR_CRYPTO_SIGNATURES: (
         "1.0",
