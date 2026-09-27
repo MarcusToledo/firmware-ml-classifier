@@ -52,7 +52,7 @@ atribuir `sem_cve_conhecida`.
 uv run python scripts/generate_labels.py \
   --features dataset/processed/features.parquet \
   --cves dataset/cve_cache.json \
-  --output dataset/labels.csv
+  --output dataset/processed/labels_v2.csv
 ```
 
 Para consultar apenas a distribuição sem salvar, adicione `--dry-run`.

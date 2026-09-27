@@ -65,11 +65,16 @@ Gerar cache de CVEs por fabricante/modelo (obrigatório para rotulagem):
   para refazer). `--dry-run` lista os pares vendor/model sem fazer requisições.
 
 Gerar rótulos a partir do cache de CVEs:
-- `uv run python scripts/generate_labels.py --features dataset/processed/features.parquet --cves dataset/cve_cache.json --output dataset/labels.csv`
+- `uv run python scripts/generate_labels.py --features dataset/processed/features.parquet --cves dataset/cve_cache.json`
+- Sem `--output`, grava `dataset/processed/labels_v2.csv`. Ao lado da tabela ficam
+  `<nome>_aliases.jsonl` (aliases e CVEs aplicáveis/indeterminadas por alias) e
+  `<nome>.meta.json` (limiar, SHA256 das entradas, commit do código e data).
 - `--critical-cvss` ajusta o limiar crítico (padrão: 9.0); `--dry-run` mostra a
-  distribuição sem salvar. As features são lidas apenas para obter IDs e metadados.
-- O cache atual usa consulta por fabricante/modelo, sem filtrar a versão exata do
-  firmware. Essa limitação deve ser considerada ao interpretar os rótulos.
+  distribuição sem salvar. As features são lidas apenas para obter IDs e metadados;
+  a tabela precisa de `meta_version_source` e o cache precisa de `schema_version: 3`
+  com `fetched_at`.
+- O cache é consultado por fabricante/modelo; a versão do firmware é filtrada na
+  rotulagem, e CVEs cuja aplicabilidade não se decide ficam indeterminadas.
 
 Inspecionar tokens usados no Doc2Vec:
 - `uv run python scripts/inspect_tokens.py --config configs/feature_extraction.yaml --input dataset/raw/ --limit 50 --max-docs 20`
