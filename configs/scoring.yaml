@@ -26,8 +26,8 @@ scoring:
       hardcoded_passwords_steepness: 2.0
       credential_pairs_midpoint: 1.0
       credential_pairs_steepness: 3.0
-      hardcoded_ips_midpoint: 2.0
-      hardcoded_ips_steepness: 1.0
+      non_public_ips_midpoint: 2.0
+      non_public_ips_steepness: 1.0
       public_ips_midpoint: 1.0
       public_ips_steepness: 2.5
       outdated_lib_score: 0.6

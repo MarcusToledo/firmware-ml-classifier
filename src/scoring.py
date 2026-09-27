@@ -84,8 +84,8 @@ class StringsSubScoreConfig:
     hardcoded_passwords_steepness: float = 2.0
     credential_pairs_midpoint: float = 1.0
     credential_pairs_steepness: float = 3.0
-    hardcoded_ips_midpoint: float = 2.0
-    hardcoded_ips_steepness: float = 1.0
+    non_public_ips_midpoint: float = 2.0
+    non_public_ips_steepness: float = 1.0
     public_ips_midpoint: float = 1.0
     public_ips_steepness: float = 2.5
     outdated_lib_score: float = 0.6
@@ -258,10 +258,10 @@ def _string_count_settings(
             config.credential_pairs_steepness,
         ),
         (
-            "count_hardcoded_ips",
-            "ips",
-            config.hardcoded_ips_midpoint,
-            config.hardcoded_ips_steepness,
+            "count_non_public_ips",
+            "non_public_ips",
+            config.non_public_ips_midpoint,
+            config.non_public_ips_steepness,
         ),
         (
             "count_public_ips",

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from src.evidence.patterns import scan_strings
 from src.labeling.cve_labels import (
     LABEL_CRITICAL_CVE,
     LABEL_KNOWN_CVE,
@@ -438,7 +439,7 @@ def test_invalid_sub_scores_report_key(tmp_path):
     cases = [
         ("stats: {entropy_low: 8, entropy_high: 7}", "stats.entropy"),
         ("stats: {byte_mean_center: 0}", "stats.byte_mean_center"),
-        ("strings: {hardcoded_ips_steepness: 0}", "strings.hardcoded_ips_steepness"),
+        ("strings: {non_public_ips_steepness: 0}", "strings.non_public_ips_steepness"),
         ("strings: {public_ips_midpoint: -1}", "strings.public_ips_midpoint"),
         ("binwalk: {encrypted_score: 2}", "binwalk.encrypted_score"),
         ("binwalk: {legacy_fs_types: [cramfs, '']}", "binwalk.legacy_fs_types"),
@@ -465,7 +466,7 @@ def test_missing_values_are_ignored_by_group():
         "has_outdated_libssl": None,
         "has_outdated_busybox": pd.NA,
         "has_outdated_dropbear": float("nan"),
-        "count_hardcoded_ips": None,
+        "count_non_public_ips": None,
         "count_public_ips": pd.NA,
         "has_encrypted_sections": pd.NA,
         "n_crypto_signatures": np.nan,
@@ -517,3 +518,10 @@ def test_hard_rules_apply_with_no_signal_and_track_all():
         "has_debug_account",
         "hardcoded_passwords",
     ]
+
+
+def test_score_strings_reads_detector_ip_columns() -> None:
+    """Pontua IPs com as colunas que os detectores realmente produzem."""
+    config = DEFAULT_CONFIG.sub_scores.strings
+    for text in ("gateway 10.0.0.1", "dns 8.8.8.8"):
+        assert _score_strings(scan_strings([text]), config).score > 0.0
