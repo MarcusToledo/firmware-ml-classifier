@@ -5,6 +5,8 @@ from collections.abc import Iterable, Iterator
 
 ASCII_MIN = 32
 ASCII_MAX = 126
+DEFAULT_MIN_STRING_LEN = 4
+DEFAULT_MAX_STRING_LEN = 1024
 
 # Regex sobre bytes (executado em C via re) casando runs de ASCII imprimivel.
 # Substitui o loop byte-a-byte em Python puro, que dominava o tempo de
@@ -16,8 +18,8 @@ _PRINTABLE_RUN_RE = re.compile(
 
 def extract_ascii_strings(
     data: bytes,
-    min_len: int = 4,
-    max_string_len: int = 1024,
+    min_len: int = DEFAULT_MIN_STRING_LEN,
+    max_string_len: int = DEFAULT_MAX_STRING_LEN,
 ) -> list[str]:
     """Extrai strings ASCII imprimiveis (32-126) de bytes.
 
@@ -44,7 +46,9 @@ def _finish_run(pending: bytearray, length: int, min_len: int) -> Iterator[str]:
 
 
 def iter_ascii_strings(
-    chunks: Iterable[bytes], min_len: int = 4, max_string_len: int = 1024
+    chunks: Iterable[bytes],
+    min_len: int = DEFAULT_MIN_STRING_LEN,
+    max_string_len: int = DEFAULT_MAX_STRING_LEN,
 ) -> Iterator[str]:
     """Preserva sequências ASCII entre blocos sem armazenar o arquivo.
 

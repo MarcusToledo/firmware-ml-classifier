@@ -6,10 +6,14 @@ from collections.abc import Iterator
 from pathlib import Path
 
 LOGGER = logging.getLogger(__name__)
+_FILE_CHUNK_SIZE = 1 << 20
 
 
 def iter_file_chunks(
-    path: Path, max_bytes: int, chunk_size: int = 1 << 20, nofollow: bool = False
+    path: Path,
+    max_bytes: int,
+    chunk_size: int = _FILE_CHUNK_SIZE,
+    nofollow: bool = False,
 ) -> Iterator[bytes]:
     """Lê blocos limitados e impede symlinks quando solicitado."""
     flags = os.O_RDONLY | (os.O_NOFOLLOW if nofollow else 0)

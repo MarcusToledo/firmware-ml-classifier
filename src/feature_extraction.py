@@ -9,17 +9,24 @@ from gensim.models import Doc2Vec
 
 from .features.doc2vec import Doc2VecConfig, infer_embedding
 from .features.statistics import ByteStats
-from .features.strings import tokenize_document
+from .features.strings import (
+    DEFAULT_MAX_STRING_LEN,
+    DEFAULT_MIN_STRING_LEN,
+    tokenize_document,
+)
+
+_DEFAULT_MAX_STRINGS = 2000
+_DEFAULT_MAX_DOC_CHARS = 200000
 
 
 @dataclass(frozen=True)
 class FeatureConfig:
     """Define os limites do documento e os parâmetros de embedding."""
 
-    min_string_len: int = 4
-    max_string_len: int = 1024
-    max_strings: int = 2000
-    max_doc_chars: int = 200000
+    min_string_len: int = DEFAULT_MIN_STRING_LEN
+    max_string_len: int = DEFAULT_MAX_STRING_LEN
+    max_strings: int = _DEFAULT_MAX_STRINGS
+    max_doc_chars: int = _DEFAULT_MAX_DOC_CHARS
     doc2vec: Doc2VecConfig = Doc2VecConfig()
 
 

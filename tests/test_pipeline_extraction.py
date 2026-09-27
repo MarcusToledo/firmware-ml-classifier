@@ -11,11 +11,26 @@ from pathlib import Path
 import pytest
 
 from pipeline.feature_extraction import (
+    STRINGS_BLOB,
+    STRINGS_FILESYSTEM,
+    THIRD_PARTY_DDWRT,
+    VERSION_SOURCE_DIRECTORY,
+    VERSION_SOURCE_FILENAME,
     extract_features_batch,
     extract_features_from_path,
     load_pipeline_config,
 )
-from src.features.unpack import Toolchain, UnpackResult
+from src.features.unpack import (
+    STATUS_FAILURE,
+    STATUS_FILES,
+    STATUS_NO_FILESYSTEM,
+    STATUS_NOT_RUN,
+    STATUS_OK,
+    STATUS_SIZE,
+    STATUS_TIME,
+    Toolchain,
+    UnpackResult,
+)
 
 
 def test_full_read_and_filesystem_strings(
@@ -33,9 +48,9 @@ def test_full_read_and_filesystem_strings(
         == result.metadata["bytes_used"]
         == path.stat().st_size
     )
-    assert result.metadata["binwalk_status"] == "ok"
-    assert result.metadata["unpack_status"] == "ok"
-    assert result.metadata["strings_source"] == "filesystem"
+    assert result.metadata["binwalk_status"] == STATUS_OK
+    assert result.metadata["unpack_status"] == STATUS_OK
+    assert result.metadata["strings_source"] == STRINGS_FILESYSTEM
     assert result.metadata["third_party"] is None
     assert result.features["count_hardcoded_passwords"] >= 1
     assert result.features["n_filesystems"] == 1
@@ -59,9 +74,9 @@ def test_empty_and_unreadable_skip_tools(
     for result in (empty_result, missing_result):
         assert result.metadata["read_ok"] is False
         assert result.firmware_id is None
-        assert result.metadata["binwalk_status"] == "nao_executado"
-        assert result.metadata["unpack_status"] == "nao_executado"
-        assert result.metadata["strings_source"] == "nao_executado"
+        assert result.metadata["binwalk_status"] == STATUS_NOT_RUN
+        assert result.metadata["unpack_status"] == STATUS_NOT_RUN
+        assert result.metadata["strings_source"] == STATUS_NOT_RUN
 
 
 def test_error_row_keeps_identity_and_batch_continues(
@@ -88,7 +103,7 @@ def test_error_row_keeps_identity_and_batch_continues(
         missing_result.metadata["model"],
         missing_result.metadata["version"],
         missing_result.metadata["version_source"],
-    ) == ("dlink", "dsr1000n", "1.2", "directory")
+    ) == ("dlink", "dsr1000n", "1.2", VERSION_SOURCE_DIRECTORY)
 
 
 def test_classifier_features_exclude_cve_and_identity_fields(
@@ -127,7 +142,9 @@ def test_classifier_features_exclude_cve_and_identity_fields(
     assert not any(key.startswith("meta_") for key in result.features)
 
 
-@pytest.mark.parametrize("version,source", [("1.0", None), (None, "filename")])
+@pytest.mark.parametrize(
+    "version,source", [("1.0", None), (None, VERSION_SOURCE_FILENAME)]
+)
 def test_inconsistent_version_metadata_is_rejected(
     tmp_path: Path,
     fake_toolchain: Toolchain,
@@ -161,18 +178,18 @@ def test_detected_filesystem_not_extracted_is_failure(
         _path: Path, _limits: object, _toolchain: Toolchain
     ) -> Iterator[UnpackResult]:
         """Simula recorte cramfs mantido sem ``cramfsck``."""
-        yield UnpackResult("sem_filesystem", None)
+        yield UnpackResult(STATUS_NO_FILESYSTEM, None)
 
     monkeypatch.setattr(pipeline, "unpack_firmware", unpack)
     monkeypatch.setattr(
-        pipeline, "_scan_binwalk", lambda path, tool: (["CramFS filesystem"], "ok")
+        pipeline, "_scan_binwalk", lambda path, tool: (["CramFS filesystem"], STATUS_OK)
     )
     result = extract_features_from_path(
         path, load_pipeline_config(None, {}), None, fake_toolchain
     )
     assert result.features["fs_type"] == "cramfs"
-    assert result.metadata["unpack_status"] == "falha"
-    assert result.metadata["strings_source"] == "blob"
+    assert result.metadata["unpack_status"] == STATUS_FAILURE
+    assert result.metadata["strings_source"] == STRINGS_BLOB
 
 
 def test_batch_preserves_relative_identity_and_order(
@@ -205,11 +222,11 @@ def test_batch_preserves_relative_identity_and_order(
 @pytest.mark.parametrize(
     "status,source",
     [
-        ("sem_filesystem", "blob"),
-        ("falha", "blob"),
-        ("limite_tamanho", "blob"),
-        ("limite_arquivos", "blob"),
-        ("limite_tempo", "nao_executado"),
+        (STATUS_NO_FILESYSTEM, STRINGS_BLOB),
+        (STATUS_FAILURE, STRINGS_BLOB),
+        (STATUS_SIZE, STRINGS_BLOB),
+        (STATUS_FILES, STRINGS_BLOB),
+        (STATUS_TIME, STATUS_NOT_RUN),
     ],
 )
 def test_unpack_fallback_or_timeout(
@@ -233,14 +250,16 @@ def test_unpack_fallback_or_timeout(
         yield UnpackResult(status, None)
 
     monkeypatch.setattr(pipeline, "unpack_firmware", unpack)
-    monkeypatch.setattr(pipeline, "_scan_binwalk", lambda path, tool: ([], "ok"))
+    monkeypatch.setattr(pipeline, "_scan_binwalk", lambda path, tool: ([], STATUS_OK))
     result = extract_features_from_path(
         path, load_pipeline_config(None, {}), None, fake_toolchain
     )
     assert result.metadata["unpack_status"] == status
     assert result.metadata["strings_source"] == source
-    assert result.metadata["third_party"] == ("dd-wrt" if source == "blob" else None)
-    if source == "blob":
+    assert result.metadata["third_party"] == (
+        THIRD_PARTY_DDWRT if source == STRINGS_BLOB else None
+    )
+    if source == STRINGS_BLOB:
         assert result.features["count_hardcoded_passwords"] >= 1
     else:
         assert result.features["count_hardcoded_passwords"] == 0
@@ -257,14 +276,14 @@ def test_webflash_name_removes_version_but_banner_does_not(
         _path: Path, _limits: object, _toolchain: Toolchain
     ) -> Iterator[UnpackResult]:
         """Indica que a imagem exige fallback às strings brutas."""
-        yield UnpackResult("sem_filesystem", None)
+        yield UnpackResult(STATUS_NO_FILESYSTEM, None)
 
     monkeypatch.setattr(pipeline, "unpack_firmware", unpack)
     root = tmp_path / "raw"
     for name, content, expected_version, expected_third in [
         ("WNDR4300-V1.0.1.30.img", b"OpenWrt\x00", "1.0.1.30", None),
-        ("WNDR4300-V1.0.1.31.img", b"DD-WRT\x00", "1.0.1.31", "dd-wrt"),
-        ("WNDR4300-webflash.img", b"firmware\x00", None, "dd-wrt"),
+        ("WNDR4300-V1.0.1.31.img", b"DD-WRT\x00", "1.0.1.31", THIRD_PARTY_DDWRT),
+        ("WNDR4300-webflash.img", b"firmware\x00", None, THIRD_PARTY_DDWRT),
     ]:
         path = root / "netgear" / "wndr4300" / name
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -291,10 +310,10 @@ def test_bounded_peak_for_large_file(
         _path: Path, _limits: object, _toolchain: Toolchain
     ) -> Iterator[UnpackResult]:
         """Evita strings do blob para medir apenas a leitura incremental."""
-        yield UnpackResult("limite_tempo", None)
+        yield UnpackResult(STATUS_TIME, None)
 
     monkeypatch.setattr(pipeline, "unpack_firmware", unpack)
-    monkeypatch.setattr(pipeline, "_scan_binwalk", lambda path, tool: ([], "ok"))
+    monkeypatch.setattr(pipeline, "_scan_binwalk", lambda path, tool: ([], STATUS_OK))
     path = tmp_path / "large.bin"
     with path.open("wb") as handle:
         for _ in range(64):
@@ -320,10 +339,10 @@ def test_bounded_peak_for_many_unique_strings(
         _path: Path, _limits: object, _toolchain: Toolchain
     ) -> Iterator[UnpackResult]:
         """Força a varredura do blob inteiro."""
-        yield UnpackResult("sem_filesystem", None)
+        yield UnpackResult(STATUS_NO_FILESYSTEM, None)
 
     monkeypatch.setattr(pipeline, "unpack_firmware", unpack)
-    monkeypatch.setattr(pipeline, "_scan_binwalk", lambda path, tool: ([], "ok"))
+    monkeypatch.setattr(pipeline, "_scan_binwalk", lambda path, tool: ([], STATUS_OK))
     path = tmp_path / "strings.bin"
     count = 300_000
     path.write_bytes(b"".join(b"u%07d\x00" % index for index in range(count)))

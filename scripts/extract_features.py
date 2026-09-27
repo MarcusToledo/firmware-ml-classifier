@@ -18,6 +18,7 @@ if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))
 
 from pipeline.feature_extraction import (  # noqa: E402
+    BINWALK_STATUS_TIMEOUT,
     PipelineConfig,
     PipelineResult,
     extract_features_batch,
@@ -26,6 +27,7 @@ from pipeline.feature_extraction import (  # noqa: E402
 )
 from src.cli_utils import parse_overrides  # noqa: E402
 from src.features.unpack import (  # noqa: E402
+    STATUS_TIME,
     Toolchain,
     ToolchainError,
     resolve_toolchain,
@@ -47,6 +49,8 @@ EXCLUDED_EXTENSIONS = {
 }
 OUTPUT_FORMATS = {"parquet", "csv"}
 LOGGER = logging.getLogger(__name__)
+_EXIT_INCOMPLETE = 1
+_EXIT_USAGE = 2
 
 
 def gather_paths(input_path: Path) -> list[Path]:
@@ -134,12 +138,12 @@ def _check_layout(paths: list[Path], root: Path | None, labelled: bool) -> None:
             "--dataset-root é obrigatório com --label-from-path quando "
             "--input é arquivo único ou lista .txt"
         )
-        raise SystemExit(2)
+        raise SystemExit(_EXIT_USAGE)
     invalid = find_off_layout_paths(paths, root)
     if invalid:
         for path in invalid:
             LOGGER.error("Arquivo fora do layout: %s", path)
-        raise SystemExit(2)
+        raise SystemExit(_EXIT_USAGE)
 
 
 def _resolve_toolchain() -> Toolchain:
@@ -148,7 +152,7 @@ def _resolve_toolchain() -> Toolchain:
         toolchain = resolve_toolchain()
     except ToolchainError as exc:
         LOGGER.error("%s", exc)
-        raise SystemExit(2) from exc
+        raise SystemExit(_EXIT_USAGE) from exc
     LOGGER.info("Ferramentas: %s", toolchain.versions)
     return toolchain
 
@@ -225,8 +229,8 @@ def _exit_if_incomplete(results: list[PipelineResult]) -> None:
     timed_out = [
         str(result.metadata["path"])
         for result in results
-        if result.metadata["binwalk_status"] == "timeout"
-        or result.metadata["unpack_status"] == "limite_tempo"
+        if result.metadata["binwalk_status"] == BINWALK_STATUS_TIMEOUT
+        or result.metadata["unpack_status"] == STATUS_TIME
     ]
     if timed_out:
         LOGGER.error(
@@ -235,7 +239,7 @@ def _exit_if_incomplete(results: list[PipelineResult]) -> None:
             len(timed_out),
             timed_out,
         )
-        raise SystemExit(1)
+        raise SystemExit(_EXIT_INCOMPLETE)
 
 
 def _load_config(args: argparse.Namespace) -> PipelineConfig:
@@ -244,7 +248,7 @@ def _load_config(args: argparse.Namespace) -> PipelineConfig:
         return load_pipeline_config(Path(args.config), parse_overrides(args.override))
     except (ValueError, FileNotFoundError) as exc:
         LOGGER.error("%s", exc)
-        raise SystemExit(2) from exc
+        raise SystemExit(_EXIT_USAGE) from exc
 
 
 def main() -> None:

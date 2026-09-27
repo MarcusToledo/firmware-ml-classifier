@@ -57,6 +57,14 @@ VERSION_SOURCE_FILENAME = "filename"
 THIRD_PARTY_DDWRT = "dd-wrt"
 STRINGS_FILESYSTEM = "filesystem"
 STRINGS_BLOB = "blob"
+BINWALK_STATUS_ERROR = "erro"
+BINWALK_STATUS_TIMEOUT = "timeout"
+_BINWALK_SCAN_TIMEOUT_SECONDS = 60
+_STRING_SCAN_BATCH_SIZE = 10_000
+_DDWRT_BANNER = "DD-WRT"
+_RELATIVE_IDENTITY_PARTS = 3
+_BINWALK_FIELDS = 3
+_BINWALK_DESCRIPTION_INDEX = _BINWALK_FIELDS - 1
 LOGGER = logging.getLogger(__name__)
 _VERSION_SUFFIX_RE = re.compile(
     r"^([a-z][a-z0-9-]*\d[a-z0-9-]*)_(\d+\.\d.*)$", re.IGNORECASE
@@ -86,7 +94,10 @@ def _split_model_version(model: str) -> tuple[str, str | None]:
 
 def infer_brand_model_label_from_path(relative_path: Path) -> PathMetadata:
     """Infere identidade apenas de fabricante/modelo/arquivo relativos à raiz."""
-    if len(relative_path.parts) != 3 or relative_path.is_absolute():
+    if (
+        len(relative_path.parts) != _RELATIVE_IDENTITY_PARTS
+        or relative_path.is_absolute()
+    ):
         return PathMetadata(None, None, None, None, None)
     brand = relative_path.parts[0].strip().lower()
     model, directory_version = _split_model_version(relative_path.parts[1].strip())
@@ -216,21 +227,23 @@ def _load_unpack(raw: Any, path: Path | None) -> UnpackLimits:
 
 def _load_feature(raw: dict[str, Any], doc: dict[str, Any]) -> FeatureConfig:
     """Carrega os limites existentes de documento e Doc2Vec."""
+    defaults = FeatureConfig()
+    doc_defaults = defaults.doc2vec
     return FeatureConfig(
-        min_string_len=int(raw.get("min_string_len", 4)),
-        max_string_len=int(raw.get("max_single_string_len", 1024)),
-        max_strings=int(raw.get("max_strings", 2000)),
-        max_doc_chars=int(raw.get("max_doc_chars", 200000)),
+        min_string_len=int(raw.get("min_string_len", defaults.min_string_len)),
+        max_string_len=int(raw.get("max_single_string_len", defaults.max_string_len)),
+        max_strings=int(raw.get("max_strings", defaults.max_strings)),
+        max_doc_chars=int(raw.get("max_doc_chars", defaults.max_doc_chars)),
         doc2vec=Doc2VecConfig(
-            vector_size=int(doc.get("vector_size", 100)),
-            window=int(doc.get("window", 5)),
-            epochs=int(doc.get("epochs", 20)),
-            min_count=int(doc.get("min_count", 2)),
-            seed=int(doc.get("seed", 42)),
-            workers=int(doc.get("workers", 1)),
-            dm=int(doc.get("dm", 1)),
-            alpha=float(doc.get("alpha", 0.025)),
-            min_alpha=float(doc.get("min_alpha", 0.0001)),
+            vector_size=int(doc.get("vector_size", doc_defaults.vector_size)),
+            window=int(doc.get("window", doc_defaults.window)),
+            epochs=int(doc.get("epochs", doc_defaults.epochs)),
+            min_count=int(doc.get("min_count", doc_defaults.min_count)),
+            seed=int(doc.get("seed", doc_defaults.seed)),
+            workers=int(doc.get("workers", doc_defaults.workers)),
+            dm=int(doc.get("dm", doc_defaults.dm)),
+            alpha=float(doc.get("alpha", doc_defaults.alpha)),
+            min_alpha=float(doc.get("min_alpha", doc_defaults.min_alpha)),
         ),
     )
 
@@ -279,7 +292,7 @@ def _run_binwalk_scan(
             capture_output=True,
             text=True,
             errors="replace",
-            timeout=60,
+            timeout=_BINWALK_SCAN_TIMEOUT_SECONDS,
             env=isolated_env(toolchain, home, home),
             check=False,
         )
@@ -291,23 +304,25 @@ def _scan_binwalk(path: Path, toolchain: Toolchain) -> tuple[list[str], str]:
         result = _run_binwalk_scan(path, toolchain)
     except subprocess.TimeoutExpired:
         LOGGER.warning("binwalk timeout para %s", path)
-        return [], "timeout"
+        return [], BINWALK_STATUS_TIMEOUT
     except OSError as exc:
         LOGGER.warning("binwalk erro para %s: código indisponível: %s", path, exc)
-        return [], "erro"
+        return [], BINWALK_STATUS_ERROR
     if result.returncode != 0:
         LOGGER.warning("binwalk erro para %s: código %d", path, result.returncode)
-        return [], "erro"
+        return [], BINWALK_STATUS_ERROR
     descriptions = []
     for line in result.stdout.splitlines():
-        parts = line.split(None, 2)
-        if len(parts) == 3 and parts[0].isdigit():
-            descriptions.append(parts[2].strip())
-    return descriptions, "ok"
+        parts = line.split(None, _BINWALK_DESCRIPTION_INDEX)
+        if len(parts) == _BINWALK_FIELDS and parts[0].isdigit():
+            descriptions.append(parts[_BINWALK_DESCRIPTION_INDEX].strip())
+    return descriptions, STATUS_OK
 
 
 def _scan_string_stream(
-    strings: Iterable[str], document: DocumentBuilder, batch_size: int = 10_000
+    strings: Iterable[str],
+    document: DocumentBuilder,
+    batch_size: int = _STRING_SCAN_BATCH_SIZE,
 ) -> tuple[list[SecurityFinding], bool]:
     """Varre todas as strings em lotes sem limitar detectores pelo documento."""
     findings: list[SecurityFinding] = []
@@ -315,7 +330,7 @@ def _scan_string_stream(
     ddwrt = False
     for value in strings:
         document.add(value)
-        ddwrt |= "DD-WRT" in value
+        ddwrt |= _DDWRT_BANNER in value
         batch.append(value)
         if len(batch) >= batch_size:
             findings.extend(scan_strings_findings(batch))

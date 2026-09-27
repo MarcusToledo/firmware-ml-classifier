@@ -27,12 +27,24 @@ STATUS_SIZE = "limite_tamanho"
 STATUS_FILES = "limite_arquivos"
 STATUS_TIME = "limite_tempo"
 STATUS_NOT_RUN = "nao_executado"
+_DEFAULT_MAX_TOTAL_BYTES = 2_147_483_648
+_DEFAULT_MAX_FILES = 100_000
+_DEFAULT_TIMEOUT_SECONDS = 300
+_TOOL_VERSION_TIMEOUT_SECONDS = 15
+_MONITOR_INTERVAL_SECONDS = 0.5
+_STDERR_TAIL_BYTES = 2048
+_BINWALK_TOOL = "binwalk"
+_UNKNOWN_VERSION = "desconhecida"
+_ENV_PATH = "PATH"
+_SANDBOX_HOME = "home"
+_SANDBOX_TMP = "tmp"
+_SANDBOX_OUT = "out"
 _ROOT_RE = re.compile(r"^[a-z0-9]+-root(-\d+)?$")
 # A tag upstream v2.3.4 aponta para cddfede, mas setup.py mantém 2.3.3.
 _BINWALK_V234_COMMIT = "cddfede"
 _REQUIRED_TOOLS = (
     (
-        "binwalk",
+        _BINWALK_TOOL,
         "Binwalk v(\\d+\\.\\d+\\.\\d+)(?:\\+([0-9a-f]+))?",
         "2.3.4",
         ("--help",),
@@ -63,9 +75,9 @@ class Toolchain:
 class UnpackLimits:
     """Limita bytes, quantidade de arquivos e tempo do extrator."""
 
-    max_total_bytes: int = 2_147_483_648
-    max_files: int = 100_000
-    timeout_seconds: float = 300
+    max_total_bytes: int = _DEFAULT_MAX_TOTAL_BYTES
+    max_files: int = _DEFAULT_MAX_FILES
+    timeout_seconds: float = _DEFAULT_TIMEOUT_SECONDS
 
 
 @dataclass(frozen=True)
@@ -93,7 +105,7 @@ def _tool_version(
             [binary, *args],
             capture_output=True,
             text=True,
-            timeout=15,
+            timeout=_TOOL_VERSION_TIMEOUT_SECONDS,
             env=env,
             check=False,
         )
@@ -103,7 +115,7 @@ def _tool_version(
         ) from exc
     match = re.search(pattern, result.stdout + result.stderr, re.IGNORECASE | re.DOTALL)
     if match is None:
-        return "desconhecida"
+        return _UNKNOWN_VERSION
     return match.group(1) + (
         f"+{match.group(2)}"
         if package is None and match.lastindex == 2 and match.group(2)
@@ -118,11 +130,11 @@ def resolve_toolchain() -> Toolchain:
             "root: versão atual privilegiada; mínimo exigido: usuário sem root"
         )
     env = dict(os.environ)
-    env["PATH"] = f"{Path(sys.executable).parent}{os.pathsep}{os.environ['PATH']}"
+    env[_ENV_PATH] = f"{Path(sys.executable).parent}{os.pathsep}{os.environ[_ENV_PATH]}"
     versions: dict[str, str] = {}
     paths: dict[str, str] = {}
     for name, pattern, minimum, args, package in _REQUIRED_TOOLS:
-        binary = shutil.which(name, path=env["PATH"])
+        binary = shutil.which(name, path=env[_ENV_PATH])
         if binary is None:
             raise ToolchainError(
                 f"{name}: versão ausente; mínimo exigido: {minimum or 'presença'}"
@@ -135,7 +147,7 @@ def resolve_toolchain() -> Toolchain:
             ) from exc
         version, _, commit = found.partition("+")
         tagged = (
-            name == "binwalk"
+            name == _BINWALK_TOOL
             and version == "2.3.3"
             and commit.startswith(_BINWALK_V234_COMMIT)
         )
@@ -143,7 +155,7 @@ def resolve_toolchain() -> Toolchain:
             minimum
             and not tagged
             and (
-                found == "desconhecida"
+                found == _UNKNOWN_VERSION
                 or tuple(map(int, version.split(".")))
                 < tuple(map(int, minimum.split(".")))
             )
@@ -151,7 +163,7 @@ def resolve_toolchain() -> Toolchain:
             raise ToolchainError(f"{name}: versão {found}; mínimo exigido: {minimum}")
         paths[name] = binary
         versions[name] = found
-    return Toolchain(paths["binwalk"], env, versions)
+    return Toolchain(paths[_BINWALK_TOOL], env, versions)
 
 
 def _scan_entries(directory: Path, strict: bool) -> list[os.DirEntry[str]]:
@@ -238,14 +250,14 @@ def _limit_status(
 def _monitor(
     process: subprocess.Popen[bytes], root: Path, limits: UnpackLimits, started: float
 ) -> str | None:
-    """Confere limites a cada 0,5 s e uma última vez após o fim do extrator."""
+    """Confere limites periodicamente e uma última vez após o extrator."""
     while True:
         finished = process.poll() is not None
         total, count, _, _ = _inventory(root, strict=False)
         status = _limit_status(total, count, time.monotonic() - started, limits)
         if status or finished:
             return status
-        time.sleep(0.5)
+        time.sleep(_MONITOR_INTERVAL_SECONDS)
 
 
 def _final_status(
@@ -263,9 +275,9 @@ def _final_status(
 
 
 def _stderr_tail(handle: BinaryIO) -> str:
-    """Lê só os últimos 2 KB do stderr pelo descritor já aberto."""
+    """Lê só a janela final do stderr pelo descritor já aberto."""
     size = handle.seek(0, os.SEEK_END)
-    handle.seek(max(0, size - 2048))
+    handle.seek(max(0, size - _STDERR_TAIL_BYTES))
     return handle.read().decode("utf-8", errors="replace")
 
 
@@ -283,14 +295,14 @@ def _run_extractor(
     path: Path, base: Path, limits: UnpackLimits, toolchain: Toolchain
 ) -> tuple[str, str | None]:
     """Roda ``binwalk -e`` confinado em ``base`` e devolve status e erro."""
-    out = base / "out"
+    out = base / _SANDBOX_OUT
     with (base / "binwalk.stderr").open("w+b") as stderr:
         try:
             started = time.monotonic()
             process = subprocess.Popen(
                 [toolchain.binwalk, "-e", "-q", "-C", str(out), str(path.absolute())],
                 cwd=base,
-                env=isolated_env(toolchain, base / "home", base / "tmp"),
+                env=isolated_env(toolchain, base / _SANDBOX_HOME, base / _SANDBOX_TMP),
                 stdout=subprocess.DEVNULL,
                 stderr=stderr,
                 start_new_session=True,
@@ -326,13 +338,13 @@ def unpack_firmware(
     """
     base = Path(tempfile.mkdtemp(prefix="fmc-unpack-"))
     try:
-        for part in ("home", "tmp", "out"):
+        for part in (_SANDBOX_HOME, _SANDBOX_TMP, _SANDBOX_OUT):
             (base / part).mkdir()
         try:
             status, error = _run_extractor(path, base, limits, toolchain)
         except OSError as exc:
             status, error = STATUS_FAILURE, str(exc)
-        root = base / "out" if status == STATUS_OK else None
+        root = base / _SANDBOX_OUT if status == STATUS_OK else None
         yield UnpackResult(status, root, error)
     finally:
         _remove_sandbox(path, base)

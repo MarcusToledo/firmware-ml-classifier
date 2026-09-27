@@ -6,6 +6,8 @@ import pytest
 
 from pipeline.feature_extraction import (
     THIRD_PARTY_DDWRT,
+    VERSION_SOURCE_DIRECTORY,
+    VERSION_SOURCE_FILENAME,
     find_off_layout_paths,
     infer_brand_model_label_from_path,
     is_third_party_name,
@@ -21,7 +23,7 @@ from pipeline.feature_extraction import (
             "zyxel",
             "nwa110ax",
             "7.10(ABTG.4)C0",
-            "directory",
+            VERSION_SOURCE_DIRECTORY,
         ),
         ("dlink/dir-300/file.bin", "dlink", "dir-300", None, None),
         (
@@ -29,21 +31,21 @@ from pipeline.feature_extraction import (
             "belkin",
             "f5d7234_4",
             "4.00.05",
-            "filename",
+            VERSION_SOURCE_FILENAME,
         ),
         (
             "asus/rt-ac68u/RT-AC68U_3.0.0.4_384_45717-gadd52a8.trx",
             "asus",
             "rt-ac68u",
             "3.0.0.4.384.45717",
-            "filename",
+            VERSION_SOURCE_FILENAME,
         ),
         (
             "dlink/dsr1000n_1.2/DSR-1000N_FW_9.99_WW",
             "dlink",
             "dsr1000n",
             "1.2",
-            "directory",
+            VERSION_SOURCE_DIRECTORY,
         ),
         ("dlink/dir-1760/DIR_1760_FW101B04.BIN", "dlink", "dir-1760", None, None),
     ],

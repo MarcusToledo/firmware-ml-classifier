@@ -8,13 +8,16 @@ from dataclasses import dataclass
 import numpy as np
 
 BLOCK_SIZE = 65536
+_BYTE_VALUES = 256
+_COMPRESSION_LEVEL = 9
+_MIN_VARIANCE_SECTIONS = 2
 
 
 def shannon_entropy(data: bytes) -> float:
     """Calcula a entropia de Shannon dos bytes, inclusive entrada vazia."""
     if not data:
         return 0.0
-    counts = np.bincount(np.frombuffer(data, dtype=np.uint8), minlength=256)
+    counts = np.bincount(np.frombuffer(data, dtype=np.uint8), minlength=_BYTE_VALUES)
     return _entropy_counts(counts, len(data))
 
 
@@ -39,10 +42,10 @@ class StreamingStats:
 
     def __init__(self) -> None:
         """Inicializa acumuladores de tamanho limitado."""
-        self._counts = np.zeros(256, dtype=np.int64)
+        self._counts = np.zeros(_BYTE_VALUES, dtype=np.int64)
         self._size = 0
         self._compressed = 0
-        self._compressor = zlib.compressobj(level=9)
+        self._compressor = zlib.compressobj(level=_COMPRESSION_LEVEL)
         self._section = bytearray()
         self._entropies: list[float] = []
 
@@ -50,7 +53,9 @@ class StreamingStats:
         """Inclui um bloco arbitrário sem reter todos os bytes lidos."""
         if not chunk:
             return
-        self._counts += np.bincount(np.frombuffer(chunk, dtype=np.uint8), minlength=256)
+        self._counts += np.bincount(
+            np.frombuffer(chunk, dtype=np.uint8), minlength=_BYTE_VALUES
+        )
         self._size += len(chunk)
         self._compressed += len(self._compressor.compress(chunk))
         view = memoryview(chunk)
@@ -65,11 +70,15 @@ class StreamingStats:
     def result(self) -> ByteStats:
         """Finaliza a compressão e devolve estatísticas do prefixo lido."""
         self._compressed += len(self._compressor.flush())
-        variance = float(np.var(self._entropies)) if len(self._entropies) >= 2 else 0.0
+        variance = (
+            float(np.var(self._entropies))
+            if len(self._entropies) >= _MIN_VARIANCE_SECTIONS
+            else 0.0
+        )
         return ByteStats(
             entropy=_entropy_counts(self._counts, self._size) if self._size else 0.0,
             byte_mean=(
-                float(np.dot(np.arange(256), self._counts) / self._size)
+                float(np.dot(np.arange(_BYTE_VALUES), self._counts) / self._size)
                 if self._size
                 else 0.0
             ),

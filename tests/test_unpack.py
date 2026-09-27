@@ -14,6 +14,12 @@ import pytest
 
 import src.features.unpack as unpack_module
 from src.features.unpack import (
+    STATUS_FAILURE,
+    STATUS_FILES,
+    STATUS_NO_FILESYSTEM,
+    STATUS_OK,
+    STATUS_SIZE,
+    STATUS_TIME,
     Toolchain,
     ToolchainError,
     UnpackLimits,
@@ -57,14 +63,14 @@ def sandboxes(monkeypatch: pytest.MonkeyPatch) -> list[Path]:
             'mkdir -p "$1/squashfs-root"; '
             'printf "%020d" 0 > "$1/squashfs-root/file"\n',
             UnpackLimits(10, 1, 5),
-            "limite_tamanho",
+            STATUS_SIZE,
         ),
         (
             'while [ "$1" != "-C" ]; do shift; done; shift; '
             'mkdir -p "$1/squashfs-root"; '
             'touch "$1/squashfs-root/a" "$1/squashfs-root/b"\n',
             UnpackLimits(100, 1, 5),
-            "limite_arquivos",
+            STATUS_FILES,
         ),
         (
             'while [ "$1" != "-C" ]; do shift; done; shift; '
@@ -72,14 +78,14 @@ def sandboxes(monkeypatch: pytest.MonkeyPatch) -> list[Path]:
             'printf "%020d" 0 > "$1/squashfs-root/a"; '
             'printf "%020d" 0 > "$1/squashfs-root/b"\n',
             UnpackLimits(10, 1, 5),
-            "limite_tamanho",
+            STATUS_SIZE,
         ),
-        ("sleep 3\n", UnpackLimits(100, 10, 0.1), "limite_tempo"),
-        ("exit 3\n", UnpackLimits(100, 10, 5), "falha"),
+        ("sleep 3\n", UnpackLimits(100, 10, 0.1), STATUS_TIME),
+        ("exit 3\n", UnpackLimits(100, 10, 5), STATUS_FAILURE),
         (
             'while [ "$1" != "-C" ]; do shift; done; shift; echo hello > "$1/raw"\n',
             UnpackLimits(100, 10, 5),
-            "sem_filesystem",
+            STATUS_NO_FILESYSTEM,
         ),
     ],
 )
@@ -117,7 +123,7 @@ def test_restricted_dirs_are_read_and_removed_without_touching_link_targets(
         UnpackLimits(1000, 10, 5),
         _script_toolchain(tmp_path, body),
     ) as result:
-        assert result.status == "ok" and result.root is not None
+        assert result.status == STATUS_OK and result.root is not None
         names = {path.name for path in iter_extracted_files(result.root)}
         assert names == {"f", "secret", "g"}
     assert stat.S_IMODE(victim.stat().st_mode) == 0o644
@@ -136,7 +142,7 @@ def test_files_vanishing_during_extraction_do_not_fail(tmp_path: Path) -> None:
         with unpack_firmware(
             tmp_path / "firmware.bin", UnpackLimits(1000, 10, 30), toolchain
         ) as result:
-            assert result.status == "ok"
+            assert result.status == STATUS_OK
 
 
 def test_orphans_are_killed_and_body_exception_still_cleans(
@@ -172,7 +178,7 @@ def test_isolated_environment_and_symlinks(tmp_path: Path) -> None:
         UnpackLimits(1000, 10, 5),
         _script_toolchain(tmp_path, body),
     ) as result:
-        assert result.status == "ok" and result.root is not None
+        assert result.status == STATUS_OK and result.root is not None
         paths = iter_extracted_files(result.root)
         assert {path.name for path in paths} == {"valid", "environment"}
         home, tmp, xdg = (
@@ -234,7 +240,7 @@ def test_real_squashfs_symlinks_are_not_read(
         capture_output=True,
     )
     with unpack_firmware(image, UnpackLimits(), require_unpack_tools) as result:
-        assert result.status == "ok" and result.root is not None
+        assert result.status == STATUS_OK and result.root is not None
         content = b"".join(
             path.read_bytes() for path in iter_extracted_files(result.root)
         )

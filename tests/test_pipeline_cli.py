@@ -9,8 +9,11 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from pipeline.feature_extraction import BINWALK_STATUS_TIMEOUT, STRINGS_FILESYSTEM
 from scripts import extract_features as cli
 from src.features.unpack import Toolchain
+
+_EXIT_USAGE = 2
 
 
 def _invoke(
@@ -40,7 +43,7 @@ def test_cli_rejects_missing_root_before_toolchain(
     firmware.write_bytes(b"firmware")
     with pytest.raises(SystemExit) as exc:
         _invoke(monkeypatch, firmware, tmp_path / "result.parquet", "--label-from-path")
-    assert exc.value.code == 2
+    assert exc.value.code == _EXIT_USAGE
 
 
 def test_cli_rejects_off_layout_before_toolchain(
@@ -54,7 +57,7 @@ def test_cli_rejects_off_layout_before_toolchain(
     path.write_bytes(b"firmware")
     with pytest.raises(SystemExit) as exc:
         _invoke(monkeypatch, root, tmp_path / "out.parquet", "--label-from-path")
-    assert exc.value.code == 2
+    assert exc.value.code == _EXIT_USAGE
     assert str(path) in caplog.text
 
 
@@ -76,7 +79,7 @@ def test_cli_relative_paths_and_unlabelled_identity(
     labelled = pd.read_parquet(output).iloc[0]
     assert labelled["meta_version"] == "1.0.1.80"
     assert labelled["meta_brand"] == "netgear"
-    assert labelled["meta_strings_source"] == "filesystem"
+    assert labelled["meta_strings_source"] == STRINGS_FILESYSTEM
 
 
 def test_cli_timeout_writes_output_before_nonzero_exit(
@@ -88,12 +91,16 @@ def test_cli_timeout_writes_output_before_nonzero_exit(
     firmware = tmp_path / "firmware.bin"
     firmware.write_bytes(b"firmware\x00")
     monkeypatch.setattr(cli, "resolve_toolchain", lambda: fake_toolchain)
-    monkeypatch.setattr(pipeline, "_scan_binwalk", lambda path, tool: ([], "timeout"))
+    monkeypatch.setattr(
+        pipeline, "_scan_binwalk", lambda path, tool: ([], BINWALK_STATUS_TIMEOUT)
+    )
     output = tmp_path / "out.parquet"
     with pytest.raises(SystemExit) as exc:
         _invoke(monkeypatch, firmware, output, "--workers", "1")
     assert exc.value.code == 1
-    assert pd.read_parquet(output).iloc[0]["meta_binwalk_status"] == "timeout"
+    assert (
+        pd.read_parquet(output).iloc[0]["meta_binwalk_status"] == BINWALK_STATUS_TIMEOUT
+    )
 
 
 def test_cli_csv_findings_and_override(
