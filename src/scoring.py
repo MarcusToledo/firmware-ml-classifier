@@ -40,6 +40,7 @@ _LEVEL_NO_KNOWN_RANK = 0
 _LEVEL_KNOWN_RANK = 1
 _LEVEL_CRITICAL_RANK = 2
 _STATS_FEATURES = (_ENTROPY_FEATURE, _COMPRESS_RATIO_FEATURE, _BYTE_MEAN_FEATURE)
+_MAX_EXP_ARGUMENT = 700.0
 
 
 # ---------------------------------------------------------------------------
@@ -157,7 +158,10 @@ class ScoringResult:
 
 def _sigmoid(x: float, midpoint: float, steepness: float) -> float:
     """Calcula a sigmoide centrada no ponto médio."""
-    return 1.0 / (1.0 + math.exp(-steepness * (x - midpoint)))
+    exponent = -steepness * (x - midpoint)
+    if exponent > _MAX_EXP_ARGUMENT:
+        return 0.0
+    return 1.0 / (1.0 + math.exp(exponent))
 
 
 def _is_missing(v: Any) -> bool:

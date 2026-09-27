@@ -9,6 +9,8 @@ from src.labeling.cve_labels import (
 )
 from src.scoring import (
     ScoringConfig,
+    StringsSubScoreConfig,
+    SubScoreConfig,
     ThresholdConfig,
     _score_strings,
     load_scoring_config,
@@ -148,6 +150,21 @@ def test_no_signals_ignore_zero_threshold_before_hard_rules() -> None:
     with_telnet = score_firmware({"has_telnetd": True}, config)
     assert with_telnet.level == LABEL_KNOWN_CVE
     assert with_telnet.hard_rule_applied == "has_telnetd"
+
+
+def test_sigmoid_with_high_steepness_avoids_overflow() -> None:
+    """Classifica senha mesmo quando a sigmoide tende a zero."""
+    config = ScoringConfig(
+        sub_scores=SubScoreConfig(
+            strings=StringsSubScoreConfig(
+                hardcoded_passwords_midpoint=10.0,
+                hardcoded_passwords_steepness=100.0,
+            )
+        )
+    )
+    result = score_firmware({"count_hardcoded_passwords": 1}, config)
+    assert result.level == LABEL_KNOWN_CVE
+    assert result.hard_rule_applied == "hardcoded_passwords"
 
 
 def test_high_score_maps_to_critical_cve() -> None:
