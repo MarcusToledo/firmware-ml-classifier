@@ -1,5 +1,9 @@
+import pytest
+
 from src.features.strings import (
+    DocumentBuilder,
     extract_ascii_strings,
+    iter_ascii_strings,
     limit_strings,
     strings_to_document,
     tokenize_document,
@@ -58,3 +62,22 @@ def test_tokenize_document_basic() -> None:
     doc = "hello  world\nfirmware"
 
     assert tokenize_document(doc) == ["hello", "world", "firmware"]
+
+
+@pytest.mark.parametrize("width", [1, 3, 7, 64])
+def test_ascii_stream_matches_whole_payload(width: int) -> None:
+    """Mantém cortes e fronteiras idênticos à extração sobre bytes contíguos."""
+    payload = b"foo\x00ABCDEF" * 9 + b"\xff" + b"z" * 200 + b"\x00END"
+    chunks = [payload[index : index + width] for index in range(0, len(payload), width)]
+    assert list(iter_ascii_strings(chunks, 4, 17)) == extract_ascii_strings(
+        payload, 4, 17
+    )
+
+
+def test_document_deduplicates_then_truncates() -> None:
+    """Mantém a primeira ocorrência e corta apenas documento, nunca detectores."""
+    builder = DocumentBuilder(max_strings=2, max_doc_chars=8)
+    for value in ["admin", "admin", "guest", "password"]:
+        builder.add(value)
+    assert builder.document() == "admin\ngu"
+    assert builder.truncated is True

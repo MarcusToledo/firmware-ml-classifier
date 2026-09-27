@@ -17,6 +17,9 @@ dependencies = [
     "matplotlib>=3.6",
     "pyyaml>=6.0",
     "pyarrow>=8.0",
+    "binwalk",
+    "jefferson>=0.4.1",
+    "ubi-reader>=0.8.5",
 ]
 
 [project.optional-dependencies]
@@ -55,3 +58,6 @@ python_version = "3.9"
 warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = true
+
+[tool.uv.sources]
+binwalk = { git = "https://github.com/ReFirmLabs/binwalk", rev = "v2.3.4" }

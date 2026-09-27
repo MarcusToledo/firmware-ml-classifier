@@ -1,9 +1,27 @@
 from __future__ import annotations
 
 import logging
+import os
+from collections.abc import Iterator
 from pathlib import Path
 
 LOGGER = logging.getLogger(__name__)
+
+
+def iter_file_chunks(
+    path: Path, max_bytes: int, chunk_size: int = 1 << 20, nofollow: bool = False
+) -> Iterator[bytes]:
+    """Lê blocos limitados e impede symlinks quando solicitado."""
+    flags = os.O_RDONLY | (os.O_NOFOLLOW if nofollow else 0)
+    fd = os.open(path, flags)
+    with os.fdopen(fd, "rb") as handle:
+        remaining = max_bytes
+        while remaining > 0:
+            chunk = handle.read(min(remaining, chunk_size))
+            if not chunk:
+                break
+            remaining -= len(chunk)
+            yield chunk
 
 
 def read_binary(path: Path, max_bytes: int | None = None) -> bytes:
