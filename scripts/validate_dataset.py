@@ -18,12 +18,16 @@ from __future__ import annotations
 
 import argparse
 import csv
-import hashlib
 import sys
 from collections import defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.append(str(ROOT))
+
+from src.run_metadata import file_sha256  # noqa: E402
+
 RAW = ROOT / "dataset" / "raw"
 LABELS_CSV = ROOT / "dataset" / "labels.csv"
 
@@ -56,14 +60,6 @@ def is_asus_router_file(fname: str) -> bool:
     if upper.startswith("ASUS-RT"):
         return True
     return False
-
-
-def sha256(path: Path) -> str:
-    h = hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
-            h.update(chunk)
-    return h.hexdigest()
 
 
 def check_structure() -> list[str]:
@@ -192,7 +188,7 @@ def check_duplicates() -> list[str]:
     print(f"  Computing SHA256 for {len(all_files)} files ...", flush=True)
     for fpath in all_files:
         try:
-            h = sha256(fpath)
+            h = file_sha256(fpath)
             hash_to_paths[h].append(fpath)
         except OSError:
             pass
