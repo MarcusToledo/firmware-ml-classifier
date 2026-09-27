@@ -486,6 +486,46 @@ def test_old_schema_rejected_without_force(
         )
 
 
+@pytest.mark.parametrize("fetched_at", [None, ""])
+def test_missing_fetched_at_rejected_without_force(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fetched_at: str | None
+) -> None:
+    """Recusa reutilizar cache sem data de consulta válida."""
+    output = tmp_path / "cache.json"
+    entry: dict[str, object] = {"schema_version": 3, "cves": []}
+    if fetched_at is not None:
+        entry["fetched_at"] = fetched_at
+    output.write_text(json.dumps({"dlink/dir300": entry}))
+    with pytest.raises(ValueError, match="fetched_at ausente; rode com --force"):
+        _invoke(
+            tmp_path, monkeypatch, [{"meta_brand": "dlink", "meta_model": "dir300"}]
+        )
+
+
+def test_missing_fetched_at_force_refetches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Consulta novamente a entrada incompleta sob --force."""
+    output = tmp_path / "cache.json"
+    output.write_text(json.dumps({"dlink/dir300": {"schema_version": 3, "cves": []}}))
+    fresh_entry = {
+        "schema_version": 3,
+        "cves": [],
+        "fetched_at": "2026-09-27T00:00:00+00:00",
+    }
+    with patch(
+        "scripts.fetch_cves.fetch_cves_for_pair", return_value=fresh_entry
+    ) as fetch:
+        _invoke(
+            tmp_path,
+            monkeypatch,
+            [{"meta_brand": "dlink", "meta_model": "dir300"}],
+            "--force",
+        )
+    fetch.assert_called_once()
+    assert json.loads(output.read_text())["dlink/dir300"] == fresh_entry
+
+
 @pytest.mark.parametrize("force", [False, True])
 def test_network_failure_persists_without_stale_entry(
     tmp_path: Path,

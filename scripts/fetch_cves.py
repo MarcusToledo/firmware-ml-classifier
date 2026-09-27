@@ -38,6 +38,7 @@ SAVE_INTERVAL = 10
 
 CACHE_SCHEMA_VERSION = 3
 _CACHE_SCHEMA_FIELD = "schema_version"
+_FETCHED_AT_FIELD = "fetched_at"
 _DEFAULT_CACHE_PATH = "dataset/processed/cve_cache_v2.json"
 _EXIT_MISSING_PAIRS = 2
 _EXIT_FETCH_FAILURE = 1
@@ -306,7 +307,7 @@ def fetch_cves_for_pair(
     cves = _fetch_all_pages(query_params, headers, delay)
     return {
         _CACHE_SCHEMA_FIELD: CACHE_SCHEMA_VERSION,
-        "fetched_at": datetime.now(timezone.utc).isoformat(
+        _FETCHED_AT_FIELD: datetime.now(timezone.utc).isoformat(
             timespec=_TIMESTAMP_PRECISION
         ),
         "cpe_candidates": candidates,
@@ -457,6 +458,11 @@ def _fetch_one_pair(
             )
         if not isinstance(entry.get(_CVE_ITEMS_FIELD), list):
             raise ValueError(f"Cache CVE inválido para {key}: cves não é uma lista")
+        fetched_at = entry.get(_FETCHED_AT_FIELD)
+        if not isinstance(fetched_at, str) or not fetched_at.strip():
+            raise ValueError(
+                f"Cache CVE inválido para {key}: fetched_at ausente; rode com --force"
+            )
         LOGGER.info("[SKIP] %d/%d %s (cached)", index, total, key)
         stats[_STATS_CACHED] += 1
         stats[_STATS_TOTAL_CVES] += len(entry[_CVE_ITEMS_FIELD])
