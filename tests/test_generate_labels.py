@@ -24,6 +24,19 @@ def _cve(cve_id: str, score: float = 7.5) -> dict:
     return {"id": cve_id, "cvss_max": score, "severity": "HIGH", "configurations": []}
 
 
+def _applicable_cve(cve_id: str, score: float = 7.5) -> dict:
+    return {
+        **_cve(cve_id, score),
+        "configurations": [
+            {
+                "nodes": [
+                    {"cpeMatch": [{"vulnerable": True, "versionStartIncluding": "1.0"}]}
+                ]
+            }
+        ],
+    }
+
+
 def _cache_entry(cves: list[dict]) -> dict:
     return {
         "source": "keyword",
@@ -250,7 +263,7 @@ def test_cli_filters_version_before_aggregating_aliases(
                     }
                 ]
             ),
-            "dlink/dir300b": _cache_entry([_cve("CVE-CURRENT")]),
+            "dlink/dir300b": _cache_entry([_applicable_cve("CVE-CURRENT")]),
         },
     )
     assert labels["security_level"].tolist() == ["cve_conhecida", "cve_conhecida"]
@@ -499,7 +512,7 @@ def _audit_inputs() -> tuple[list[dict], dict]:
     }
     cache = {
         "dlink/dir300": _cache_entry([old]),
-        "dlink/dir300b": _cache_entry([_cve("CVE-CURRENT")]),
+        "dlink/dir300b": _cache_entry([_applicable_cve("CVE-CURRENT")]),
         "dlink/dir600": _cache_entry([_cve("CVE-B"), _cve("CVE-A")]),
     }
     return rows, cache

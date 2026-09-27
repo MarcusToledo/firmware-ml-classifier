@@ -102,7 +102,7 @@ def test_missing_version_with_empty_cache_has_negative_evidence() -> None:
 def test_applicable_and_indeterminate_cves_are_both_returned() -> None:
     indeterminate = _cve([{"versionEndExcluding": "ABTG"}])
     indeterminate["id"] = "CVE-INDETERMINATE"
-    applicable = _cve([])
+    applicable = _cve([{"versionEndExcluding": "2.0"}])
     applicable["id"] = "CVE-APPLICABLE"
     entry = {"cves": [indeterminate, applicable]}
 
@@ -119,9 +119,12 @@ def test_comparable_version_filters_fixed_release() -> None:
     assert applicable_cves_for_version("2.0", entry) == ([], [])
 
 
-def test_cve_without_cpe_information_applies_conservatively() -> None:
+def test_cve_without_configurations_is_indeterminate_with_version() -> None:
     cve = _cve([])
-    assert applicable_cves_for_version("1.0", {"cves": [cve]}) == ([cve], [])
+    assert applicable_cves_for_version("1.0", {"cves": [cve]}) == ([], [cve])
+    assert applicable_cves_for_version(
+        "1.0", {"vendor": "d-link", "model": "DIR-300", "cves": [cve]}
+    ) == ([], [cve])
 
 
 def test_cpe_criteria_prevents_other_product_range_from_matching() -> None:
