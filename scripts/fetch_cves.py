@@ -15,6 +15,7 @@ import re
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote as url_quote
@@ -22,6 +23,7 @@ from urllib.parse import quote as url_quote
 import pandas as pd
 
 from src.labeling.cve_labels import severity_bucket
+from src.run_metadata import code_commit, file_sha256
 
 LOGGER = logging.getLogger(__name__)
 
@@ -89,21 +91,18 @@ def normalize_model(model: str) -> str:
 
 
 def extract_cvss(cve: dict[str, Any]) -> tuple[float, str]:
-    """Return (baseScore, severity) preferring v3.1 > v3.0 > v2."""
+    """Seleciona o maior score da primeira versão CVSS disponível."""
     metrics = cve.get("metrics", {})
-
-    for key in ("cvssMetricV31", "cvssMetricV30"):
+    for key in ("cvssMetricV31", "cvssMetricV30", "cvssMetricV2"):
         entries = metrics.get(key, [])
         if entries:
-            data = entries[0]["cvssData"]
-            return data["baseScore"], data["baseSeverity"]
-
-    v2 = metrics.get("cvssMetricV2", [])
-    if v2:
-        data = v2[0]["cvssData"]
-        severity = v2[0].get("baseSeverity", "MEDIUM")
-        return data["baseScore"], severity
-
+            entry = max(entries, key=lambda item: item["cvssData"]["baseScore"])
+            severity = (
+                entry.get("baseSeverity", "MEDIUM")
+                if key == "cvssMetricV2"
+                else entry["cvssData"]["baseSeverity"]
+            )
+            return entry["cvssData"]["baseScore"], severity
     return 0.0, "NONE"
 
 
@@ -138,9 +137,14 @@ def _fetch_page(
         return result
 
 
-def _fetch_cpe_page(keyword: str, headers: dict[str, str]) -> dict[str, Any]:
-    """Consulta o dicionário oficial de nomes CPE da NVD."""
-    params = f"keywordSearch={url_quote(keyword)}&resultsPerPage={RESULTS_PER_PAGE}"
+def _fetch_cpe_page(
+    keyword: str, start_index: int, headers: dict[str, str]
+) -> dict[str, Any]:
+    """Consulta uma página do dicionário oficial de nomes CPE da NVD."""
+    params = (
+        f"keywordSearch={url_quote(keyword)}&resultsPerPage={RESULTS_PER_PAGE}"
+        f"&startIndex={start_index}"
+    )
     request = urllib.request.Request(f"{NVD_CPE_API_URL}?{params}", headers=headers)
     with urllib.request.urlopen(request, timeout=30) as response:
         result: dict[str, Any] = json.loads(response.read().decode())
@@ -148,29 +152,48 @@ def _fetch_cpe_page(keyword: str, headers: dict[str, str]) -> dict[str, Any]:
 
 
 def _canonical_cpe_token(value: str) -> str:
+    """Normaliza um campo CPE para comparação sem caixa nem pontuação."""
     return re.sub(r"[^a-z0-9]", "", value.lower())
 
 
-def resolve_cpe_name(vendor: str, model: str, headers: dict[str, str]) -> str | None:
-    """Seleciona CPE de firmware do par exato e generaliza sua versão."""
+def resolve_cpe_name(
+    vendor: str, model: str, headers: dict[str, str], delay: float
+) -> tuple[str | None, list[str]]:
+    """Percorre o dicionário, prioriza software e expõe ambiguidades."""
     nvd_vendor = normalize_vendor(vendor)
     nvd_model = normalize_model(model)
-    data = _fetch_cpe_page(f"{nvd_vendor} {nvd_model}", headers)
+    keyword = f"{nvd_vendor} {nvd_model}"
     expected_vendor = _canonical_cpe_token(nvd_vendor)
     expected_model = _canonical_cpe_token(nvd_model)
-    for product in data.get("products", []):
-        name = product.get("cpe", {}).get("cpeName")
-        if not isinstance(name, str):
-            continue
-        parts = name.split(":")
-        if len(parts) != 13 or parts[:3] != ["cpe", "2.3", "o"]:
-            continue
-        cpe_vendor = _canonical_cpe_token(parts[3])
-        cpe_model = _canonical_cpe_token(parts[4]).removesuffix("firmware")
-        if cpe_vendor == expected_vendor and cpe_model == expected_model:
-            parts[5:] = ["*"] * 8
-            return ":".join(parts)
-    return None
+    accepted: dict[tuple[str, str, str], str] = {}
+    start_index = 0
+    while True:
+        data = _fetch_cpe_page(keyword, start_index, headers)
+        products = data.get("products", [])
+        for product in products:
+            name = product.get("cpe", {}).get("cpeName")
+            if not isinstance(name, str):
+                continue
+            parts = name.split(":")
+            if len(parts) != 13 or parts[:2] != ["cpe", "2.3"]:
+                continue
+            if parts[2] not in ("o", "h"):
+                continue
+            cpe_vendor = _canonical_cpe_token(parts[3])
+            cpe_model = _canonical_cpe_token(parts[4]).removesuffix("firmware")
+            if cpe_vendor == expected_vendor and cpe_model == expected_model:
+                accepted[(parts[2], parts[3], parts[4])] = ":".join(
+                    parts[:5] + ["*"] * 8
+                )
+        start_index += len(products)
+        if not products or start_index >= data.get("totalResults", 0):
+            break
+        time.sleep(delay)
+    part = "o" if any(key[0] == "o" for key in accepted) else "h"
+    names = sorted(name for key, name in accepted.items() if key[0] == part)
+    if len(names) == 1:
+        return names[0], []
+    return None, names
 
 
 def _fetch_all_pages(
@@ -208,7 +231,7 @@ def fetch_cves_for_pair(
     delay: float,
 ) -> dict[str, Any]:
     """Busca CVEs por CPE oficial ou por texto e mantém evidência por CVE."""
-    cpe_name = resolve_cpe_name(vendor, model, headers)
+    cpe_name, candidates = resolve_cpe_name(vendor, model, headers, delay)
     if cpe_name is not None:
         query_params = f"virtualMatchString={url_quote(cpe_name)}"
         source = "cpe"
@@ -220,7 +243,9 @@ def fetch_cves_for_pair(
         time.sleep(delay)
     cves = _fetch_all_pages(query_params, headers, delay)
     return {
-        "schema_version": 2,
+        "schema_version": 3,
+        "fetched_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "cpe_candidates": candidates,
         "source": source,
         "vendor": normalize_vendor(vendor),
         "model": normalize_model(model),
@@ -254,12 +279,16 @@ def save_cache(cache: dict[str, Any], path: Path) -> None:
 
 
 def extract_pairs(df: pd.DataFrame) -> list[tuple[str, str]]:
-    """Extract unique (brand, model) pairs from features dataframe."""
+    """Extrai pares únicos de fabricante/modelo ordenados das features."""
     # fillna before stringifying so missing values (None/NaN, regardless of
     # column dtype) normalize to "" instead of the literal string "nan".
     brand = df["meta_brand"].fillna("").astype(str).str.strip().str.lower()
     model = df["meta_model"].fillna("").astype(str).str.strip().str.lower()
     valid = (brand != "") & (model != "")
+    LOGGER.info(
+        "Linhas descartadas por fabricante ou modelo nulo ou vazio: %d",
+        int((~valid).sum()),
+    )
     pairs = set(zip(brand[valid], model[valid]))
     return sorted(pairs)
 
@@ -274,8 +303,8 @@ def _should_save(fetched_count: int, interval: int = SAVE_INTERVAL) -> bool:
     return fetched_count % interval == 0
 
 
-def main() -> None:
-    """CLI para buscar dados de CVE da NVD API v2.0."""
+def _parse_args() -> argparse.Namespace:
+    """Obtém os argumentos da busca de CVEs."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--features",
@@ -284,8 +313,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--output",
-        default="dataset/cve_cache.json",
-        help="Path to CVE cache JSON (default: dataset/cve_cache.json)",
+        default="dataset/processed/cve_cache_v2.json",
+        help="Path to CVE cache JSON (default: dataset/processed/cve_cache_v2.json)",
     )
     parser.add_argument(
         "--delay",
@@ -299,93 +328,185 @@ def main() -> None:
         help="List vendor/model pairs without making requests",
     )
     parser.add_argument(
-        "--force",
-        action="store_true",
-        help="Re-fetch even if pair is already cached",
+        "--force", action="store_true", help="Re-fetch even if pair is already cached"
     )
-    args = parser.parse_args()
+    return parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
-    # Determine delay
-    has_key = bool(os.environ.get("NVD_API_KEY", ""))
-    delay = (
-        args.delay
-        if args.delay is not None
-        else (DEFAULT_DELAY_WITH_KEY if has_key else DEFAULT_DELAY_NO_KEY)
+def _resolve_delay(args: argparse.Namespace) -> float:
+    """Escolhe o intervalo segundo a chave NVD e o argumento explícito."""
+    if args.delay is not None:
+        return float(args.delay)
+    return (
+        DEFAULT_DELAY_WITH_KEY
+        if os.environ.get("NVD_API_KEY")
+        else DEFAULT_DELAY_NO_KEY
     )
 
-    # Read features (only the two columns actually needed — the parquet may
-    # also carry heavy feature/embedding columns we don't want to load).
-    features_path = Path(args.features)
-    df = pd.read_parquet(features_path, columns=["meta_brand", "meta_model"])
-    LOGGER.info("Loaded %d records from %s", len(df), features_path)
 
+def _load_pairs(path: Path) -> list[tuple[str, str]]:
+    """Lê apenas as colunas de identidade e exige pares válidos."""
+    df = pd.read_parquet(path, columns=["meta_brand", "meta_model"])
+    LOGGER.info("Loaded %d records from %s", len(df), path)
     pairs = extract_pairs(df)
     LOGGER.info("Found %d unique vendor/model pairs", len(pairs))
+    if not pairs:
+        LOGGER.error(
+            "Nenhum par fabricante/modelo em %s; extraia as features com "
+            "--label-from-path",
+            path,
+        )
+        raise SystemExit(2)
+    return pairs
 
-    if args.dry_run:
-        for vendor, model in pairs:
-            nv = normalize_vendor(vendor)
-            nm = normalize_model(model)
-            suffix = f" -> {nv} {nm}" if (nv != vendor or nm != model) else ""
-            print(f"  {vendor}/{model}{suffix}")
-        LOGGER.info("Dry run — no requests made")
+
+def _show_dry_run(pairs: list[tuple[str, str]]) -> None:
+    """Lista os pares e suas formas NVD sem acessar rede nem cache."""
+    for vendor, model in pairs:
+        nv = normalize_vendor(vendor)
+        nm = normalize_model(model)
+        suffix = f" -> {nv} {nm}" if (nv != vendor or nm != model) else ""
+        print(f"  {vendor}/{model}{suffix}")
+    LOGGER.info("Dry run — no requests made")
+
+
+def _fetch_one_pair(
+    vendor: str,
+    model: str,
+    index: int,
+    total: int,
+    cache: dict[str, Any],
+    headers: dict[str, str],
+    delay: float,
+    force: bool,
+    stats: dict[str, int],
+) -> None:
+    """Reaproveita entrada válida ou consulta a NVD e registra a falha."""
+    key = f"{vendor}/{model}"
+    if key in cache and not force:
+        entry = cache[key]
+        version = entry.get("schema_version") if isinstance(entry, dict) else None
+        if version != 3:
+            raise ValueError(
+                f"Cache CVE em schema antigo para {key}: "
+                f"schema_version={version}; rode com --force"
+            )
+        if not isinstance(entry.get("cves"), list):
+            raise ValueError(f"Cache CVE inválido para {key}: cves não é uma lista")
+        LOGGER.info("[SKIP] %d/%d %s (cached)", index, total, key)
+        stats["cached"] += 1
+        stats["total_cves"] += len(entry["cves"])
         return
-
-    # Load existing cache
-    output_path = Path(args.output)
-    cache = load_cache(output_path)
-    LOGGER.info("[CACHE] Loaded %d existing entries", len(cache))
-
-    headers = _build_headers()
-    stats = {"fetched": 0, "cached": 0, "failed": 0, "total_cves": 0}
-
     try:
-        for i, (vendor, model) in enumerate(pairs, 1):
-            key = f"{vendor}/{model}"
+        LOGGER.info("[FETCH] %d/%d %s", index, total, key)
+        result = fetch_cves_for_pair(vendor, model, headers, delay)
+        cache[key] = result
+        stats["fetched"] += 1
+        stats["total_cves"] += len(result["cves"])
+        LOGGER.info(
+            "  -> %d CVEs (max CVSS: %.1f)",
+            len(result["cves"]),
+            max((cve["cvss_max"] for cve in result["cves"]), default=0.0),
+        )
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as exc:
+        LOGGER.error("[FAIL] %s: %s", key, exc)
+        stats["failed"] += 1
+        if force:
+            cache.pop(key, None)
 
-            if key in cache and not args.force:
-                if not isinstance(cache[key], dict) or not isinstance(
-                    cache[key].get("cves"), list
-                ):
-                    raise ValueError(f"Cache CVE em schema antigo para {key}")
-                if cache[key].get("schema_version") != 2:
-                    raise ValueError(f"Versão de schema inválida no cache para {key}")
-                LOGGER.info("[SKIP] %d/%d %s (cached)", i, len(pairs), key)
-                stats["cached"] += 1
-                stats["total_cves"] += len(cache[key]["cves"])
-                continue
 
-            try:
-                LOGGER.info("[FETCH] %d/%d %s", i, len(pairs), key)
-                result = fetch_cves_for_pair(vendor, model, headers, delay)
-                cache[key] = result
-                stats["fetched"] += 1
-                stats["total_cves"] += len(result["cves"])
-                if _should_save(stats["fetched"]):
-                    save_cache(cache, output_path)
-                LOGGER.info(
-                    "  -> %d CVEs (max CVSS: %.1f)",
-                    len(result["cves"]),
-                    max((cve["cvss_max"] for cve in result["cves"]), default=0.0),
-                )
-            except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as exc:
-                LOGGER.error("[FAIL] %s: %s", key, exc)
-                stats["failed"] += 1
-
-            if i < len(pairs):
+def _fetch_all_pairs(
+    pairs: list[tuple[str, str]],
+    output: Path,
+    delay: float,
+    force: bool,
+    stats: dict[str, int],
+    args: argparse.Namespace,
+    started_at: str,
+) -> dict[str, int]:
+    """Percorre pares e preserva o cache mesmo com exceção inesperada."""
+    cache = load_cache(output)
+    LOGGER.info("[CACHE] Loaded %d existing entries", len(cache))
+    headers = _build_headers()
+    try:
+        for index, (vendor, model) in enumerate(pairs, 1):
+            fetched_before = stats["fetched"]
+            _fetch_one_pair(
+                vendor,
+                model,
+                index,
+                len(pairs),
+                cache,
+                headers,
+                delay,
+                force,
+                stats,
+            )
+            if stats["fetched"] > fetched_before and _should_save(stats["fetched"]):
+                save_cache(cache, output)
+                _write_run_metadata(args, output, started_at, stats)
+            if index < len(pairs):
                 time.sleep(delay)
     finally:
-        # Always persist whatever was fetched, even on an unfinished/interrupted
-        # run, so progress since the last periodic save isn't lost.
-        save_cache(cache, output_path)
+        save_cache(cache, output)
+    return stats
 
+
+def _log_summary(stats: dict[str, int]) -> None:
+    """Registra a quantidade consultada, reaproveitada e falha."""
     LOGGER.info("--- Summary ---")
     LOGGER.info("  Fetched: %d", stats["fetched"])
     LOGGER.info("  Cached:  %d", stats["cached"])
     LOGGER.info("  Failed:  %d", stats["failed"])
     LOGGER.info("  Total CVEs: %d", stats["total_cves"])
+
+
+def _write_run_metadata(
+    args: argparse.Namespace, output: Path, started_at: str, stats: dict[str, int]
+) -> None:
+    """Grava a proveniência de uma execução que escreveu o cache."""
+    features = Path(args.features)
+    metadata = {
+        "cli_args": {
+            key: str(value) if isinstance(value, Path) else value
+            for key, value in vars(args).items()
+        },
+        "features_path": str(features),
+        "features_sha256": file_sha256(features),
+        "output_path": str(output),
+        "code_commit": code_commit(),
+        "started_at": started_at,
+        "finished_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "pairs_fetched": stats["fetched"],
+        "pairs_skipped": stats["cached"],
+        "pairs_failed": stats["failed"],
+    }
+    path = output.with_name(f"{output.stem}.meta.json")
+    path.write_text(json.dumps(metadata, indent=2, ensure_ascii=False) + "\n")
+
+
+def main() -> None:
+    """Orquestra a busca e sinaliza falhas depois de salvar os artefatos."""
+    args = _parse_args()
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    started_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    delay = _resolve_delay(args)
+    pairs = _load_pairs(Path(args.features))
+    if args.dry_run:
+        _show_dry_run(pairs)
+        return
+    output = Path(args.output)
+    stats = {"fetched": 0, "cached": 0, "failed": 0, "total_cves": 0}
+    try:
+        _fetch_all_pairs(pairs, output, delay, args.force, stats, args, started_at)
+    except BaseException:
+        if output.exists():
+            _write_run_metadata(args, output, started_at, stats)
+        raise
+    _log_summary(stats)
+    _write_run_metadata(args, output, started_at, stats)
+    if stats["failed"]:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
