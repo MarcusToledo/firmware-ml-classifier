@@ -8,9 +8,9 @@ por meio de `src/labeling/cve_labels.py` e `scripts/generate_labels.py`.
 ## Cálculo
 
 Cada grupo presente produz um sub-score de 0 a 1. O score final é a média
-ponderada dos grupos presentes; grupos ausentes têm peso zero. Com nenhum
-grupo presente, o score é zero. Os parâmetros estão em
-`configs/scoring.yaml`.
+ponderada dos grupos presentes; grupos ausentes têm peso zero. Sem grupos
+presentes, o score é zero e a classe inicial é `sem_cve_conhecida`,
+independentemente dos limiares. Os parâmetros estão em `configs/scoring.yaml`.
 
 | Grupo | Peso configurado | Sinais |
 |---|---:|---|

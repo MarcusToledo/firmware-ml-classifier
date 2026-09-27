@@ -141,6 +141,15 @@ def test_empty_features_returns_no_known_cve() -> None:
     assert result.numeric_score == 0.0
 
 
+def test_no_signals_ignore_zero_threshold_before_hard_rules() -> None:
+    """Mantém a classe sem CVE sem sinais e aplica a regra de telnet."""
+    config = ScoringConfig(thresholds=ThresholdConfig(0.0, 0.5))
+    assert score_firmware({}, config).level == LABEL_NO_KNOWN_CVE
+    with_telnet = score_firmware({"has_telnetd": True}, config)
+    assert with_telnet.level == LABEL_KNOWN_CVE
+    assert with_telnet.hard_rule_applied == "has_telnetd"
+
+
 def test_high_score_maps_to_critical_cve() -> None:
     """Features that produce a high score should map to LABEL_CRITICAL_CVE."""
     features = {

@@ -417,6 +417,15 @@ def _apply_hard_rules(
     return level, applied, triggered
 
 
+def _level_from_score(score: float, thresholds: ThresholdConfig) -> str:
+    """Classifica o score pelos limiares configurados."""
+    if score < thresholds.low:
+        return LABEL_NO_KNOWN_CVE
+    if score < thresholds.high:
+        return LABEL_KNOWN_CVE
+    return LABEL_CRITICAL_CVE
+
+
 def score_firmware(
     features: dict[str, Any],
     config: ScoringConfig,
@@ -443,12 +452,11 @@ def score_firmware(
     numeric_score = (
         sum(s.score * s.weight for s in signals) / total_weight if total_weight else 0.0
     )
-    if numeric_score < config.thresholds.low:
-        level = LABEL_NO_KNOWN_CVE
-    elif numeric_score < config.thresholds.high:
-        level = LABEL_KNOWN_CVE
-    else:
-        level = LABEL_CRITICAL_CVE
+    level = (
+        _level_from_score(numeric_score, config.thresholds)
+        if total_weight
+        else LABEL_NO_KNOWN_CVE
+    )
     level, applied, triggered = _apply_hard_rules(features, config, level)
     return ScoringResult(level, numeric_score, signals, applied, triggered)
 
