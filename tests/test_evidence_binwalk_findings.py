@@ -57,3 +57,10 @@ def test_encrypted_section_finding_has_medium_confidence() -> None:
     assert len(findings) == 1
     assert findings[0].confidence == "medium"
     assert findings[0].detector == "encrypted_sections"
+
+
+def test_s_box_only_counts_as_crypto_signature() -> None:
+    descriptions = ["AES S-Box", "AES Inverse S-Box"]
+    assert len(find_crypto_signatures(descriptions)) == 2
+    assert find_encrypted_sections(descriptions) == []
+    assert len(find_encrypted_sections(["AES encrypted block"])) == 1

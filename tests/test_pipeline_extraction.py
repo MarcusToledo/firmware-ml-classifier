@@ -208,7 +208,7 @@ def test_extract_features_includes_string_pattern_keys(tmp_path: Path) -> None:
 
     expected_keys = {
         "count_hardcoded_passwords",
-        "count_hardcoded_ips",
+        "count_non_public_ips",
         "has_telnetd",
         "has_debug_account",
         "has_outdated_libssl",
