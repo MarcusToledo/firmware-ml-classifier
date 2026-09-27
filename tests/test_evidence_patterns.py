@@ -214,6 +214,11 @@ def test_public_ips_ignores_multicast() -> None:
     assert count_public_ips(["224.0.0.1"]) == 0
 
 
+def test_public_ips_ignores_cgnat_and_documentation() -> None:
+    assert count_public_ips(["gateway 100.64.0.1"]) == 0
+    assert count_public_ips(["server 203.0.113.5"]) == 0
+
+
 def test_public_ips_multiple_in_one_string() -> None:
     assert count_public_ips(["dns server 8.8.8.8 and 1.1.1.1"]) == 2
 

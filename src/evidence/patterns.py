@@ -11,6 +11,7 @@ retornando a contagem/flag achatada usada como feature do classificador.
 
 from __future__ import annotations
 
+import ipaddress
 import math
 import re
 from collections import Counter
@@ -272,17 +273,6 @@ def count_credential_pairs(strings: list[str]) -> int:
 _MAX_IPV4_OCTET = 255
 _UNSPECIFIED_FIRST_OCTET = 0
 _LOOPBACK_FIRST_OCTET = 127
-_PRIVATE_CLASS_A_FIRST_OCTET = 10
-_PRIVATE_CLASS_B_FIRST_OCTET = 172
-_PRIVATE_CLASS_B_SECOND_MIN = 16
-_PRIVATE_CLASS_B_SECOND_MAX = 31
-_PRIVATE_CLASS_C_FIRST_OCTET = 192
-_PRIVATE_CLASS_C_SECOND_OCTET = 168
-_LINK_LOCAL_FIRST_OCTET = 169
-_LINK_LOCAL_SECOND_OCTET = 254
-_MULTICAST_FIRST_MIN = 224
-_MULTICAST_FIRST_MAX = 239
-_RESERVED_FIRST_MIN = 240
 
 _IPV4_RE = re.compile(
     r"(?<![-_A-Za-z0-9.])(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?![-_A-Za-z0-9]|\.[-_A-Za-z0-9])"
@@ -312,7 +302,7 @@ _NETWORK_CONTEXT_WORDS: frozenset[str] = frozenset(
 )
 
 
-def _iter_contextual_ipv4(s: str) -> Iterator[tuple[int, int, int, int]]:
+def _iter_contextual_ipv4(s: str) -> Iterator[ipaddress.IPv4Address]:
     """Produz IPv4 válidos quando a string oferece contexto de rede."""
     words = {word.lower() for word in _WORD_RE.findall(s)}
     for match in _IPV4_RE.finditer(s):
@@ -337,20 +327,19 @@ def _iter_contextual_ipv4(s: str) -> Iterator[tuple[int, int, int, int]]:
             or re.match(r":\d+", s[match.end() :])
         ):
             continue
-        yield octets
+        yield ipaddress.IPv4Address(bytes(octets))
 
 
 def find_hardcoded_ips(strings: list[str]) -> list[SecurityFinding]:
     """Encontra strings que contêm endereços IPv4 válidos e não excluídos."""
     findings: list[SecurityFinding] = []
     for s in strings:
-        for octets in _iter_contextual_ipv4(s):
-            ip = ".".join(str(octet) for octet in octets)
+        for address in _iter_contextual_ipv4(s):
             findings.append(
                 SecurityFinding(
                     type="hardcoded_ip",
                     source=s,
-                    context=f"IPv4 address: {ip}",
+                    context=f"IPv4 address: {address}",
                     confidence=CONFIDENCE_LOW,
                     detector=DETECTOR_HARDCODED_IPS,
                     detector_version=DETECTOR_VERSIONS[DETECTOR_HARDCODED_IPS],
@@ -365,35 +354,22 @@ def count_hardcoded_ips(strings: list[str]) -> int:
 
 
 def find_public_ips(strings: list[str]) -> list[SecurityFinding]:
-    """Encontra strings com IPv4 público hardcoded (fora do RFC-1918).
+    """Encontra strings com IPv4 global hardcoded.
 
-    Exclui loopback, link-local, ranges privados do RFC-1918, multicast e
-    reservado/broadcast. IPs públicos hardcoded em firmware são indicadores
-    de alta confiança de endpoints de C2 ou telemetria.
+    Exclui endereços não globais pela IANA (RFC 1918, loopback, link-local,
+    CGNAT 100.64/10, documentação, benchmark e reservado/broadcast), além de
+    multicast. IPs globais em firmware indicam endpoints de C2 ou telemetria.
     """
     findings: list[SecurityFinding] = []
     for s in strings:
-        for a, b, c, d in _iter_contextual_ipv4(s):
-            ip = f"{a}.{b}.{c}.{d}"
-            if a == _PRIVATE_CLASS_A_FIRST_OCTET:
-                continue
-            if a == _PRIVATE_CLASS_B_FIRST_OCTET and (
-                _PRIVATE_CLASS_B_SECOND_MIN <= b <= _PRIVATE_CLASS_B_SECOND_MAX
-            ):
-                continue
-            if a == _PRIVATE_CLASS_C_FIRST_OCTET and b == _PRIVATE_CLASS_C_SECOND_OCTET:
-                continue
-            if a == _LINK_LOCAL_FIRST_OCTET and b == _LINK_LOCAL_SECOND_OCTET:
-                continue
-            if _MULTICAST_FIRST_MIN <= a <= _MULTICAST_FIRST_MAX:
-                continue
-            if a >= _RESERVED_FIRST_MIN:
+        for address in _iter_contextual_ipv4(s):
+            if not address.is_global or address.is_multicast:
                 continue
             findings.append(
                 SecurityFinding(
                     type="public_ip",
                     source=s,
-                    context=f"public (non-RFC-1918) IPv4 address: {ip}",
+                    context=f"public (non-RFC-1918) IPv4 address: {address}",
                     confidence=CONFIDENCE_HIGH,
                     detector=DETECTOR_PUBLIC_IPS,
                     detector_version=DETECTOR_VERSIONS[DETECTOR_PUBLIC_IPS],
