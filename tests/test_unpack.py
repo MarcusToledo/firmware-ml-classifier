@@ -130,6 +130,28 @@ def test_restricted_dirs_are_read_and_removed_without_touching_link_targets(
     assert not sandboxes[0].exists()
 
 
+def test_replaced_output_symlink_does_not_change_victim(
+    tmp_path: Path, sandboxes: list[Path]
+) -> None:
+    """Rejeita raiz substituída sem modificar diretório externo."""
+    victim = tmp_path / "victim"
+    victim.mkdir()
+    file = victim / "keep"
+    file.write_text("outside")
+    victim.chmod(0o555)
+    body = _EXTRACT_DIR + f'rmdir "$1"; ln -s "{victim}" "$1"\n'
+    with unpack_firmware(
+        tmp_path / "firmware.bin",
+        UnpackLimits(1000, 10, 5),
+        _script_toolchain(tmp_path, body),
+    ) as result:
+        assert result.status == STATUS_FAILURE
+        assert result.root is None
+    assert stat.S_IMODE(victim.stat().st_mode) == 0o555
+    assert file.exists()
+    assert not sandboxes[0].exists()
+
+
 def test_files_vanishing_during_extraction_do_not_fail(tmp_path: Path) -> None:
     """Tolera entradas apagadas pelo extrator enquanto o monitor varre."""
     body = (

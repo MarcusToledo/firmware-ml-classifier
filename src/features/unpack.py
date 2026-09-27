@@ -182,8 +182,20 @@ def _scan_entries(directory: Path, strict: bool) -> list[os.DirEntry[str]]:
         return []
 
 
+def _is_real_dir(path: Path) -> bool:
+    """Confere por lstat que o caminho é diretório sem seguir symlink."""
+    try:
+        return stat.S_ISDIR(os.lstat(path).st_mode)
+    except FileNotFoundError:
+        return False
+
+
 def _inventory(root: Path, strict: bool) -> tuple[int, int, bool, bool]:
     """Conta entradas sem seguir links e identifica raízes extraídas válidas."""
+    if not _is_real_dir(root):
+        if strict:
+            raise OSError(f"saída do extrator não é diretório real: {root}")
+        return 0, 0, False, False
     total = count = 0
     regular = filesystem = False
     stack = [(root, False)]
@@ -218,6 +230,8 @@ def _grant_owner_access(root: Path) -> None:
     stack = [root]
     while stack:
         directory = stack.pop()
+        if not _is_real_dir(directory):
+            continue
         os.chmod(directory, stat.S_IRWXU)
         with os.scandir(directory) as entries:
             stack.extend(
@@ -264,6 +278,9 @@ def _final_status(
     process: subprocess.Popen[bytes], out: Path, limits: UnpackLimits
 ) -> str:
     """Classifica a saída completa depois de normalizar as permissões."""
+    if not _is_real_dir(out):
+        LOGGER.warning("Saída do extrator substituída por link: %s", out)
+        return STATUS_FAILURE
     _grant_owner_access(out)
     total, count, regular, filesystem = _inventory(out, strict=True)
     limit = _limit_status(total, count, 0.0, limits)
