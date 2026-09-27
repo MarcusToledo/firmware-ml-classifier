@@ -9,9 +9,9 @@ scoring:
     binwalk: 0.15
 
   hard_rules:
-    has_telnetd_min_level: &known_cve "cve_conhecida"
-    has_debug_account_min_level: *known_cve
-    hardcoded_passwords_min_level: *known_cve
+    has_telnetd_min_level: "cve_conhecida"
+    has_debug_account_min_level: "cve_conhecida"
+    hardcoded_passwords_min_level: "cve_conhecida"
 
   sub_scores:
     stats:
