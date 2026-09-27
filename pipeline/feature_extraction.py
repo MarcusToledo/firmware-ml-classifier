@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import math
 import os
 import re
 import subprocess
+import tempfile
 from collections.abc import Iterable
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, NamedTuple, cast
+from typing import Any, NamedTuple, Union, cast
 
 import yaml
 from gensim.models import Doc2Vec
@@ -32,20 +34,23 @@ from src.features.binwalk import (
     detect_fs_type,
 )
 from src.features.doc2vec import Doc2VecConfig, load_doc2vec
-from src.features.statistics import StreamingStats
+from src.features.statistics import ByteStats, StreamingStats
 from src.features.strings import DocumentBuilder, iter_ascii_strings
 from src.features.unpack import (
+    STATUS_FAILURE,
+    STATUS_NO_FILESYSTEM,
     STATUS_NOT_RUN,
     STATUS_OK,
     STATUS_TIME,
     Toolchain,
     UnpackLimits,
+    isolated_env,
     iter_extracted_files,
     unpack_firmware,
 )
 from src.io_utils import iter_file_chunks
 
-FeatureValue = float | int | bool | str | None
+FeatureValue = Union[float, int, bool, str, None]
 DEFAULT_MAX_BYTES = 268_435_456
 VERSION_SOURCE_DIRECTORY = "directory"
 VERSION_SOURCE_FILENAME = "filename"
@@ -160,7 +165,11 @@ def _positive(
         if isinstance(value, bool) or value in (None, "null"):
             raise ValueError
         parsed = int(value) if integer else float(value)
-        if parsed <= 0 or (integer and str(value) != str(parsed)):
+        if (
+            not math.isfinite(parsed)
+            or parsed <= 0
+            or (integer and str(value) != str(parsed))
+        ):
             raise ValueError
         return parsed
     except (ValueError, TypeError) as exc:
@@ -173,8 +182,10 @@ def _positive(
         ) from exc
 
 
-def _load_unpack(raw: dict[str, Any], path: Path | None) -> UnpackLimits:
+def _load_unpack(raw: Any, path: Path | None) -> UnpackLimits:
     """Carrega limites de desempacotamento com padrões explícitos."""
+    if not isinstance(raw, dict):
+        raise ValueError(f"unpack inválido ({raw!r}) em {path}: DEVE ser mapeamento")
     defaults = UnpackLimits()
     return UnpackLimits(
         max_total_bytes=cast(
@@ -257,17 +268,27 @@ def load_doc2vec_model(path: Path | None) -> Doc2Vec | None:
     return load_doc2vec(str(path))
 
 
+def _run_binwalk_scan(
+    path: Path, toolchain: Toolchain
+) -> subprocess.CompletedProcess[str]:
+    """Roda a varredura de assinaturas com HOME e XDG temporários."""
+    with tempfile.TemporaryDirectory(prefix="fmc-scan-") as scratch:
+        home = Path(scratch)
+        return subprocess.run(
+            [toolchain.binwalk, str(path.absolute())],
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=60,
+            env=isolated_env(toolchain, home, home),
+            check=False,
+        )
+
+
 def _scan_binwalk(path: Path, toolchain: Toolchain) -> tuple[list[str], str]:
     """Varre assinaturas e expõe erro ou timeout sem achados espúrios."""
     try:
-        result = subprocess.run(
-            [toolchain.binwalk, str(path)],
-            capture_output=True,
-            text=True,
-            timeout=60,
-            env=toolchain.env,
-            check=False,
-        )
+        result = _run_binwalk_scan(path, toolchain)
     except subprocess.TimeoutExpired:
         LOGGER.warning("binwalk timeout para %s", path)
         return [], "timeout"
@@ -327,7 +348,17 @@ def _scan_extracted(
     return findings, banner, cut
 
 
-def _read_stats(path: Path, limit: int) -> tuple[str, Any, int]:
+@dataclass(frozen=True)
+class _FirmwareRead:
+    """Agrupa a primeira passada sobre o arquivo bruto."""
+
+    firmware_id: str
+    stats: ByteStats
+    size: int
+    file_size: int
+
+
+def _read_stats(path: Path, limit: int, file_size: int) -> _FirmwareRead:
     """Calcula SHA256 e estatísticas em uma passada sem armazenar o arquivo."""
     digest = hashlib.sha256()
     streaming = StreamingStats()
@@ -336,27 +367,51 @@ def _read_stats(path: Path, limit: int) -> tuple[str, Any, int]:
         digest.update(chunk)
         streaming.update(chunk)
         size += len(chunk)
-    return digest.hexdigest(), streaming.result(), size
+    return _FirmwareRead(digest.hexdigest(), streaming.result(), size, file_size)
+
+
+def _effective_unpack_status(status: str, fs_type: str | None) -> str:
+    """Marca falha quando a varredura viu filesystem e nenhuma raiz foi extraída.
+
+    O binwalk mantém o recorte quando o extrator do filesystem falha (ex.:
+    cramfs sem ``cramfsck``); sem esta regra o caso se confundiria com imagem
+    sem filesystem.
+    """
+    if status == STATUS_NO_FILESYSTEM and fs_type is not None:
+        return STATUS_FAILURE
+    return status
 
 
 def _string_features(
-    path: Path, config: PipelineConfig, toolchain: Toolchain, document: DocumentBuilder
+    path: Path,
+    config: PipelineConfig,
+    toolchain: Toolchain,
+    document: DocumentBuilder,
+    fs_type: str | None,
 ) -> tuple[list[SecurityFinding], bool, str, str, int]:
     """Prefere filesystem; faz fallback bruto exceto após limite de tempo."""
     with unpack_firmware(path, config.unpack, toolchain) as unpack:
-        if unpack.status == STATUS_OK:
+        status = _effective_unpack_status(unpack.status, fs_type)
+        if status != unpack.status:
+            LOGGER.warning(
+                "Filesystem %s detectado e não extraído em %s: %s",
+                fs_type,
+                path,
+                unpack.error,
+            )
+        if status == STATUS_OK:
             assert unpack.root is not None
             findings, banner, cut = _scan_extracted(unpack.root, config, document)
-            return findings, banner, unpack.status, STRINGS_FILESYSTEM, cut
-        if unpack.status == STATUS_TIME:
-            return [], False, unpack.status, STATUS_NOT_RUN, 0
-        strings = iter_ascii_strings(
-            iter_file_chunks(path, config.max_bytes),
-            config.feature.min_string_len,
-            config.feature.max_string_len,
-        )
-        findings, banner = _scan_string_stream(strings, document)
-        return findings, banner, unpack.status, STRINGS_BLOB, 0
+            return findings, banner, status, STRINGS_FILESYSTEM, cut
+        if status == STATUS_TIME:
+            return [], False, status, STATUS_NOT_RUN, 0
+    strings = iter_ascii_strings(
+        iter_file_chunks(path, config.max_bytes),
+        config.feature.min_string_len,
+        config.feature.max_string_len,
+    )
+    findings, banner = _scan_string_stream(strings, document)
+    return findings, banner, status, STRINGS_BLOB, 0
 
 
 def _structural_features(
@@ -373,6 +428,86 @@ def _structural_features(
     }
 
 
+def _identity_metadata(
+    path: Path, meta_path: str, identity: PathMetadata, third_party: bool
+) -> dict[str, Any]:
+    """Monta os metadados de identidade comuns a sucesso e erro."""
+    return {
+        "path": meta_path,
+        "brand": identity.brand,
+        "model": identity.model,
+        "label": identity.label,
+        "version": identity.version,
+        "version_source": identity.version_source,
+        "third_party": (
+            THIRD_PARTY_DDWRT if is_third_party_name(path.name) or third_party else None
+        ),
+    }
+
+
+@dataclass(frozen=True)
+class _StringScan:
+    """Agrupa o resultado da varredura de strings de um firmware."""
+
+    findings: list[SecurityFinding]
+    banner: bool
+    unpack_status: str
+    strings_source: str
+    files_cut: int
+
+
+def _build_result(
+    path: Path,
+    config: PipelineConfig,
+    model: Doc2Vec | None,
+    read: _FirmwareRead,
+    binwalk: tuple[list[str], str],
+    scan: _StringScan,
+    document: DocumentBuilder,
+    meta_path: str,
+    identity: PathMetadata,
+) -> PipelineResult:
+    """Combina features, achados e metadados de uma extração bem-sucedida."""
+    descriptions, binwalk_status = binwalk
+    vector = extract_features(
+        read.stats,
+        document.document(),
+        document.truncated,
+        read.size,
+        config.feature,
+        model,
+    )
+    features: dict[str, FeatureValue] = {
+        **combine_features(vector),
+        **_structural_features(
+            descriptions, read.stats.entropy_variance_across_sections
+        ),
+        **findings_to_counts(scan.findings),
+    }
+    findings = [
+        *scan.findings,
+        *find_crypto_signatures(descriptions),
+        *find_encrypted_sections(descriptions),
+    ]
+    metadata = {
+        "read_ok": True,
+        "byte_len": read.size,
+        "bytes_used": read.size,
+        "file_size": read.file_size,
+        "max_bytes": config.max_bytes,
+        "truncated": vector.truncated,
+        "max_bytes_applied": True,
+        "doc2vec_used": model is not None,
+        "error": None,
+        "binwalk_status": binwalk_status,
+        "unpack_status": scan.unpack_status,
+        "strings_source": scan.strings_source,
+        "unpack_files_cut": scan.files_cut,
+        **_identity_metadata(path, meta_path, identity, scan.banner),
+    }
+    return PipelineResult(read.firmware_id, features, metadata, findings)
+
+
 def extract_features_from_path(
     path: Path,
     config: PipelineConfig,
@@ -385,139 +520,67 @@ def extract_features_from_path(
     version_source: str | None = None,
     dataset_root: Path | None = None,
 ) -> PipelineResult:
-    """Extrai um firmware em streaming e preserva estado de cada etapa."""
+    """Extrai um firmware em streaming e preserva estado de cada etapa.
+
+    Levanta ``ValueError`` quando só um de ``version``/``version_source`` vem
+    preenchido. Falha de leitura, arquivo vazio ou erro de E/S no
+    desempacotamento viram linha com ``read_ok=False``.
+    """
     if (version is None) != (version_source is None):
         raise ValueError(
             f"version and version_source must be both set or both None for {path}"
         )
+    identity = PathMetadata(brand, model_name, label, version, version_source)
     relative = relative_to_root(path, dataset_root)
     meta_path = relative.as_posix() if relative is not None else str(path)
+    file_size: int | None = None
     try:
         file_size = path.stat().st_size
-        firmware_id, stats, size = _read_stats(path, config.max_bytes)
-    except OSError as exc:
-        return _build_error_result(
-            path,
-            config,
-            brand,
-            model_name,
-            label,
-            version,
-            version_source,
-            exc,
-            meta_path,
+        read = _read_stats(path, config.max_bytes, file_size)
+        if not read.size:
+            raise ValueError("empty firmware")
+        binwalk = _scan_binwalk(path, toolchain)
+        document = DocumentBuilder(
+            config.feature.max_strings, config.feature.max_doc_chars
         )
-    if not size:
-        return _build_error_result(
-            path,
-            config,
-            brand,
-            model_name,
-            label,
-            version,
-            version_source,
-            ValueError("empty firmware"),
-            meta_path,
-            file_size,
+        scan = _StringScan(
+            *_string_features(
+                path, config, toolchain, document, detect_fs_type(binwalk[0])
+            )
         )
-    descriptions, binwalk_status = _scan_binwalk(path, toolchain)
-    document = DocumentBuilder(config.feature.max_strings, config.feature.max_doc_chars)
-    try:
-        findings, banner, unpack_status, strings_source, cut = _string_features(
-            path, config, toolchain, document
-        )
-    except OSError as exc:
-        return _build_error_result(
-            path,
-            config,
-            brand,
-            model_name,
-            label,
-            version,
-            version_source,
-            exc,
-            meta_path,
-            file_size,
-        )
-    vector = extract_features(
-        stats, document.document(), document.truncated, size, config.feature, model
+    except (OSError, ValueError) as exc:
+        return _build_error_result(path, config, identity, exc, meta_path, file_size)
+    return _build_result(
+        path, config, model, read, binwalk, scan, document, meta_path, identity
     )
-    features: dict[str, FeatureValue] = {
-        **combine_features(vector),
-        **_structural_features(descriptions, stats.entropy_variance_across_sections),
-        **findings_to_counts(findings),
-    }
-    findings.extend(find_crypto_signatures(descriptions))
-    findings.extend(find_encrypted_sections(descriptions))
-    metadata = {
-        "read_ok": True,
-        "byte_len": size,
-        "bytes_used": size,
-        "file_size": file_size,
-        "max_bytes": config.max_bytes,
-        "truncated": vector.truncated,
-        "max_bytes_applied": True,
-        "doc2vec_used": model is not None,
-        "error": None,
-        "path": meta_path,
-        "brand": brand,
-        "model": model_name,
-        "label": label,
-        "version": version,
-        "version_source": version_source,
-        "binwalk_status": binwalk_status,
-        "unpack_status": unpack_status,
-        "strings_source": strings_source,
-        "unpack_files_cut": cut,
-        "third_party": (
-            THIRD_PARTY_DDWRT if is_third_party_name(path.name) or banner else None
-        ),
-    }
-    return PipelineResult(firmware_id, features, metadata, findings)
 
 
 def _build_error_result(
     path: Path,
     config: PipelineConfig,
-    brand: str | None,
-    model_name: str | None,
-    label: str | None,
-    version: str | None,
-    version_source: str | None,
+    identity: PathMetadata,
     exc: Exception,
     meta_path: str | None = None,
     file_size: int | None = None,
 ) -> PipelineResult:
     """Mantém esquema dos metadados em falhas de leitura ou extração."""
-    return PipelineResult(
-        None,
-        {},
-        {
-            "read_ok": False,
-            "byte_len": 0,
-            "bytes_used": 0,
-            "file_size": file_size,
-            "max_bytes": config.max_bytes,
-            "truncated": False,
-            "max_bytes_applied": True,
-            "doc2vec_used": False,
-            "error": str(exc),
-            "path": meta_path or str(path),
-            "brand": brand,
-            "model": model_name,
-            "label": label,
-            "version": version,
-            "version_source": version_source,
-            "binwalk_status": STATUS_NOT_RUN,
-            "unpack_status": STATUS_NOT_RUN,
-            "strings_source": STATUS_NOT_RUN,
-            "unpack_files_cut": 0,
-            "third_party": (
-                THIRD_PARTY_DDWRT if is_third_party_name(path.name) else None
-            ),
-        },
-        [],
-    )
+    metadata = {
+        "read_ok": False,
+        "byte_len": 0,
+        "bytes_used": 0,
+        "file_size": file_size,
+        "max_bytes": config.max_bytes,
+        "truncated": False,
+        "max_bytes_applied": True,
+        "doc2vec_used": False,
+        "error": str(exc),
+        "binwalk_status": STATUS_NOT_RUN,
+        "unpack_status": STATUS_NOT_RUN,
+        "strings_source": STATUS_NOT_RUN,
+        "unpack_files_cut": 0,
+        **_identity_metadata(path, meta_path or str(path), identity, False),
+    }
+    return PipelineResult(None, {}, metadata, [])
 
 
 def _process_path(
@@ -549,17 +612,8 @@ def _process_path(
         )
     except Exception as exc:
         LOGGER.warning("Failed to extract features for %s: %s", path, exc)
-        return _build_error_result(
-            path,
-            config,
-            identity.brand,
-            identity.model,
-            identity.label,
-            identity.version,
-            identity.version_source,
-            exc,
-            relative.as_posix() if relative else None,
-        )
+        meta_path = relative.as_posix() if relative else None
+        return _build_error_result(path, config, identity, exc, meta_path)
 
 
 _WORKER_CONFIG: PipelineConfig | None = None

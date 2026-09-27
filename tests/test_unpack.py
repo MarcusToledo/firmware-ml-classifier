@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import os
+import stat
 import subprocess
+import tempfile
+import time
 from pathlib import Path
+from typing import Any
 
 import pytest
 
+import src.features.unpack as unpack_module
 from src.features.unpack import (
     Toolchain,
     ToolchainError,
@@ -17,6 +22,8 @@ from src.features.unpack import (
     unpack_firmware,
 )
 
+_EXTRACT_DIR = 'while [ "$1" != "-C" ]; do shift; done; shift; '
+
 
 def _script_toolchain(tmp_path: Path, body: str) -> Toolchain:
     """Cria extrator shell controlado para exercitar o monitor de limites."""
@@ -24,6 +31,22 @@ def _script_toolchain(tmp_path: Path, body: str) -> Toolchain:
     path.write_text("#!/bin/sh\n" + body)
     path.chmod(0o755)
     return Toolchain(str(path), dict(os.environ), {"binwalk": "fake"})
+
+
+@pytest.fixture
+def sandboxes(monkeypatch: pytest.MonkeyPatch) -> list[Path]:
+    """Registra cada diretório temporário criado por ``unpack_firmware``."""
+    created: list[Path] = []
+    original = tempfile.mkdtemp
+
+    def mkdtemp(*args: Any, **kwargs: Any) -> str:
+        """Cria o diretório e guarda o path para conferir a limpeza."""
+        path = original(*args, **kwargs)
+        created.append(Path(path))
+        return path
+
+    monkeypatch.setattr(unpack_module.tempfile, "mkdtemp", mkdtemp)
+    return created
 
 
 @pytest.mark.parametrize(
@@ -61,14 +84,78 @@ def _script_toolchain(tmp_path: Path, body: str) -> Toolchain:
     ],
 )
 def test_unpack_status_and_cleanup(
-    tmp_path: Path, body: str, limits: UnpackLimits, status: str
+    tmp_path: Path,
+    sandboxes: list[Path],
+    body: str,
+    limits: UnpackLimits,
+    status: str,
 ) -> None:
     """Registra cada estado e remove o diretório temporário após consumo."""
     toolchain = _script_toolchain(tmp_path, body)
     with unpack_firmware(tmp_path / "firmware.bin", limits, toolchain) as result:
         assert result.status == status
         assert result.root is None
-    assert not any(Path("/tmp").glob("fmc-unpack-*"))
+    assert len(sandboxes) == 1
+    assert not sandboxes[0].exists()
+
+
+def test_restricted_dirs_are_read_and_removed_without_touching_link_targets(
+    tmp_path: Path, sandboxes: list[Path]
+) -> None:
+    """Lê diretórios 000 e 400, remove diretório 555 e não muda o alvo de symlink."""
+    victim = tmp_path / "victim"
+    victim.write_text("outside")
+    victim.chmod(0o644)
+    body = (
+        _EXTRACT_DIR + 'r="$1/squashfs-root"; mkdir -p "$r/ro" "$r/zz"; '
+        f'ln -s {victim} "$r/ro/l"; echo inner > "$r/ro/f"; '
+        'echo hidden > "$r/zz/secret"; chmod 555 "$r/ro"; chmod 000 "$r/zz"; '
+        'mkdir "$r/zr"; echo g > "$r/zr/g"; chmod 400 "$r/zr"\n'
+    )
+    with unpack_firmware(
+        tmp_path / "firmware.bin",
+        UnpackLimits(1000, 10, 5),
+        _script_toolchain(tmp_path, body),
+    ) as result:
+        assert result.status == "ok" and result.root is not None
+        names = {path.name for path in iter_extracted_files(result.root)}
+        assert names == {"f", "secret", "g"}
+    assert stat.S_IMODE(victim.stat().st_mode) == 0o644
+    assert not sandboxes[0].exists()
+
+
+def test_files_vanishing_during_extraction_do_not_fail(tmp_path: Path) -> None:
+    """Tolera entradas apagadas pelo extrator enquanto o monitor varre."""
+    body = (
+        _EXTRACT_DIR + "i=0; while [ $i -lt 400 ]; do "
+        'mkdir -p "$1/t/a/b"; touch "$1/t/a/b/x"; rm -rf "$1/t"; i=$((i+1)); done; '
+        'mkdir -p "$1/squashfs-root"; echo ok > "$1/squashfs-root/f"\n'
+    )
+    toolchain = _script_toolchain(tmp_path, body)
+    for _ in range(3):
+        with unpack_firmware(
+            tmp_path / "firmware.bin", UnpackLimits(1000, 10, 30), toolchain
+        ) as result:
+            assert result.status == "ok"
+
+
+def test_orphans_are_killed_and_body_exception_still_cleans(
+    tmp_path: Path, sandboxes: list[Path]
+) -> None:
+    """Mata filhos de um líder já encerrado e limpa mesmo com erro no corpo."""
+    body = (
+        _EXTRACT_DIR + 'mkdir -p "$1/squashfs-root"; echo x > "$1/squashfs-root/f"; '
+        '(sleep 1; mkdir "$1/late") & exit 0\n'
+    )
+    with pytest.raises(RuntimeError, match="consumidor"):
+        with unpack_firmware(
+            tmp_path / "firmware.bin",
+            UnpackLimits(1000, 10, 5),
+            _script_toolchain(tmp_path, body),
+        ):
+            raise RuntimeError("consumidor")
+    time.sleep(1.5)
+    assert not sandboxes[0].exists()
 
 
 def test_isolated_environment_and_symlinks(tmp_path: Path) -> None:
@@ -78,7 +165,7 @@ def test_isolated_environment_and_symlinks(tmp_path: Path) -> None:
         'mkdir -p "$1/squashfs-root"; printf marker > "$1/squashfs-root/valid"; '
         'ln -s /etc/passwd "$1/squashfs-root/escape"; '
         'ln -s /etc "$1/squashfs-root/outside"; '
-        'echo "$HOME:$TMPDIR" > "$1/squashfs-root/environment"\n'
+        'echo "$HOME:$TMPDIR:$XDG_CONFIG_HOME" > "$1/squashfs-root/environment"\n'
     )
     with unpack_firmware(
         tmp_path / "firmware.bin",
@@ -88,7 +175,7 @@ def test_isolated_environment_and_symlinks(tmp_path: Path) -> None:
         assert result.status == "ok" and result.root is not None
         paths = iter_extracted_files(result.root)
         assert {path.name for path in paths} == {"valid", "environment"}
-        home, tmp = (
+        home, tmp, xdg = (
             next(path for path in paths if path.name == "environment")
             .read_text()
             .strip()
@@ -96,6 +183,7 @@ def test_isolated_environment_and_symlinks(tmp_path: Path) -> None:
         )
         assert Path(home).parent == result.root.parent
         assert Path(tmp).parent == result.root.parent
+        assert Path(xdg).parent == Path(home)
     assert not Path(home).exists()
 
 

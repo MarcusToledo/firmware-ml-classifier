@@ -14,9 +14,10 @@ import sys
 import tempfile
 import time
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
+from typing import BinaryIO
 
 LOGGER = logging.getLogger(__name__)
 STATUS_OK = "ok"
@@ -153,119 +154,188 @@ def resolve_toolchain() -> Toolchain:
     return Toolchain(paths["binwalk"], env, versions)
 
 
-def _inventory(root: Path) -> tuple[int, int, bool, bool]:
+def _scan_entries(directory: Path, strict: bool) -> list[os.DirEntry[str]]:
+    """Lista um diretório; fora do modo estrito tolera entrada sumida ou fechada.
+
+    Durante a extração o binwalk cria, apaga e renomeia arquivos, então
+    ``FileNotFoundError`` e ``PermissionError`` só são erro depois que o
+    processo terminou e as permissões foram normalizadas.
+    """
+    try:
+        with os.scandir(directory) as entries:
+            return list(entries)
+    except (FileNotFoundError, PermissionError):
+        if strict:
+            raise
+        return []
+
+
+def _inventory(root: Path, strict: bool) -> tuple[int, int, bool, bool]:
     """Conta entradas sem seguir links e identifica raízes extraídas válidas."""
     total = count = 0
     regular = filesystem = False
     stack = [(root, False)]
     while stack:
         directory, in_root = stack.pop()
-        with os.scandir(directory) as entries:
-            for entry in entries:
+        for entry in _scan_entries(directory, strict):
+            try:
                 info = entry.stat(follow_symlinks=False)
-                if stat.S_ISDIR(info.st_mode):
-                    stack.append(
-                        (
-                            Path(entry.path),
-                            in_root or bool(_ROOT_RE.fullmatch(entry.name)),
-                        )
-                    )
-                else:
-                    count += 1
-                    if stat.S_ISREG(info.st_mode):
-                        total += info.st_size
-                        regular = True
-                        filesystem |= in_root
+            except (FileNotFoundError, PermissionError):
+                if strict:
+                    raise
+                continue
+            if stat.S_ISDIR(info.st_mode):
+                nested = in_root or bool(_ROOT_RE.fullmatch(entry.name))
+                stack.append((Path(entry.path), nested))
+                continue
+            count += 1
+            if stat.S_ISREG(info.st_mode):
+                total += info.st_size
+                regular = True
+                filesystem |= in_root
     return total, count, regular, filesystem
 
 
+def _grant_owner_access(root: Path) -> None:
+    """Dá rwx ao dono em cada diretório real sob ``root``, de cima para baixo.
+
+    Só roda com o grupo do extrator já morto: cada alvo foi conferido por
+    ``lstat`` como diretório real e o caminho até ele só tem diretórios reais,
+    então o ``chmod`` nunca atravessa symlink para fora da sandbox.
+    """
+    stack = [root]
+    while stack:
+        directory = stack.pop()
+        os.chmod(directory, stat.S_IRWXU)
+        with os.scandir(directory) as entries:
+            stack.extend(
+                Path(entry.path)
+                for entry in entries
+                if entry.is_dir(follow_symlinks=False)
+            )
+
+
 def _stop_process(process: subprocess.Popen[bytes]) -> None:
-    """Mata o grupo inteiro do extrator, inclusive subprocessos remanescentes."""
-    if process.poll() is None:
+    """Mata o grupo inteiro do extrator, inclusive órfãos de um líder já morto."""
+    with suppress(ProcessLookupError):
         os.killpg(process.pid, signal.SIGKILL)
     process.wait()
 
 
+def _limit_status(
+    total: int, count: int, elapsed: float, limits: UnpackLimits
+) -> str | None:
+    """Devolve o primeiro limite estourado: tamanho, arquivos e depois tempo."""
+    if total > limits.max_total_bytes:
+        return STATUS_SIZE
+    if count > limits.max_files:
+        return STATUS_FILES
+    if elapsed > limits.timeout_seconds:
+        return STATUS_TIME
+    return None
+
+
 def _monitor(
     process: subprocess.Popen[bytes], root: Path, limits: UnpackLimits, started: float
-) -> str:
-    """Verifica limites periodicamente e novamente após a saída do extrator."""
+) -> str | None:
+    """Confere limites a cada 0,5 s e uma última vez após o fim do extrator."""
     while True:
-        total, count, _, _ = _inventory(root)
-        status = (
-            STATUS_SIZE
-            if total > limits.max_total_bytes
-            else (
-                STATUS_FILES
-                if count > limits.max_files
-                else (
-                    STATUS_TIME
-                    if time.monotonic() - started > limits.timeout_seconds
-                    else None
-                )
-            )
-        )
-        if status:
-            _stop_process(process)
+        finished = process.poll() is not None
+        total, count, _, _ = _inventory(root, strict=False)
+        status = _limit_status(total, count, time.monotonic() - started, limits)
+        if status or finished:
             return status
-        if process.poll() is not None:
-            return STATUS_OK
         time.sleep(0.5)
 
 
-def _cleanup_error(func: object, name: str, exc: object) -> None:
-    """Tenta novamente a remoção de diretórios tornados somente leitura."""
-    os.chmod(name, stat.S_IRWXU)
-    func(name)
+def _final_status(
+    process: subprocess.Popen[bytes], out: Path, limits: UnpackLimits
+) -> str:
+    """Classifica a saída completa depois de normalizar as permissões."""
+    _grant_owner_access(out)
+    total, count, regular, filesystem = _inventory(out, strict=True)
+    limit = _limit_status(total, count, 0.0, limits)
+    if limit:
+        return limit
+    if process.returncode != 0 or not regular:
+        return STATUS_FAILURE
+    return STATUS_OK if filesystem else STATUS_NO_FILESYSTEM
+
+
+def _stderr_tail(handle: BinaryIO) -> str:
+    """Lê só os últimos 2 KB do stderr pelo descritor já aberto."""
+    size = handle.seek(0, os.SEEK_END)
+    handle.seek(max(0, size - 2048))
+    return handle.read().decode("utf-8", errors="replace")
+
+
+def isolated_env(toolchain: Toolchain, home: Path, tmp: Path) -> dict[str, str]:
+    """Monta o ambiente do binwalk sem configuração, plugins nem magic do usuário."""
+    return {
+        **toolchain.env,
+        "HOME": str(home),
+        "XDG_CONFIG_HOME": str(home / ".config"),
+        "TMPDIR": str(tmp),
+    }
+
+
+def _run_extractor(
+    path: Path, base: Path, limits: UnpackLimits, toolchain: Toolchain
+) -> tuple[str, str | None]:
+    """Roda ``binwalk -e`` confinado em ``base`` e devolve status e erro."""
+    out = base / "out"
+    with (base / "binwalk.stderr").open("w+b") as stderr:
+        try:
+            started = time.monotonic()
+            process = subprocess.Popen(
+                [toolchain.binwalk, "-e", "-q", "-C", str(out), str(path.absolute())],
+                cwd=base,
+                env=isolated_env(toolchain, base / "home", base / "tmp"),
+                stdout=subprocess.DEVNULL,
+                stderr=stderr,
+                start_new_session=True,
+            )
+        except OSError as exc:
+            return STATUS_FAILURE, str(exc)
+        try:
+            status = _monitor(process, out, limits, started)
+        finally:
+            _stop_process(process)
+        status = status or _final_status(process, out, limits)
+        error = _stderr_tail(stderr) if status == STATUS_FAILURE else None
+    return status, error
+
+
+def _remove_sandbox(path: Path, base: Path) -> None:
+    """Remove a sandbox inteira; falha de limpeza é registrada, não propagada."""
+    try:
+        _grant_owner_access(base)
+        shutil.rmtree(base)
+    except OSError as exc:
+        LOGGER.error("Falha ao limpar extração de %s em %s: %s", path, base, exc)
 
 
 @contextmanager
 def unpack_firmware(
     path: Path, limits: UnpackLimits, toolchain: Toolchain
 ) -> Iterator[UnpackResult]:
-    """Executa binwalk isolado e remove todo o diretório após o consumo."""
+    """Executa binwalk isolado e remove todo o diretório após o consumo.
+
+    ``root`` só é válido dentro do ``with``; ao sair, o grupo do extrator já
+    está morto e o diretório temporário é apagado.
+    """
     base = Path(tempfile.mkdtemp(prefix="fmc-unpack-"))
-    home, tmp, out = (base / part for part in ("home", "tmp", "out"))
-    for directory in (home, tmp, out):
-        directory.mkdir()
-    stderr_path = base / "binwalk.stderr"
-    process: subprocess.Popen[bytes] | None = None
     try:
-        with stderr_path.open("wb") as stderr:
-            try:
-                started = time.monotonic()
-                process = subprocess.Popen(
-                    [toolchain.binwalk, "-e", "-q", "-C", str(out), str(path)],
-                    cwd=base,
-                    env={**toolchain.env, "HOME": str(home), "TMPDIR": str(tmp)},
-                    stdout=subprocess.DEVNULL,
-                    stderr=stderr,
-                    start_new_session=True,
-                )
-                status = _monitor(process, out, limits, started)
-                _, _, regular, filesystem = _inventory(out)
-                if status == STATUS_OK:
-                    status = (
-                        STATUS_FAILURE
-                        if process.returncode != 0 or not regular
-                        else STATUS_OK if filesystem else STATUS_NO_FILESYSTEM
-                    )
-                error = (
-                    stderr_path.read_bytes()[-2048:].decode("utf-8", errors="replace")
-                    if status == STATUS_FAILURE
-                    else None
-                )
-            except OSError as exc:
-                status, error = STATUS_FAILURE, str(exc)
-            finally:
-                if process is not None and process.poll() is None:
-                    _stop_process(process)
-        yield UnpackResult(status, out if status == STATUS_OK else None, error)
-    finally:
+        for part in ("home", "tmp", "out"):
+            (base / part).mkdir()
         try:
-            shutil.rmtree(base, onerror=_cleanup_error)
+            status, error = _run_extractor(path, base, limits, toolchain)
         except OSError as exc:
-            LOGGER.error("Falha ao limpar extração de %s em %s: %s", path, base, exc)
+            status, error = STATUS_FAILURE, str(exc)
+        root = base / "out" if status == STATUS_OK else None
+        yield UnpackResult(status, root, error)
+    finally:
+        _remove_sandbox(path, base)
 
 
 def iter_extracted_files(root: Path) -> list[Path]:

@@ -58,3 +58,18 @@ def test_unpack_limits_must_be_positive(key: str) -> None:
     """Recusa cada limite desativado antes do processamento."""
     with pytest.raises(ValueError, match=f"unpack.{key}"):
         load_pipeline_config(None, {f"unpack.{key}": 0})
+
+
+@pytest.mark.parametrize("value", ["nan", "inf", "1e999", "-inf"])
+def test_unpack_timeout_must_be_finite(value: str) -> None:
+    """Não aceita timeout que desativaria o limite de tempo."""
+    with pytest.raises(ValueError, match="unpack.timeout_seconds"):
+        load_pipeline_config(None, {"unpack.timeout_seconds": value})
+
+
+def test_null_unpack_section_is_rejected(tmp_path: Path) -> None:
+    """Seção ``unpack: null`` é erro com a chave, não AttributeError."""
+    path = tmp_path / "config.yaml"
+    path.write_text("unpack: null\n")
+    with pytest.raises(ValueError, match="unpack inválido"):
+        load_pipeline_config(path, {})

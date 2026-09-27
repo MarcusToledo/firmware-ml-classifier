@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -93,3 +94,46 @@ def test_cli_timeout_writes_output_before_nonzero_exit(
         _invoke(monkeypatch, firmware, output, "--workers", "1")
     assert exc.value.code == 1
     assert pd.read_parquet(output).iloc[0]["meta_binwalk_status"] == "timeout"
+
+
+def test_cli_csv_findings_and_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fake_toolchain: Toolchain
+) -> None:
+    """Grava CSV, JSONL ligado ao firmware_id e aplica override registrado."""
+    firmware = tmp_path / "firmware.bin"
+    firmware.write_bytes(b"firmware\x00")
+    monkeypatch.setattr(cli, "resolve_toolchain", lambda: fake_toolchain)
+    output = tmp_path / "out.csv"
+    findings = tmp_path / "findings.jsonl"
+    _invoke(
+        monkeypatch,
+        firmware,
+        output,
+        "--format",
+        "csv",
+        "--findings-output",
+        str(findings),
+        "--override",
+        "max_bytes=4",
+        "--workers",
+        "1",
+    )
+    row = pd.read_csv(output).iloc[0]
+    assert (row["meta_max_bytes"], row["meta_bytes_used"]) == (4, 4)
+    assert row["meta_file_size"] == firmware.stat().st_size
+    records = [json.loads(line) for line in findings.read_text().splitlines()]
+    assert "hardcoded_passwords" in {record["detector"] for record in records}
+    assert {record["firmware_id"] for record in records} == {row["firmware_id"]}
+
+
+def test_cli_without_findings_output_writes_only_table(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fake_toolchain: Toolchain
+) -> None:
+    """Sem --findings-output, só a tabela é gravada."""
+    firmware = tmp_path / "in" / "firmware.bin"
+    firmware.parent.mkdir()
+    firmware.write_bytes(b"firmware\x00")
+    monkeypatch.setattr(cli, "resolve_toolchain", lambda: fake_toolchain)
+    out_dir = tmp_path / "out"
+    _invoke(monkeypatch, firmware, out_dir / "features.parquet", "--workers", "1")
+    assert [path.name for path in out_dir.iterdir()] == ["features.parquet"]
