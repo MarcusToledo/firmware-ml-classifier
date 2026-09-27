@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import zlib
 from dataclasses import dataclass
+from typing import cast
 
 import numpy as np
 
@@ -13,11 +14,17 @@ _COMPRESSION_LEVEL = 9
 _MIN_VARIANCE_SECTIONS = 2
 
 
+def _byte_histogram(data: bytes | bytearray) -> np.ndarray:
+    """Conta a frequência de cada byte sem copiar os dados."""
+    counts = np.bincount(np.frombuffer(data, dtype=np.uint8), minlength=_BYTE_VALUES)
+    return cast(np.ndarray, counts)
+
+
 def shannon_entropy(data: bytes) -> float:
     """Calcula a entropia de Shannon dos bytes, inclusive entrada vazia."""
     if not data:
         return 0.0
-    counts = np.bincount(np.frombuffer(data, dtype=np.uint8), minlength=_BYTE_VALUES)
+    counts = _byte_histogram(data)
     return _entropy_counts(counts, len(data))
 
 
@@ -53,9 +60,7 @@ class StreamingStats:
         """Inclui um bloco arbitrário sem reter todos os bytes lidos."""
         if not chunk:
             return
-        self._counts += np.bincount(
-            np.frombuffer(chunk, dtype=np.uint8), minlength=_BYTE_VALUES
-        )
+        self._counts += _byte_histogram(chunk)
         self._size += len(chunk)
         self._compressed += len(self._compressor.compress(chunk))
         view = memoryview(chunk)
