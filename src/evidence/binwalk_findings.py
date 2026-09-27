@@ -7,13 +7,17 @@ de segurança. Sinais estruturais (não relacionados a segurança) do Binwalk,
 como tipo de filesystem, tipo de compressão e contagem de filesystems,
 ficam em ``src/features/binwalk.py``.
 """
+
 from __future__ import annotations
 
 import re
 
 from src.evidence.findings import SecurityFinding
 
-_DETECTOR_VERSION = "1.0"
+DETECTOR_VERSIONS: dict[str, str] = {
+    "crypto_signatures": "1.0",
+    "encrypted_sections": "2.0",
+}
 
 _CRYPTO_RE = re.compile(
     r"\bAES\b|\bDES\b|\bRSA\b|certificate|private\skey",
@@ -39,7 +43,7 @@ def find_crypto_signatures(descriptions: list[str]) -> list[SecurityFinding]:
                     context=f"cryptographic construct: {m.group(0)!r}",
                     confidence="medium",
                     detector="crypto_signatures",
-                    detector_version=_DETECTOR_VERSION,
+                    detector_version=DETECTOR_VERSIONS["crypto_signatures"],
                 )
             )
     return findings
@@ -54,6 +58,8 @@ def find_encrypted_sections(descriptions: list[str]) -> list[SecurityFinding]:
     """Encontra descrições do Binwalk que sugerem conteúdo criptografado."""
     findings: list[SecurityFinding] = []
     for d in descriptions:
+        if "s-box" in d.lower():
+            continue
         m = _ENCRYPTED_RE.search(d)
         if m:
             findings.append(
@@ -63,7 +69,7 @@ def find_encrypted_sections(descriptions: list[str]) -> list[SecurityFinding]:
                     context=f"encryption indicator: {m.group(0)!r}",
                     confidence="medium",
                     detector="encrypted_sections",
-                    detector_version=_DETECTOR_VERSION,
+                    detector_version=DETECTOR_VERSIONS["encrypted_sections"],
                 )
             )
     return findings

@@ -11,20 +11,73 @@ retornando a contagem/flag achatada usada como feature do classificador.
 
 from __future__ import annotations
 
+import math
 import re
+from collections import Counter
+from collections.abc import Iterator
 
 from src.evidence.findings import SecurityFinding
 
-_DETECTOR_VERSION = "1.0"
+DETECTOR_VERSIONS: dict[str, str] = {
+    "hardcoded_passwords": "2.0",
+    "credential_pairs": "1.0",
+    "hardcoded_ips": "2.0",
+    "public_ips": "2.0",
+    "telnetd": "1.0",
+    "debug_account": "2.0",
+    "outdated_libssl": "1.0",
+    "outdated_busybox": "1.0",
+    "outdated_dropbear": "2.0",
+    "urls": "1.0",
+    "api_tokens": "2.0",
+}
 
 # ---------------------------------------------------------------------------
 # Padrões de senha
 # ---------------------------------------------------------------------------
 
-_PASSWORD_KV_RE = re.compile(
-    r"\b(?:password|passwd|pass|pwd|secret|credential)\s*[=:]\s*(\S+)",
-    re.IGNORECASE,
+_PASSWORD_KV_RE = re.compile(r"\b([A-Za-z][A-Za-z0-9_-]{0,40})\s*[=:]\s*([^\s&;]+)")
+_CREDENTIAL_KEY_TOKENS: frozenset[str] = frozenset(
+    {
+        "password",
+        "passwd",
+        "pwd",
+        "pass",
+        "secret",
+        "credential",
+        "passphrase",
+        "pswd",
+        "psw",
+        "userpass",
+        "loginpass",
+        "psk",
+    }
 )
+_METADATA_KEY_TOKENS: frozenset[str] = frozenset(
+    {"length", "len", "size", "hash", "algorithm", "algo", "policy", "timeout"}
+)
+_NULL_LITERALS: frozenset[str] = frozenset(
+    {"null", "none", "nil", "undefined", "(null)"}
+)
+_VARIABLE_REF_RE = re.compile(r"^\$\{?\w+\}?$")
+_TEMPLATE_RE = re.compile(r"^\{\{?\w+\}?\}$|^<\w+>$")
+_CAMEL_BOUNDARY_RE = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
+_AUTH_CONTEXT_TRIGGERS: frozenset[str] = frozenset(
+    {
+        "login",
+        "user",
+        "username",
+        "account",
+        "credential",
+        "auth",
+        "senha",
+        "password",
+        "passwd",
+        "pwd",
+        "default",
+    }
+)
+_WORD_RE = re.compile(r"[A-Za-z0-9]+")
 
 _DEFAULT_PASSWORDS: frozenset[str] = frozenset(
     {
@@ -54,42 +107,73 @@ _DEFAULT_PASSWORDS: frozenset[str] = frozenset(
 )
 
 
-def find_hardcoded_passwords(strings: list[str]) -> list[SecurityFinding]:
-    """Encontra strings que contêm credenciais hardcoded.
+def _key_tokens(key: str) -> list[str]:
+    """Separa chaves compostas em tokens minúsculos."""
+    spaced = _CAMEL_BOUNDARY_RE.sub("_", key)
+    return [token.lower() for token in re.split(r"[_-]", spaced) if token]
 
-    Casa tanto padrões key=value (``password=admin``, confiança alta)
-    quanto ocorrências avulsas de senhas padrão conhecidas (confiança
-    média). No máximo um achado por string, preservando a semântica de
-    contagem original.
-    """
+
+def _is_credential_key(key: str) -> bool:
+    """Reconhece chaves de credencial que não descrevem metadados."""
+    tokens = set(_key_tokens(key))
+    return not bool(tokens & _METADATA_KEY_TOKENS) and bool(
+        tokens & _CREDENTIAL_KEY_TOKENS
+    )
+
+
+def _is_rejected_value(value: str) -> bool:
+    """Rejeita especificadores de formato, variáveis, templates e nulos."""
+    return (
+        value.startswith("%")
+        or bool(_VARIABLE_REF_RE.match(value))
+        or bool(_TEMPLATE_RE.match(value))
+        or value.strip("()").lower() in _NULL_LITERALS
+    )
+
+
+def _has_default_password_token(s: str) -> bool:
+    """Reconhece senha padrão distinta de um gatilho de autenticação."""
+    words = {word.lower() for word in _WORD_RE.findall(s)}
+    return bool((words & _DEFAULT_PASSWORDS) - _AUTH_CONTEXT_TRIGGERS) and bool(
+        words & _AUTH_CONTEXT_TRIGGERS
+    )
+
+
+def find_hardcoded_passwords(strings: list[str]) -> list[SecurityFinding]:
+    """Encontra credenciais concretas ou senhas padrão com contexto de autenticação."""
     findings: list[SecurityFinding] = []
     for s in strings:
-        m = _PASSWORD_KV_RE.search(s)
-        if m:
-            findings.append(
-                SecurityFinding(
-                    type="credential_candidate",
-                    source=s,
-                    context=f"key=value assignment: {m.group(0)!r}",
-                    confidence="high",
-                    detector="hardcoded_passwords",
-                    detector_version=_DETECTOR_VERSION,
-                )
+        match = next(
+            (
+                m
+                for m in _PASSWORD_KV_RE.finditer(s)
+                if _is_credential_key(m.group(1)) and not _is_rejected_value(m.group(2))
+            ),
+            None,
+        )
+        if match is not None:
+            context = f"key=value assignment: {match.group(0)!r}"
+            confidence = "high"
+        elif _has_default_password_token(s):
+            token = next(
+                word
+                for word in _WORD_RE.findall(s)
+                if word.lower() in _DEFAULT_PASSWORDS - _AUTH_CONTEXT_TRIGGERS
             )
+            context = f"default password token: {token!r}"
+            confidence = "medium"
+        else:
             continue
-        tokens = s.split()
-        matched = next((t for t in tokens if t.lower() in _DEFAULT_PASSWORDS), None)
-        if matched is not None:
-            findings.append(
-                SecurityFinding(
-                    type="credential_candidate",
-                    source=s,
-                    context=f"default password token: {matched!r}",
-                    confidence="medium",
-                    detector="hardcoded_passwords",
-                    detector_version=_DETECTOR_VERSION,
-                )
+        findings.append(
+            SecurityFinding(
+                type="credential_candidate",
+                source=s,
+                context=context,
+                confidence=confidence,
+                detector="hardcoded_passwords",
+                detector_version=DETECTOR_VERSIONS["hardcoded_passwords"],
             )
+        )
     return findings
 
 
@@ -153,7 +237,7 @@ def find_credential_pairs(strings: list[str]) -> list[SecurityFinding]:
                         context=f"weak user:pass pair: {m.group(0)!r}",
                         confidence="high",
                         detector="credential_pairs",
-                        detector_version=_DETECTOR_VERSION,
+                        detector_version=DETECTOR_VERSIONS["credential_pairs"],
                     )
                 )
                 break
@@ -169,23 +253,64 @@ def count_credential_pairs(strings: list[str]) -> int:
 # Padrões de endereço IP
 # ---------------------------------------------------------------------------
 
-_IPV4_RE = re.compile(r"\b(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\b")
-_IP_EXCLUDES: frozenset[str] = frozenset({"0.0.0.0", "255.255.255.255"})
+_IPV4_RE = re.compile(
+    r"(?<![-_A-Za-z0-9.])(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?![-_A-Za-z0-9]|\.\d)"
+)
+_VERSION_IP_PREFIX_RE = re.compile(r"(?:\bv|\bversion|\bLinux-)\s*$", re.IGNORECASE)
+_NETWORK_CONTEXT_WORDS: frozenset[str] = frozenset(
+    {
+        "ip",
+        "ipaddr",
+        "host",
+        "hostname",
+        "server",
+        "gateway",
+        "gw",
+        "dns",
+        "ntp",
+        "route",
+        "addr",
+        "address",
+        "proxy",
+        "remote",
+        "peer",
+        "connect",
+        "bind",
+        "listen",
+    }
+)
+
+
+def _iter_contextual_ipv4(s: str) -> Iterator[tuple[int, int, int, int]]:
+    """Produz IPv4 válidos quando a string oferece contexto de rede."""
+    words = {word.lower() for word in _WORD_RE.findall(s)}
+    for match in _IPV4_RE.finditer(s):
+        octets = (
+            int(match.group(1)),
+            int(match.group(2)),
+            int(match.group(3)),
+            int(match.group(4)),
+        )
+        if any(octet > 255 for octet in octets) or octets[0] in (0, 127, 255):
+            continue
+        if _VERSION_IP_PREFIX_RE.search(s[: match.start()]):
+            continue
+        if not (
+            words & _NETWORK_CONTEXT_WORDS
+            or "http://" in s.lower()
+            or "https://" in s.lower()
+            or re.match(r":\d+", s[match.end() :])
+        ):
+            continue
+        yield octets
 
 
 def find_hardcoded_ips(strings: list[str]) -> list[SecurityFinding]:
     """Encontra strings que contêm endereços IPv4 válidos e não excluídos."""
     findings: list[SecurityFinding] = []
     for s in strings:
-        for m in _IPV4_RE.finditer(s):
-            octets = tuple(int(g) for g in m.groups())
-            if any(o > 255 for o in octets):
-                continue
-            ip = ".".join(str(o) for o in octets)
-            if ip in _IP_EXCLUDES:
-                continue
-            if octets[0] == 127:
-                continue
+        for octets in _iter_contextual_ipv4(s):
+            ip = ".".join(str(octet) for octet in octets)
             findings.append(
                 SecurityFinding(
                     type="hardcoded_ip",
@@ -193,7 +318,7 @@ def find_hardcoded_ips(strings: list[str]) -> list[SecurityFinding]:
                     context=f"IPv4 address: {ip}",
                     confidence="low",
                     detector="hardcoded_ips",
-                    detector_version=_DETECTOR_VERSION,
+                    detector_version=DETECTOR_VERSIONS["hardcoded_ips"],
                 )
             )
     return findings
@@ -213,15 +338,8 @@ def find_public_ips(strings: list[str]) -> list[SecurityFinding]:
     """
     findings: list[SecurityFinding] = []
     for s in strings:
-        for m in _IPV4_RE.finditer(s):
-            a, b, c, d = (int(g) for g in m.groups())
-            if any(o > 255 for o in (a, b, c, d)):
-                continue
+        for a, b, c, d in _iter_contextual_ipv4(s):
             ip = f"{a}.{b}.{c}.{d}"
-            if ip in _IP_EXCLUDES:
-                continue
-            if a == 127:
-                continue
             if a == 10:
                 continue
             if a == 172 and 16 <= b <= 31:
@@ -241,7 +359,7 @@ def find_public_ips(strings: list[str]) -> list[SecurityFinding]:
                     context=f"public (non-RFC-1918) IPv4 address: {ip}",
                     confidence="high",
                     detector="public_ips",
-                    detector_version=_DETECTOR_VERSION,
+                    detector_version=DETECTOR_VERSIONS["public_ips"],
                 )
             )
     return findings
@@ -257,7 +375,7 @@ def count_public_ips(strings: list[str]) -> int:
 # ---------------------------------------------------------------------------
 
 _TELNETD_SUBSTR = "telnetd"
-_DEBUG_ACCOUNT_RE = re.compile(r"\b(?:debug|guest|test)\b", re.IGNORECASE)
+_DEBUG_ACCOUNT_WORDS: frozenset[str] = frozenset({"debug", "guest", "test"})
 
 
 def find_telnetd(strings: list[str]) -> list[SecurityFinding]:
@@ -269,7 +387,7 @@ def find_telnetd(strings: list[str]) -> list[SecurityFinding]:
             context=f"{_TELNETD_SUBSTR!r} substring found",
             confidence="high",
             detector="telnetd",
-            detector_version=_DETECTOR_VERSION,
+            detector_version=DETECTOR_VERSIONS["telnetd"],
         )
         for s in strings
         if _TELNETD_SUBSTR in s
@@ -282,19 +400,22 @@ def has_telnetd(strings: list[str]) -> bool:
 
 
 def find_debug_account(strings: list[str]) -> list[SecurityFinding]:
-    """Encontra strings com palavra-chave de conta debug/guest/test."""
+    """Encontra nome de conta de teste em contexto de autenticação."""
     findings: list[SecurityFinding] = []
     for s in strings:
-        m = _DEBUG_ACCOUNT_RE.search(s)
-        if m:
+        words = [word.lower() for word in _WORD_RE.findall(s)]
+        if not set(words) & _AUTH_CONTEXT_TRIGGERS:
+            continue
+        name = next((word for word in words if word in _DEBUG_ACCOUNT_WORDS), None)
+        if name is not None:
             findings.append(
                 SecurityFinding(
                     type="debug_account",
                     source=s,
-                    context=f"debug/guest/test keyword: {m.group(0)!r}",
+                    context=f"debug/guest/test keyword: {name!r}",
                     confidence="low",
                     detector="debug_account",
-                    detector_version=_DETECTOR_VERSION,
+                    detector_version=DETECTOR_VERSIONS["debug_account"],
                 )
             )
     return findings
@@ -311,7 +432,9 @@ def has_debug_account(strings: list[str]) -> bool:
 
 _LIBSSL_RE = re.compile(r"OpenSSL[\s/]+([\d]+\.[\d]+\.[\d]+[a-z]?)", re.IGNORECASE)
 _BUSYBOX_RE = re.compile(r"BusyBox[\s_]*v?([\d]+\.[\d]+\.[\d]+)", re.IGNORECASE)
-_DROPBEAR_RE = re.compile(r"Dropbear\s+(?:SSH\s+)?v?([\d]{4}\.[\d]+)", re.IGNORECASE)
+_DROPBEAR_RE = re.compile(
+    r"Dropbear\s+(?:SSH\s+)?v?(\d{4}\.\d+|0\.\d{2}(?:\.\d+)?)", re.IGNORECASE
+)
 _VERSION_THRESHOLDS: dict[str, tuple[int, ...]] = {
     "libssl": (1, 1, 1),  # < OpenSSL 1.1.1 → desatualizado
     "busybox": (1, 33, 0),  # < BusyBox 1.33.0 → desatualizado
@@ -359,7 +482,7 @@ def _find_outdated_version(
                         ),
                         confidence="medium",
                         detector=detector,
-                        detector_version=_DETECTOR_VERSION,
+                        detector_version=DETECTOR_VERSIONS[detector],
                     )
                 )
     return findings
@@ -403,8 +526,29 @@ def has_outdated_dropbear(strings: list[str]) -> bool:
 
 _URL_RE = re.compile(r"https?://[^\s\"'<>]+", re.IGNORECASE)
 _API_TOKEN_RE = re.compile(
-    r"(?<![A-Za-z0-9])(?:[0-9a-fA-F]{32,}|[A-Za-z0-9+/=_\-]{32,})(?![A-Za-z0-9])"
+    r"(?<![A-Za-z0-9])(?:[0-9a-fA-F]{32,}|[A-Za-z0-9+/]{40,}={0,2})(?![A-Za-z0-9])"
 )
+_HEX_TOKEN_RE = re.compile(r"[0-9a-fA-F]{32,}\Z")
+_API_TOKEN_MIN_ENTROPY = 4.3
+_API_TOKEN_MAX_RUN = 5
+
+
+def _shannon_entropy_chars(s: str) -> float:
+    """Calcula a entropia de Shannon por caractere."""
+    frequencies = Counter(s)
+    return -sum(
+        (count / len(s)) * math.log2(count / len(s)) for count in frequencies.values()
+    )
+
+
+def _has_ascending_run(s: str, n: int) -> bool:
+    """Detecta uma sequência crescente de códigos consecutivos."""
+    run = 1
+    for previous, current in zip(s, s[1:]):
+        run = run + 1 if ord(current) == ord(previous) + 1 else 1
+        if run >= n:
+            return True
+    return False
 
 
 def find_urls(strings: list[str]) -> list[SecurityFinding]:
@@ -419,7 +563,7 @@ def find_urls(strings: list[str]) -> list[SecurityFinding]:
                     context=f"URL: {m.group(0)}",
                     confidence="low",
                     detector="urls",
-                    detector_version=_DETECTOR_VERSION,
+                    detector_version=DETECTOR_VERSIONS["urls"],
                 )
             )
     return findings
@@ -431,18 +575,28 @@ def count_urls(strings: list[str]) -> int:
 
 
 def find_api_tokens(strings: list[str]) -> list[SecurityFinding]:
-    """Encontra tokens longos hex ou base64-like (32+ chars) nas strings."""
+    """Encontra candidatos hexadecimais ou base64 de alta entropia."""
     findings: list[SecurityFinding] = []
     for s in strings:
-        for m in _API_TOKEN_RE.finditer(s):
+        for match in _API_TOKEN_RE.finditer(s):
+            candidate = match.group(0)
+            if _has_ascending_run(candidate, _API_TOKEN_MAX_RUN):
+                continue
+            if not _HEX_TOKEN_RE.fullmatch(candidate) and not (
+                re.search(r"[A-Z]", candidate)
+                and re.search(r"[a-z]", candidate)
+                and re.search(r"\d", candidate)
+                and _shannon_entropy_chars(candidate) >= _API_TOKEN_MIN_ENTROPY
+            ):
+                continue
             findings.append(
                 SecurityFinding(
                     type="api_token_candidate",
                     source=s,
-                    context=f"long token: {m.group(0)[:12]}…",
+                    context=f"long token: {candidate[:12]}…",
                     confidence="low",
                     detector="api_tokens",
-                    detector_version=_DETECTOR_VERSION,
+                    detector_version=DETECTOR_VERSIONS["api_tokens"],
                 )
             )
     return findings

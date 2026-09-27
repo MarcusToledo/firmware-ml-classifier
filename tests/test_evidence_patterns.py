@@ -1,3 +1,5 @@
+import pytest
+
 from src.evidence.patterns import (
     count_api_tokens,
     count_credential_pairs,
@@ -45,12 +47,8 @@ def test_passwords_kv_case_insensitive() -> None:
     assert count_hardcoded_passwords(["PASSWORD=abc"]) == 1
 
 
-def test_passwords_default_token() -> None:
-    assert count_hardcoded_passwords(["admin"]) == 1
-
-
-def test_passwords_default_token_root() -> None:
-    assert count_hardcoded_passwords(["root"]) == 1
+def test_passwords_default_token_without_context() -> None:
+    assert count_hardcoded_passwords(["admin", "root", " -- System halted"]) == 0
 
 
 def test_passwords_no_match() -> None:
@@ -71,7 +69,7 @@ def test_passwords_finding_has_high_confidence_on_kv_match() -> None:
 
 
 def test_passwords_finding_has_medium_confidence_on_default_token() -> None:
-    findings = find_hardcoded_passwords(["admin"])
+    findings = find_hardcoded_passwords(["default login admin"])
     assert len(findings) == 1
     assert findings[0].confidence == "medium"
 
@@ -131,7 +129,7 @@ def test_ips_valid_match() -> None:
 
 
 def test_ips_multiple() -> None:
-    assert count_hardcoded_ips(["10.0.0.1 and 172.16.0.2"]) == 2
+    assert count_hardcoded_ips(["ip 10.0.0.1 and 172.16.0.2"]) == 2
 
 
 def test_ips_excludes_broadcast() -> None:
@@ -159,7 +157,7 @@ def test_ips_no_match() -> None:
 
 
 def test_ips_finding_has_low_confidence() -> None:
-    findings = find_hardcoded_ips(["192.168.1.1"])
+    findings = find_hardcoded_ips(["host 192.168.1.1"])
     assert len(findings) == 1
     assert findings[0].confidence == "low"
     assert findings[0].detector == "hardcoded_ips"
@@ -175,11 +173,11 @@ def test_public_ips_empty() -> None:
 
 
 def test_public_ips_routable() -> None:
-    assert count_public_ips(["8.8.8.8"]) == 1
+    assert count_public_ips(["dns server 8.8.8.8"]) == 1
 
 
 def test_public_ips_c2_candidate() -> None:
-    assert count_public_ips(["45.33.32.156"]) == 1
+    assert count_public_ips(["remote 45.33.32.156"]) == 1
 
 
 def test_public_ips_ignores_private_10() -> None:
@@ -195,7 +193,7 @@ def test_public_ips_ignores_rfc1918_172() -> None:
 
 
 def test_public_ips_172_32_is_public() -> None:
-    assert count_public_ips(["172.32.0.1"]) == 1
+    assert count_public_ips(["host 172.32.0.1"]) == 1
 
 
 def test_public_ips_ignores_link_local() -> None:
@@ -207,11 +205,11 @@ def test_public_ips_ignores_multicast() -> None:
 
 
 def test_public_ips_multiple_in_one_string() -> None:
-    assert count_public_ips(["8.8.8.8 and 1.1.1.1"]) == 2
+    assert count_public_ips(["dns server 8.8.8.8 and 1.1.1.1"]) == 2
 
 
 def test_public_ips_finding_has_high_confidence() -> None:
-    findings = find_public_ips(["8.8.8.8"])
+    findings = find_public_ips(["dns 8.8.8.8"])
     assert len(findings) == 1
     assert findings[0].confidence == "high"
     assert findings[0].detector == "public_ips"
@@ -254,20 +252,10 @@ def test_debug_account_empty() -> None:
     assert has_debug_account([]) is False
 
 
-def test_debug_account_debug() -> None:
-    assert has_debug_account(["debug"]) is True
-
-
-def test_debug_account_guest() -> None:
-    assert has_debug_account(["guest"]) is True
-
-
-def test_debug_account_test() -> None:
-    assert has_debug_account(["test"]) is True
-
-
-def test_debug_account_case_insensitive() -> None:
-    assert has_debug_account(["DEBUG"]) is True
+@pytest.mark.parametrize("name", ["debug", "guest", "test", "DEBUG"])
+def test_debug_account_requires_auth_context(name: str) -> None:
+    assert has_debug_account([name, "mtest   - simple RAM test"]) is False
+    assert has_debug_account([f"login: {name}"]) is True
 
 
 def test_debug_account_no_partial_match() -> None:
@@ -279,7 +267,7 @@ def test_debug_account_no_match() -> None:
 
 
 def test_debug_account_finding_has_low_confidence() -> None:
-    findings = find_debug_account(["debug"])
+    findings = find_debug_account(["login: debug"])
     assert len(findings) == 1
     assert findings[0].confidence == "low"
     assert findings[0].detector == "debug_account"
@@ -436,13 +424,94 @@ def test_tokens_no_match() -> None:
     assert count_api_tokens(["short string"]) == 0
 
 
+_REPORT_PASSWORD_CASES = [
+    ("password=%s", 0),
+    ("password=%.*s", 0),
+    ("password=${PASSWORD}", 0),
+    ("password=$1", 0),
+    ("password={{password}}", 0),
+    ("password=<password>", 0),
+    ("password=NULL", 0),
+    ("password=None", 0),
+    ("password=(null)", 0),
+    ("password_length=8", 0),
+    ("password_hash=5f4dcc3b5aa765d61d8327deb882cf99", 0),
+    ("Password authentication failed", 0),
+    ("setPassword", 0),
+    ("/etc/passwd", 0),
+    ("passwd.c", 0),
+    ("confirm password", 0),
+    ("wpa_psk=12345678", 1),
+    ("wl0_wpa_psk=12345678", 1),
+    ("ftp_pass=admin123", 1),
+    ("adminPassword=admin123", 1),
+    ("admin_password=admin123", 1),
+    ("http://x/?mode=auto&password=admin", 1),
+]
+
+
+@pytest.mark.parametrize("text,expected", _REPORT_PASSWORD_CASES)
+def test_password_regression(text: str, expected: int) -> None:
+    assert count_hardcoded_passwords([text]) == expected
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("7.0.1.0", 0),
+        ("version 7.0.1.0", 0),
+        ("Linux-2.6.22.18", 0),
+        ("255.255.255.0", 0),
+        ("ip 0.0.0.1", 0),
+        ("host 255.1.2.3", 0),
+        ("ip 8.8.8.8-extra", 0),
+        ("ip 8.8.8.8_abc", 0),
+        ("ip 8.8.8.8.9", 0),
+        ("dns server 8.8.8.8", 1),
+        ("https://8.8.8.8/", 1),
+        ("8.8.8.8:443", 1),
+    ],
+)
+def test_ips_network_context_and_boundaries(text: str, expected: int) -> None:
+    assert count_public_ips([text]) == expected
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("WLAN_ABandRegion0_ChannelselectItems_3", 0),
+        ("0123456789abcdefghijklmnopqrstuvwxyz", 0),
+        ("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", 0),
+        ("abc123" + "0" * 26, 1),
+        ("Ab7kQr2mNz9pXv4tYw6sDc8hJf3lGp5uBa0e", 0),
+        ("ObroVR5fBbnGbmPIoLZaZSvj9vfg2MZUI+yJ1N3KTcosfogr", 1),
+    ],
+)
+def test_api_token_candidates(text: str, expected: int) -> None:
+    assert count_api_tokens([text]) == expected
+
+
+def test_password_kv_precedes_token_and_counts_once() -> None:
+    finding = find_hardcoded_passwords(
+        ["default login admin password=${PASS}&wifi_psk=s3cr3tKey"]
+    )
+    assert len(finding) == 1
+    assert finding[0].confidence == "high"
+    assert "wifi_psk=s3cr3tKey" in finding[0].context
+
+
+def test_dropbear_legacy_and_current_versions() -> None:
+    assert has_outdated_dropbear(["Dropbear v0.52", "Dropbear SSH v0.52.1"])
+    assert not has_outdated_dropbear(["Dropbear v2022.83"])
+
+
 # ---------------------------------------------------------------------------
 # scan_strings_findings / findings_to_counts / scan_strings
 # ---------------------------------------------------------------------------
 
 
 def test_scan_strings_findings_returns_all_matches() -> None:
-    strings = ["password=admin", "192.168.1.1", "/usr/sbin/telnetd"]
+    strings = ["password=admin", "host 192.168.1.1", "/usr/sbin/telnetd"]
     findings = scan_strings_findings(strings)
     detectors = {f.detector for f in findings}
     assert "hardcoded_passwords" in detectors
@@ -451,7 +520,12 @@ def test_scan_strings_findings_returns_all_matches() -> None:
 
 
 def test_findings_to_counts_matches_scan_strings() -> None:
-    strings = ["password=admin", "192.168.1.1", "/usr/sbin/telnetd", "OpenSSL 1.0.2k"]
+    strings = [
+        "password=admin",
+        "host 192.168.1.1",
+        "/usr/sbin/telnetd",
+        "OpenSSL 1.0.2k",
+    ]
     via_findings = findings_to_counts(scan_strings_findings(strings))
     assert via_findings == scan_strings(strings)
 
@@ -490,7 +564,7 @@ def test_scan_strings_empty_defaults() -> None:
 def test_scan_strings_detects_features() -> None:
     strings = [
         "password=admin",
-        "192.168.1.1",
+        "host 192.168.1.1",
         "/usr/sbin/telnetd",
         "OpenSSL 1.0.2k",
         "https://example.com",
