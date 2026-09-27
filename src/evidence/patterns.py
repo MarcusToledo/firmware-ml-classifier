@@ -18,18 +18,34 @@ from collections.abc import Iterator
 
 from src.evidence.findings import SecurityFinding
 
+CONFIDENCE_HIGH = "high"
+CONFIDENCE_MEDIUM = "medium"
+CONFIDENCE_LOW = "low"
+
+DETECTOR_HARDCODED_PASSWORDS = "hardcoded_passwords"
+DETECTOR_CREDENTIAL_PAIRS = "credential_pairs"
+DETECTOR_HARDCODED_IPS = "hardcoded_ips"
+DETECTOR_PUBLIC_IPS = "public_ips"
+DETECTOR_TELNETD = "telnetd"
+DETECTOR_DEBUG_ACCOUNT = "debug_account"
+DETECTOR_OUTDATED_LIBSSL = "outdated_libssl"
+DETECTOR_OUTDATED_BUSYBOX = "outdated_busybox"
+DETECTOR_OUTDATED_DROPBEAR = "outdated_dropbear"
+DETECTOR_URLS = "urls"
+DETECTOR_API_TOKENS = "api_tokens"
+
 DETECTOR_VERSIONS: dict[str, str] = {
-    "hardcoded_passwords": "2.0",
-    "credential_pairs": "1.0",
-    "hardcoded_ips": "2.0",
-    "public_ips": "2.0",
-    "telnetd": "1.0",
-    "debug_account": "2.0",
-    "outdated_libssl": "1.0",
-    "outdated_busybox": "1.0",
-    "outdated_dropbear": "2.0",
-    "urls": "1.0",
-    "api_tokens": "2.0",
+    DETECTOR_HARDCODED_PASSWORDS: "2.1",
+    DETECTOR_CREDENTIAL_PAIRS: "1.1",
+    DETECTOR_HARDCODED_IPS: "2.1",
+    DETECTOR_PUBLIC_IPS: "2.1",
+    DETECTOR_TELNETD: "1.1",
+    DETECTOR_DEBUG_ACCOUNT: "2.1",
+    DETECTOR_OUTDATED_LIBSSL: "1.1",
+    DETECTOR_OUTDATED_BUSYBOX: "1.1",
+    DETECTOR_OUTDATED_DROPBEAR: "2.1",
+    DETECTOR_URLS: "1.1",
+    DETECTOR_API_TOKENS: "2.1",
 }
 
 # ---------------------------------------------------------------------------
@@ -153,7 +169,7 @@ def find_hardcoded_passwords(strings: list[str]) -> list[SecurityFinding]:
         )
         if match is not None:
             context = f"key=value assignment: {match.group(0)!r}"
-            confidence = "high"
+            confidence = CONFIDENCE_HIGH
         elif _has_default_password_token(s):
             token = next(
                 word
@@ -161,7 +177,7 @@ def find_hardcoded_passwords(strings: list[str]) -> list[SecurityFinding]:
                 if word.lower() in _DEFAULT_PASSWORDS - _AUTH_CONTEXT_TRIGGERS
             )
             context = f"default password token: {token!r}"
-            confidence = "medium"
+            confidence = CONFIDENCE_MEDIUM
         else:
             continue
         findings.append(
@@ -170,8 +186,8 @@ def find_hardcoded_passwords(strings: list[str]) -> list[SecurityFinding]:
                 source=s,
                 context=context,
                 confidence=confidence,
-                detector="hardcoded_passwords",
-                detector_version=DETECTOR_VERSIONS["hardcoded_passwords"],
+                detector=DETECTOR_HARDCODED_PASSWORDS,
+                detector_version=DETECTOR_VERSIONS[DETECTOR_HARDCODED_PASSWORDS],
             )
         )
     return findings
@@ -235,9 +251,9 @@ def find_credential_pairs(strings: list[str]) -> list[SecurityFinding]:
                         type="credential_pair",
                         source=s,
                         context=f"weak user:pass pair: {m.group(0)!r}",
-                        confidence="high",
-                        detector="credential_pairs",
-                        detector_version=DETECTOR_VERSIONS["credential_pairs"],
+                        confidence=CONFIDENCE_HIGH,
+                        detector=DETECTOR_CREDENTIAL_PAIRS,
+                        detector_version=DETECTOR_VERSIONS[DETECTOR_CREDENTIAL_PAIRS],
                     )
                 )
                 break
@@ -252,6 +268,21 @@ def count_credential_pairs(strings: list[str]) -> int:
 # ---------------------------------------------------------------------------
 # Padrões de endereço IP
 # ---------------------------------------------------------------------------
+
+_MAX_IPV4_OCTET = 255
+_UNSPECIFIED_FIRST_OCTET = 0
+_LOOPBACK_FIRST_OCTET = 127
+_PRIVATE_CLASS_A_FIRST_OCTET = 10
+_PRIVATE_CLASS_B_FIRST_OCTET = 172
+_PRIVATE_CLASS_B_SECOND_MIN = 16
+_PRIVATE_CLASS_B_SECOND_MAX = 31
+_PRIVATE_CLASS_C_FIRST_OCTET = 192
+_PRIVATE_CLASS_C_SECOND_OCTET = 168
+_LINK_LOCAL_FIRST_OCTET = 169
+_LINK_LOCAL_SECOND_OCTET = 254
+_MULTICAST_FIRST_MIN = 224
+_MULTICAST_FIRST_MAX = 239
+_RESERVED_FIRST_MIN = 240
 
 _IPV4_RE = re.compile(
     r"(?<![-_A-Za-z0-9.])(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?![-_A-Za-z0-9]|\.\d)"
@@ -291,7 +322,11 @@ def _iter_contextual_ipv4(s: str) -> Iterator[tuple[int, int, int, int]]:
             int(match.group(3)),
             int(match.group(4)),
         )
-        if any(octet > 255 for octet in octets) or octets[0] in (0, 127, 255):
+        if any(octet > _MAX_IPV4_OCTET for octet in octets) or octets[0] in (
+            _UNSPECIFIED_FIRST_OCTET,
+            _LOOPBACK_FIRST_OCTET,
+            _MAX_IPV4_OCTET,
+        ):
             continue
         if _VERSION_IP_PREFIX_RE.search(s[: match.start()]):
             continue
@@ -316,9 +351,9 @@ def find_hardcoded_ips(strings: list[str]) -> list[SecurityFinding]:
                     type="hardcoded_ip",
                     source=s,
                     context=f"IPv4 address: {ip}",
-                    confidence="low",
-                    detector="hardcoded_ips",
-                    detector_version=DETECTOR_VERSIONS["hardcoded_ips"],
+                    confidence=CONFIDENCE_LOW,
+                    detector=DETECTOR_HARDCODED_IPS,
+                    detector_version=DETECTOR_VERSIONS[DETECTOR_HARDCODED_IPS],
                 )
             )
     return findings
@@ -340,26 +375,28 @@ def find_public_ips(strings: list[str]) -> list[SecurityFinding]:
     for s in strings:
         for a, b, c, d in _iter_contextual_ipv4(s):
             ip = f"{a}.{b}.{c}.{d}"
-            if a == 10:
+            if a == _PRIVATE_CLASS_A_FIRST_OCTET:
                 continue
-            if a == 172 and 16 <= b <= 31:
+            if a == _PRIVATE_CLASS_B_FIRST_OCTET and (
+                _PRIVATE_CLASS_B_SECOND_MIN <= b <= _PRIVATE_CLASS_B_SECOND_MAX
+            ):
                 continue
-            if a == 192 and b == 168:
+            if a == _PRIVATE_CLASS_C_FIRST_OCTET and b == _PRIVATE_CLASS_C_SECOND_OCTET:
                 continue
-            if a == 169 and b == 254:
+            if a == _LINK_LOCAL_FIRST_OCTET and b == _LINK_LOCAL_SECOND_OCTET:
                 continue
-            if 224 <= a <= 239:
+            if _MULTICAST_FIRST_MIN <= a <= _MULTICAST_FIRST_MAX:
                 continue
-            if a >= 240:
+            if a >= _RESERVED_FIRST_MIN:
                 continue
             findings.append(
                 SecurityFinding(
                     type="public_ip",
                     source=s,
                     context=f"public (non-RFC-1918) IPv4 address: {ip}",
-                    confidence="high",
-                    detector="public_ips",
-                    detector_version=DETECTOR_VERSIONS["public_ips"],
+                    confidence=CONFIDENCE_HIGH,
+                    detector=DETECTOR_PUBLIC_IPS,
+                    detector_version=DETECTOR_VERSIONS[DETECTOR_PUBLIC_IPS],
                 )
             )
     return findings
@@ -385,9 +422,9 @@ def find_telnetd(strings: list[str]) -> list[SecurityFinding]:
             type="exposed_service",
             source=s,
             context=f"{_TELNETD_SUBSTR!r} substring found",
-            confidence="high",
-            detector="telnetd",
-            detector_version=DETECTOR_VERSIONS["telnetd"],
+            confidence=CONFIDENCE_HIGH,
+            detector=DETECTOR_TELNETD,
+            detector_version=DETECTOR_VERSIONS[DETECTOR_TELNETD],
         )
         for s in strings
         if _TELNETD_SUBSTR in s
@@ -413,9 +450,9 @@ def find_debug_account(strings: list[str]) -> list[SecurityFinding]:
                     type="debug_account",
                     source=s,
                     context=f"debug/guest/test keyword: {name!r}",
-                    confidence="low",
-                    detector="debug_account",
-                    detector_version=DETECTOR_VERSIONS["debug_account"],
+                    confidence=CONFIDENCE_LOW,
+                    detector=DETECTOR_DEBUG_ACCOUNT,
+                    detector_version=DETECTOR_VERSIONS[DETECTOR_DEBUG_ACCOUNT],
                 )
             )
     return findings
@@ -480,7 +517,7 @@ def _find_outdated_version(
                             f"{lib_name} version {m.group(1)} "
                             f"below threshold {threshold}"
                         ),
-                        confidence="medium",
+                        confidence=CONFIDENCE_MEDIUM,
                         detector=detector,
                         detector_version=DETECTOR_VERSIONS[detector],
                     )
@@ -490,7 +527,9 @@ def _find_outdated_version(
 
 def find_outdated_libssl(strings: list[str]) -> list[SecurityFinding]:
     """Encontra strings com versão do OpenSSL abaixo do limiar."""
-    return _find_outdated_version(strings, _LIBSSL_RE, "libssl", "outdated_libssl")
+    return _find_outdated_version(
+        strings, _LIBSSL_RE, "libssl", DETECTOR_OUTDATED_LIBSSL
+    )
 
 
 def has_outdated_libssl(strings: list[str]) -> bool:
@@ -500,7 +539,9 @@ def has_outdated_libssl(strings: list[str]) -> bool:
 
 def find_outdated_busybox(strings: list[str]) -> list[SecurityFinding]:
     """Encontra strings com versão do BusyBox abaixo do limiar."""
-    return _find_outdated_version(strings, _BUSYBOX_RE, "busybox", "outdated_busybox")
+    return _find_outdated_version(
+        strings, _BUSYBOX_RE, "busybox", DETECTOR_OUTDATED_BUSYBOX
+    )
 
 
 def has_outdated_busybox(strings: list[str]) -> bool:
@@ -511,7 +552,7 @@ def has_outdated_busybox(strings: list[str]) -> bool:
 def find_outdated_dropbear(strings: list[str]) -> list[SecurityFinding]:
     """Encontra strings com versão do Dropbear abaixo do limiar."""
     return _find_outdated_version(
-        strings, _DROPBEAR_RE, "dropbear", "outdated_dropbear"
+        strings, _DROPBEAR_RE, "dropbear", DETECTOR_OUTDATED_DROPBEAR
     )
 
 
@@ -531,6 +572,7 @@ _API_TOKEN_RE = re.compile(
 _HEX_TOKEN_RE = re.compile(r"[0-9a-fA-F]{32,}\Z")
 _API_TOKEN_MIN_ENTROPY = 4.3
 _API_TOKEN_MAX_RUN = 5
+_TOKEN_CONTEXT_LENGTH = 12
 
 
 def _shannon_entropy_chars(s: str) -> float:
@@ -561,9 +603,9 @@ def find_urls(strings: list[str]) -> list[SecurityFinding]:
                     type="url",
                     source=s,
                     context=f"URL: {m.group(0)}",
-                    confidence="low",
-                    detector="urls",
-                    detector_version=DETECTOR_VERSIONS["urls"],
+                    confidence=CONFIDENCE_LOW,
+                    detector=DETECTOR_URLS,
+                    detector_version=DETECTOR_VERSIONS[DETECTOR_URLS],
                 )
             )
     return findings
@@ -593,10 +635,10 @@ def find_api_tokens(strings: list[str]) -> list[SecurityFinding]:
                 SecurityFinding(
                     type="api_token_candidate",
                     source=s,
-                    context=f"long token: {candidate[:12]}…",
-                    confidence="low",
-                    detector="api_tokens",
-                    detector_version=DETECTOR_VERSIONS["api_tokens"],
+                    context=f"long token: {candidate[:_TOKEN_CONTEXT_LENGTH]}…",
+                    confidence=CONFIDENCE_LOW,
+                    detector=DETECTOR_API_TOKENS,
+                    detector_version=DETECTOR_VERSIONS[DETECTOR_API_TOKENS],
                 )
             )
     return findings
@@ -612,20 +654,20 @@ def count_api_tokens(strings: list[str]) -> int:
 # ---------------------------------------------------------------------------
 
 _COUNT_DETECTORS: dict[str, str] = {
-    "hardcoded_passwords": "count_hardcoded_passwords",
-    "credential_pairs": "count_credential_pairs",
-    "hardcoded_ips": "count_hardcoded_ips",
-    "public_ips": "count_public_ips",
-    "urls": "count_urls",
-    "api_tokens": "count_api_tokens",
+    DETECTOR_HARDCODED_PASSWORDS: "count_hardcoded_passwords",
+    DETECTOR_CREDENTIAL_PAIRS: "count_credential_pairs",
+    DETECTOR_HARDCODED_IPS: "count_hardcoded_ips",
+    DETECTOR_PUBLIC_IPS: "count_public_ips",
+    DETECTOR_URLS: "count_urls",
+    DETECTOR_API_TOKENS: "count_api_tokens",
 }
 
 _BOOL_DETECTORS: dict[str, str] = {
-    "telnetd": "has_telnetd",
-    "debug_account": "has_debug_account",
-    "outdated_libssl": "has_outdated_libssl",
-    "outdated_busybox": "has_outdated_busybox",
-    "outdated_dropbear": "has_outdated_dropbear",
+    DETECTOR_TELNETD: "has_telnetd",
+    DETECTOR_DEBUG_ACCOUNT: "has_debug_account",
+    DETECTOR_OUTDATED_LIBSSL: "has_outdated_libssl",
+    DETECTOR_OUTDATED_BUSYBOX: "has_outdated_busybox",
+    DETECTOR_OUTDATED_DROPBEAR: "has_outdated_dropbear",
 }
 
 

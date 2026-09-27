@@ -8,7 +8,7 @@ from src.evidence import binwalk_findings as b
 from src.evidence import patterns as p
 
 _DETECTOR_PARTS: dict[str, list[object]] = {
-    "hardcoded_passwords": [
+    p.DETECTOR_HARDCODED_PASSWORDS: [
         p.find_hardcoded_passwords,
         p._PASSWORD_KV_RE,
         p._CREDENTIAL_KEY_TOKENS,
@@ -25,114 +25,143 @@ _DETECTOR_PARTS: dict[str, list[object]] = {
         p._is_rejected_value,
         p._has_default_password_token,
     ],
-    "credential_pairs": [p.find_credential_pairs, p._CRED_PAIR_RE, p._CRED_PAIR_WEAK],
-    "hardcoded_ips": [
+    p.DETECTOR_CREDENTIAL_PAIRS: [
+        p.find_credential_pairs,
+        p._CRED_PAIR_RE,
+        p._CRED_PAIR_WEAK,
+    ],
+    p.DETECTOR_HARDCODED_IPS: [
         p.find_hardcoded_ips,
         p._iter_contextual_ipv4,
         p._IPV4_RE,
         p._VERSION_IP_PREFIX_RE,
         p._NETWORK_CONTEXT_WORDS,
         p._WORD_RE,
+        (
+            p._MAX_IPV4_OCTET,
+            p._UNSPECIFIED_FIRST_OCTET,
+            p._LOOPBACK_FIRST_OCTET,
+        ),
     ],
-    "public_ips": [
+    p.DETECTOR_PUBLIC_IPS: [
         p.find_public_ips,
         p._iter_contextual_ipv4,
         p._IPV4_RE,
         p._VERSION_IP_PREFIX_RE,
         p._NETWORK_CONTEXT_WORDS,
         p._WORD_RE,
+        (
+            p._MAX_IPV4_OCTET,
+            p._UNSPECIFIED_FIRST_OCTET,
+            p._LOOPBACK_FIRST_OCTET,
+            p._PRIVATE_CLASS_A_FIRST_OCTET,
+            p._PRIVATE_CLASS_B_FIRST_OCTET,
+            p._PRIVATE_CLASS_B_SECOND_MIN,
+            p._PRIVATE_CLASS_B_SECOND_MAX,
+            p._PRIVATE_CLASS_C_FIRST_OCTET,
+            p._PRIVATE_CLASS_C_SECOND_OCTET,
+            p._LINK_LOCAL_FIRST_OCTET,
+            p._LINK_LOCAL_SECOND_OCTET,
+            p._MULTICAST_FIRST_MIN,
+            p._MULTICAST_FIRST_MAX,
+            p._RESERVED_FIRST_MIN,
+        ),
     ],
-    "telnetd": [p.find_telnetd, p._TELNETD_SUBSTR],
-    "debug_account": [
+    p.DETECTOR_TELNETD: [p.find_telnetd, p._TELNETD_SUBSTR],
+    p.DETECTOR_DEBUG_ACCOUNT: [
         p.find_debug_account,
         p._DEBUG_ACCOUNT_WORDS,
         p._AUTH_CONTEXT_TRIGGERS,
         p._WORD_RE,
     ],
-    "outdated_libssl": [
+    p.DETECTOR_OUTDATED_LIBSSL: [
         p.find_outdated_libssl,
         p._find_outdated_version,
         p._parse_version,
         p._LIBSSL_RE,
         p._VERSION_THRESHOLDS,
     ],
-    "outdated_busybox": [
+    p.DETECTOR_OUTDATED_BUSYBOX: [
         p.find_outdated_busybox,
         p._find_outdated_version,
         p._parse_version,
         p._BUSYBOX_RE,
         p._VERSION_THRESHOLDS,
     ],
-    "outdated_dropbear": [
+    p.DETECTOR_OUTDATED_DROPBEAR: [
         p.find_outdated_dropbear,
         p._find_outdated_version,
         p._parse_version,
         p._DROPBEAR_RE,
         p._VERSION_THRESHOLDS,
     ],
-    "urls": [p.find_urls, p._URL_RE],
-    "api_tokens": [
+    p.DETECTOR_URLS: [p.find_urls, p._URL_RE],
+    p.DETECTOR_API_TOKENS: [
         p.find_api_tokens,
         p._API_TOKEN_RE,
         p._HEX_TOKEN_RE,
         p._API_TOKEN_MIN_ENTROPY,
         p._API_TOKEN_MAX_RUN,
+        p._TOKEN_CONTEXT_LENGTH,
         p._shannon_entropy_chars,
         p._has_ascending_run,
     ],
-    "crypto_signatures": [b.find_crypto_signatures, b._CRYPTO_RE],
-    "encrypted_sections": [b.find_encrypted_sections, b._ENCRYPTED_RE],
+    b.DETECTOR_CRYPTO_SIGNATURES: [b.find_crypto_signatures, b._CRYPTO_RE],
+    b.DETECTOR_ENCRYPTED_SECTIONS: [b.find_encrypted_sections, b._ENCRYPTED_RE],
 }
 
 _EXPECTED: dict[str, tuple[str, str]] = {
-    "hardcoded_passwords": (
-        "2.0",
-        "73ef16fb882f3aea2cf09dc37f9f333fefe45a1eded27e548fa3c36e89e1cec4",
+    p.DETECTOR_HARDCODED_PASSWORDS: (
+        "2.1",
+        "15ffc82fb4ad66a4b0564143dfa5448c98801d7c5936209f3f8e8088600bd704",
     ),
-    "credential_pairs": (
-        "1.0",
-        "e9a37d3909a2d8736f9ba8879d52dcd1132c41f6cd517e85b4c9964f18b48e2b",
+    p.DETECTOR_CREDENTIAL_PAIRS: (
+        "1.1",
+        "94ae0030d1b63c144cb2ec5cfc1651c7b13d0d3ff941b37a9d12612a42f25227",
     ),
-    "hardcoded_ips": (
-        "2.0",
-        "4b50d0c3c68103a18ed462aae8defdd68d32237a560fab1a2bff4d87df72aed0",
+    p.DETECTOR_HARDCODED_IPS: (
+        "2.1",
+        "fcbc03b0ce20d6961f8be8bb0ac7ed4b2ef88eb8f7d3cbce0d0915c6da318850",
     ),
-    "public_ips": (
-        "2.0",
-        "c3dc77c699483f9eed668a2fc57036f2ac672a6d738cb47c779c0de34b89b3fd",
+    p.DETECTOR_PUBLIC_IPS: (
+        "2.1",
+        "088f8f84a726117abfdc9e386437d5635f75e7242c5b47d608a5dea78380b7fe",
     ),
-    "telnetd": (
-        "1.0",
-        "9d9dd83f417072789df4d9b09684be9bdbc6b43e27d26a2c120d004c7d62e7ff",
+    p.DETECTOR_TELNETD: (
+        "1.1",
+        "05f33b81cd900f00e375b54fd20f67988f2a2f8aab66ffcee9c898cc122f706d",
     ),
-    "debug_account": (
-        "2.0",
-        "0c47a75b83098e20ae23474af428248f7541b8e72144b25f24e9ee33bdc92b09",
+    p.DETECTOR_DEBUG_ACCOUNT: (
+        "2.1",
+        "ae28ec239c50ce713689f1d05e4fb66bff0f8472174a948a59627a8f8165ce27",
     ),
-    "outdated_libssl": (
-        "1.0",
-        "7a1acd5a3f6243e34040b51c2008fb847e5752d6a5a3210b88bbbecf1a263d65",
+    p.DETECTOR_OUTDATED_LIBSSL: (
+        "1.1",
+        "859b9199d1a33893bf4cc219ecad0350015913e3ad67db805ae39aa889a688ea",
     ),
-    "outdated_busybox": (
-        "1.0",
-        "4a604c94f55bf7703b34100cd7969589e2326fff616bc45f967f54eeeb06bbe9",
+    p.DETECTOR_OUTDATED_BUSYBOX: (
+        "1.1",
+        "06caca75534d5e215f03b6528733e1784f45b45d8d169d35d9f1e6e958bb32ef",
     ),
-    "outdated_dropbear": (
-        "2.0",
-        "acafad0084e8c1f8ffe362fe708cb363ddd0f4c5bc10a877d497c0ec5d919ea9",
+    p.DETECTOR_OUTDATED_DROPBEAR: (
+        "2.1",
+        "b5984c6e2598d30f21f42b5ab641a0c1a2e06a8a087361c0f43be2aa2d33b3e4",
     ),
-    "urls": ("1.0", "8bc41df2fb25b1349e79e0149463d699388b63d96475ee38fa1be395aa328517"),
-    "api_tokens": (
-        "2.0",
-        "e50b16d8845d2b198a1402f53c8b5fb38a2640f986f1567b57ac7a531d2187df",
+    p.DETECTOR_URLS: (
+        "1.1",
+        "b52c02688f385a1042a85795312dd4de0991bdba42f09d8145cd9fbfae8831ce",
     ),
-    "crypto_signatures": (
-        "1.0",
-        "3c94c59e38d11193d25726d6bf3028436f4052d569dc7cf165960930abc0e212",
+    p.DETECTOR_API_TOKENS: (
+        "2.1",
+        "5040f7147335b8e33aebec54be2ad8954d79a3ff74f0c8be3f7419fa125bbd8a",
     ),
-    "encrypted_sections": (
-        "2.0",
-        "376e0e6c8b7e43c64590075c99713371a98ed65257f896c0f3e2f8eba5facd1b",
+    b.DETECTOR_CRYPTO_SIGNATURES: (
+        "1.1",
+        "dda8d8ace86e5d900b27d10524d3feefc342ab6f61e04ed2133fc7739ceb8ad6",
+    ),
+    b.DETECTOR_ENCRYPTED_SECTIONS: (
+        "2.1",
+        "106f58db1c84dd16465117c52f80cf19e499e6effcabd140894e307c5493f894",
     ),
 }
 

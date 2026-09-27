@@ -13,10 +13,15 @@ from __future__ import annotations
 import re
 
 from src.evidence.findings import SecurityFinding
+from src.evidence.patterns import CONFIDENCE_MEDIUM
+
+DETECTOR_CRYPTO_SIGNATURES = "crypto_signatures"
+DETECTOR_ENCRYPTED_SECTIONS = "encrypted_sections"
+
 
 DETECTOR_VERSIONS: dict[str, str] = {
-    "crypto_signatures": "1.0",
-    "encrypted_sections": "2.0",
+    DETECTOR_CRYPTO_SIGNATURES: "1.1",
+    DETECTOR_ENCRYPTED_SECTIONS: "2.1",
 }
 
 _CRYPTO_RE = re.compile(
@@ -41,9 +46,9 @@ def find_crypto_signatures(descriptions: list[str]) -> list[SecurityFinding]:
                     type="crypto_signature",
                     source=d,
                     context=f"cryptographic construct: {m.group(0)!r}",
-                    confidence="medium",
-                    detector="crypto_signatures",
-                    detector_version=DETECTOR_VERSIONS["crypto_signatures"],
+                    confidence=CONFIDENCE_MEDIUM,
+                    detector=DETECTOR_CRYPTO_SIGNATURES,
+                    detector_version=DETECTOR_VERSIONS[DETECTOR_CRYPTO_SIGNATURES],
                 )
             )
     return findings
@@ -67,9 +72,9 @@ def find_encrypted_sections(descriptions: list[str]) -> list[SecurityFinding]:
                     type="encrypted_section",
                     source=d,
                     context=f"encryption indicator: {m.group(0)!r}",
-                    confidence="medium",
-                    detector="encrypted_sections",
-                    detector_version=DETECTOR_VERSIONS["encrypted_sections"],
+                    confidence=CONFIDENCE_MEDIUM,
+                    detector=DETECTOR_ENCRYPTED_SECTIONS,
+                    detector_version=DETECTOR_VERSIONS[DETECTOR_ENCRYPTED_SECTIONS],
                 )
             )
     return findings
