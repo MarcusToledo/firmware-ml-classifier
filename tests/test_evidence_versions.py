@@ -37,6 +37,8 @@ _DETECTOR_PARTS: dict[str, list[object]] = {
         p._VERSION_IP_PREFIX_RE,
         p._NETWORK_CONTEXT_WORDS,
         p._WORD_RE,
+        p._url_spans,
+        p._URL_RE,
         (
             p._MAX_IPV4_OCTET,
             p._UNSPECIFIED_FIRST_OCTET,
@@ -50,6 +52,8 @@ _DETECTOR_PARTS: dict[str, list[object]] = {
         p._VERSION_IP_PREFIX_RE,
         p._NETWORK_CONTEXT_WORDS,
         p._WORD_RE,
+        p._url_spans,
+        p._URL_RE,
         (
             p._MAX_IPV4_OCTET,
             p._UNSPECIFIED_FIRST_OCTET,
@@ -110,11 +114,11 @@ _EXPECTED: dict[str, tuple[str, str]] = {
     ),
     p.DETECTOR_HARDCODED_IPS: (
         "2.0",
-        "83942e9e0ed01dbacbfb8290f9989815fea102a1d247ee932d9196f7b56b1a63",
+        "bee8d81858f59f759d078dde51df3277ccd9c0014b8e19be7c677c5b57b2a9e4",
     ),
     p.DETECTOR_PUBLIC_IPS: (
         "2.0",
-        "ed51fe15222b1f3d99022885f42c9c4a9446643aab75423d5d3f2524d8d195bc",
+        "b80b8db6486333a3bf344ff35c9ec9c9663a89f2f619b368c2aceb4fd1c17257",
     ),
     p.DETECTOR_TELNETD: (
         "1.0",

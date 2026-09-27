@@ -492,7 +492,8 @@ def test_password_regression(text: str, expected: int) -> None:
         ("ip 8.8.8.8_abc", 0),
         ("ip 8.8.8.8.9", 0),
         ("dns server 8.8.8.8", 1),
-        ("https://8.8.8.8/", 1),
+        ("https://8.8.8.8/", 0),
+        ("mirror https://example.com/ 8.8.8.8", 1),
         ("8.8.8.8:443", 1),
     ],
 )
@@ -599,3 +600,17 @@ def test_scan_strings_detects_features() -> None:
     assert result["has_telnetd"] is True
     assert result["has_outdated_libssl"] is True
     assert result["count_urls"] == 1
+
+
+def test_ip_inside_url_counts_only_as_url() -> None:
+    for url in ("http://8.8.8.8/", "https://10.0.0.1:8080/cgi"):
+        result = scan_strings([url])
+        assert result["count_urls"] == 1
+        assert result["count_hardcoded_ips"] == 0
+        assert result["count_public_ips"] == 0
+
+
+def test_ip_outside_url_still_counts_in_same_string() -> None:
+    result = scan_strings(["fetch http://example.com/fw from dns 8.8.8.8"])
+    assert result["count_urls"] == 1
+    assert result["count_public_ips"] == 1

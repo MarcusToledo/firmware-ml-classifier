@@ -299,12 +299,24 @@ _NETWORK_CONTEXT_WORDS: frozenset[str] = frozenset(
         "listen",
     }
 )
+_URL_RE = re.compile(r"https?://[^\s\"'<>]+", re.IGNORECASE)
+
+
+def _url_spans(s: str) -> list[tuple[int, int]]:
+    """Retorna os intervalos das URLs HTTP/HTTPS da string."""
+    return [match.span() for match in _URL_RE.finditer(s)]
 
 
 def _iter_contextual_ipv4(s: str) -> Iterator[ipaddress.IPv4Address]:
-    """Produz IPv4 válidos quando a string oferece contexto de rede."""
+    """Produz IPv4 válidos quando a string oferece contexto de rede.
+
+    IPv4 dentro de uma URL não é produzido: a URL já conta em ``urls``.
+    """
     words = {word.lower() for word in _WORD_RE.findall(s)}
+    url_spans = _url_spans(s)
     for match in _IPV4_RE.finditer(s):
+        if any(start <= match.start() < end for start, end in url_spans):
+            continue
         octets = (
             int(match.group(1)),
             int(match.group(2)),
@@ -540,7 +552,6 @@ def has_outdated_dropbear(strings: list[str]) -> bool:
 # Padrões de URL e token
 # ---------------------------------------------------------------------------
 
-_URL_RE = re.compile(r"https?://[^\s\"'<>]+", re.IGNORECASE)
 _API_TOKEN_RE = re.compile(
     r"(?<![A-Za-z0-9+/])(?:[0-9a-fA-F]{32,}|[A-Za-z0-9+/]{40,}={0,2})(?![A-Za-z0-9+/=])"
 )
