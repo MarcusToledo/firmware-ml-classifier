@@ -238,14 +238,16 @@ def test_n_filesystems_zero_does_not_activate_binwalk_signal() -> None:
 
 def test_score_strings_no_features_absent() -> None:
     """No string features → signal absent with score 0."""
-    result = _score_strings({})
+    result = _score_strings({}, DEFAULT_CONFIG.sub_scores.strings)
     assert result.present is False
     assert result.score == 0.0
 
 
 def test_score_strings_outdated_libssl_raises_score() -> None:
     """has_outdated_libssl=True should produce a non-zero score."""
-    result = _score_strings({"has_outdated_libssl": True})
+    result = _score_strings(
+        {"has_outdated_libssl": True}, DEFAULT_CONFIG.sub_scores.strings
+    )
     assert result.present is True
     assert result.score > 0.0
 
@@ -257,7 +259,8 @@ def test_score_strings_no_outdated_lib_zero() -> None:
             "has_outdated_libssl": False,
             "has_outdated_busybox": False,
             "has_outdated_dropbear": False,
-        }
+        },
+        DEFAULT_CONFIG.sub_scores.strings,
     )
     assert result.present is True
     assert result.score == 0.0
@@ -265,60 +268,226 @@ def test_score_strings_no_outdated_lib_zero() -> None:
 
 def test_score_strings_outdated_busybox_contributes() -> None:
     """has_outdated_busybox=True should be reflected in score."""
-    r_false = _score_strings({"has_outdated_busybox": False})
-    r_true = _score_strings({"has_outdated_busybox": True})
+    r_false = _score_strings(
+        {"has_outdated_busybox": False}, DEFAULT_CONFIG.sub_scores.strings
+    )
+    r_true = _score_strings(
+        {"has_outdated_busybox": True}, DEFAULT_CONFIG.sub_scores.strings
+    )
     assert r_true.score > r_false.score
 
 
 def test_score_strings_outdated_dropbear_contributes() -> None:
     """has_outdated_dropbear=True should be reflected in score."""
-    r_false = _score_strings({"has_outdated_dropbear": False})
-    r_true = _score_strings({"has_outdated_dropbear": True})
+    r_false = _score_strings(
+        {"has_outdated_dropbear": False}, DEFAULT_CONFIG.sub_scores.strings
+    )
+    r_true = _score_strings(
+        {"has_outdated_dropbear": True}, DEFAULT_CONFIG.sub_scores.strings
+    )
     assert r_true.score > r_false.score
 
 
 def test_score_strings_passwords_contributes() -> None:
     """count_hardcoded_passwords should contribute to score."""
-    r_none = _score_strings({})
-    r_some = _score_strings({"count_hardcoded_passwords": 3})
+    r_none = _score_strings({}, DEFAULT_CONFIG.sub_scores.strings)
+    r_some = _score_strings(
+        {"count_hardcoded_passwords": 3}, DEFAULT_CONFIG.sub_scores.strings
+    )
     assert r_some.score > r_none.score
 
 
 def test_score_strings_combined_features() -> None:
     """Multiple string features produce higher score than single feature."""
-    r_single = _score_strings({"has_outdated_libssl": True})
+    r_single = _score_strings(
+        {"has_outdated_libssl": True}, DEFAULT_CONFIG.sub_scores.strings
+    )
     r_combined = _score_strings(
         {
             "has_outdated_libssl": True,
             "has_outdated_busybox": True,
             "count_hardcoded_passwords": 2,
-        }
+        },
+        DEFAULT_CONFIG.sub_scores.strings,
     )
     assert r_combined.score >= r_single.score
 
 
 def test_score_strings_cred_pairs_contributes() -> None:
     """count_credential_pairs > 0 should raise the strings sub-score."""
-    r_none = _score_strings({})
-    r_some = _score_strings({"count_credential_pairs": 1})
+    r_none = _score_strings({}, DEFAULT_CONFIG.sub_scores.strings)
+    r_some = _score_strings(
+        {"count_credential_pairs": 1}, DEFAULT_CONFIG.sub_scores.strings
+    )
     assert r_some.score > r_none.score
 
 
 def test_score_strings_public_ips_contributes() -> None:
     """count_public_ips > 0 should raise the strings sub-score."""
-    r_none = _score_strings({})
-    r_some = _score_strings({"count_public_ips": 1})
+    r_none = _score_strings({}, DEFAULT_CONFIG.sub_scores.strings)
+    r_some = _score_strings({"count_public_ips": 1}, DEFAULT_CONFIG.sub_scores.strings)
     assert r_some.score > r_none.score
 
 
 def test_score_strings_zero_new_counts_no_dilution() -> None:
     """New count features at zero must not dilute the existing score."""
-    r_without = _score_strings({"has_outdated_libssl": True})
+    r_without = _score_strings(
+        {"has_outdated_libssl": True}, DEFAULT_CONFIG.sub_scores.strings
+    )
     r_with_zeros = _score_strings(
         {
             "has_outdated_libssl": True,
             "count_credential_pairs": 0,
             "count_public_ips": 0,
-        }
+        },
+        DEFAULT_CONFIG.sub_scores.strings,
     )
     assert r_with_zeros.score == r_without.score
+
+
+def test_invalid_config_reports_path_and_key(tmp_path):
+    """Rejeita categorias inválidas com contexto da configuração."""
+    import pytest
+
+    cases = [
+        ("", "scoring"),
+        ("[]", "scoring"),
+        ("weights: {}", "scoring"),
+        ("scoring: {unknown: 1}", "scoring.unknown"),
+        ("unknown: 1\nscoring: {}", "unknown"),
+        ("scoring: {thresholds: {unknown: 1}}", "scoring.thresholds.unknown"),
+        ("scoring: {thresholds: {low: 0.8, high: 0.2}}", "scoring.thresholds"),
+        ("scoring: {thresholds: {low: true}}", "scoring.thresholds.low"),
+        ("scoring: {weights: {stats: -1}}", "scoring.weights.stats"),
+        ("scoring: {weights: {stats: 0, strings: 0, binwalk: 0}}", "scoring.weights"),
+        (
+            "scoring: {hard_rules: {has_telnetd_min_level: invalid}}",
+            "scoring.hard_rules.has_telnetd_min_level",
+        ),
+        (
+            "scoring: {hard_rules: {has_telnetd_min_level: [x]}}",
+            "scoring.hard_rules.has_telnetd_min_level",
+        ),
+        ("scoring: {weights: {strings: null}}", "scoring.weights.strings"),
+        ("scoring: {weights: false}", "scoring.weights"),
+        (
+            "scoring: {sub_scores: {stats: {entropy_high: false}}}",
+            "scoring.sub_scores.stats.entropy_high",
+        ),
+    ]
+    path = tmp_path / "invalid.yaml"
+    for text, key in cases:
+        path.write_text(text)
+        with pytest.raises(ValueError) as exc:
+            load_scoring_config(path)
+        assert str(path) in str(exc.value)
+        assert key in str(exc.value)
+
+
+def test_yaml_sub_scores_reproduce_defaults_and_override(tmp_path):
+    """Reproduz padrões e altera o cálculo ao mudar o YAML."""
+
+    yaml_path = Path(__file__).resolve().parents[1] / "configs/scoring.yaml"
+    loaded = load_scoring_config(yaml_path)
+    assert loaded.sub_scores == DEFAULT_CONFIG.sub_scores
+    features = {"entropy": 7.0}
+    assert (
+        score_firmware(features, loaded).numeric_score
+        == score_firmware(features, DEFAULT_CONFIG).numeric_score
+    )
+    text = yaml_path.read_text().replace("entropy_low: 6.0", "entropy_low: 7.5")
+    path = tmp_path / "changed.yaml"
+    path.write_text(text)
+    changed = load_scoring_config(path)
+    assert (
+        score_firmware(features, changed).numeric_score
+        != score_firmware(features, loaded).numeric_score
+    )
+
+
+def test_invalid_sub_scores_report_key(tmp_path):
+    """Rejeita faixas, fatores, saturações e tipos inválidos."""
+    import pytest
+
+    cases = [
+        ("stats: {entropy_low: 8, entropy_high: 7}", "stats.entropy"),
+        ("stats: {byte_mean_center: 0}", "stats.byte_mean_center"),
+        ("strings: {hardcoded_ips_steepness: 0}", "strings.hardcoded_ips_steepness"),
+        ("strings: {public_ips_midpoint: -1}", "strings.public_ips_midpoint"),
+        ("binwalk: {encrypted_score: 2}", "binwalk.encrypted_score"),
+        ("binwalk: {legacy_fs_types: [cramfs, '']}", "binwalk.legacy_fs_types"),
+        ("binwalk: {mystery: 3}", "binwalk.mystery"),
+    ]
+    path = tmp_path / "invalid.yaml"
+    for value, key in cases:
+        path.write_text(f"scoring:\n  sub_scores:\n    {value}\n")
+        with pytest.raises(ValueError, match=key):
+            load_scoring_config(path)
+
+
+def test_missing_values_are_ignored_by_group():
+    """Ignora None, NaN e pd.NA sem transformar ausência em risco."""
+    import numpy as np
+    import pandas as pd
+
+    features = {
+        "entropy": float("nan"),
+        "compress_ratio": np.nan,
+        "byte_mean": pd.NA,
+        "count_hardcoded_passwords": pd.NA,
+        "count_credential_pairs": np.nan,
+        "has_outdated_libssl": None,
+        "has_outdated_busybox": pd.NA,
+        "has_outdated_dropbear": float("nan"),
+        "count_hardcoded_ips": None,
+        "count_public_ips": pd.NA,
+        "has_encrypted_sections": pd.NA,
+        "n_crypto_signatures": np.nan,
+        "entropy_variance_across_sections": None,
+        "fs_type": pd.NA,
+        "compression_type": np.nan,
+        "n_filesystems": pd.NA,
+        "has_telnetd": pd.NA,
+        "has_debug_account": np.nan,
+    }
+    result = score_firmware(features, DEFAULT_CONFIG)
+    assert result.level == LABEL_NO_KNOWN_CVE
+    assert result.numeric_score == 0
+    assert result.hard_rules_triggered == []
+    assert [(s.present, s.missing_ignored) for s in result.signals] == [
+        (False, 3),
+        (False, 7),
+        (False, 6),
+    ]
+    assert all("missing_ignored=" in s.detail for s in result.signals)
+
+
+def test_hard_rules_apply_with_no_signal_and_track_all():
+    """Aplica mínimos sem peso e registra todas as regras acionadas."""
+    from src.scoring import HardRuleConfig, WeightConfig
+
+    single = score_firmware({"has_telnetd": True}, DEFAULT_CONFIG)
+    assert single.numeric_score == 0
+    assert single.level == LABEL_KNOWN_CVE
+    assert single.hard_rules_triggered == ["has_telnetd"]
+    config = ScoringConfig(
+        weights=WeightConfig(stats=0, strings=0, binwalk=0),
+        hard_rules=HardRuleConfig(has_debug_account_min_level=LABEL_CRITICAL_CVE),
+    )
+    result = score_firmware(
+        {
+            "entropy": 7,
+            "has_telnetd": True,
+            "has_debug_account": True,
+            "count_hardcoded_passwords": 1,
+        },
+        config,
+    )
+    assert result.numeric_score == 0
+    assert result.level == LABEL_CRITICAL_CVE
+    assert result.hard_rule_applied == "has_debug_account"
+    assert result.hard_rules_triggered == [
+        "has_telnetd",
+        "has_debug_account",
+        "hardcoded_passwords",
+    ]
