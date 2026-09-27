@@ -567,7 +567,7 @@ def has_outdated_dropbear(strings: list[str]) -> bool:
 
 _URL_RE = re.compile(r"https?://[^\s\"'<>]+", re.IGNORECASE)
 _API_TOKEN_RE = re.compile(
-    r"(?<![A-Za-z0-9])(?:[0-9a-fA-F]{32,}|[A-Za-z0-9+/]{40,}={0,2})(?![A-Za-z0-9])"
+    r"(?<![A-Za-z0-9+/])(?:[0-9a-fA-F]{32,}|[A-Za-z0-9+/]{40,}={0,2})(?![A-Za-z0-9+/=])"
 )
 _HEX_TOKEN_RE = re.compile(r"[0-9a-fA-F]{32,}\Z")
 _API_TOKEN_MIN_ENTROPY = 4.3

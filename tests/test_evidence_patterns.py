@@ -7,6 +7,7 @@ from src.evidence.patterns import (
     count_hardcoded_passwords,
     count_public_ips,
     count_urls,
+    find_api_tokens,
     find_credential_pairs,
     find_debug_account,
     find_hardcoded_ips,
@@ -423,6 +424,15 @@ def test_tokens_empty() -> None:
 
 def test_tokens_hex_32_chars() -> None:
     assert count_api_tokens(["abc123" + "0" * 26]) == 1
+
+
+def test_tokens_do_not_match_prefix_before_base64_suffix() -> None:
+    assert find_api_tokens(["a" * 32 + "+x"]) == []
+    assert find_api_tokens(["a" * 32 + "/Zk9"]) == []
+
+
+def test_tokens_still_match_isolated_hex() -> None:
+    assert len(find_api_tokens(["key " + "f3a9c1e07b5d2846" * 2])) == 1
 
 
 def test_tokens_too_short() -> None:
