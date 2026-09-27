@@ -16,7 +16,7 @@ resolution-markers = [
 [[package]]
 name = "binwalk"
 version = "2.3.3+cddfede"
-source = { git = "https://github.com/ReFirmLabs/binwalk?rev=v2.3.4#cddfede795971045d99422bd7a9676c8803ec5ee" }
+source = { git = "https://github.com/ReFirmLabs/binwalk?rev=cddfede795971045d99422bd7a9676c8803ec5ee#cddfede795971045d99422bd7a9676c8803ec5ee" }
 
 [[package]]
 name = "black"
@@ -888,7 +888,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "binwalk", git = "https://github.com/ReFirmLabs/binwalk?rev=v2.3.4" },
+    { name = "binwalk", git = "https://github.com/ReFirmLabs/binwalk?rev=cddfede795971045d99422bd7a9676c8803ec5ee" },
     { name = "black", marker = "extra == 'dev'", specifier = ">=23.0" },
     { name = "gensim", specifier = ">=4.2" },
     { name = "jefferson", specifier = ">=0.4.1" },
