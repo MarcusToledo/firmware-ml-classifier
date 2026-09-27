@@ -388,6 +388,11 @@ def _read_stats(path: Path, limit: int, file_size: int) -> _FirmwareRead:
         digest.update(chunk)
         streaming.update(chunk)
         size += len(chunk)
+    if size != min(file_size, limit):
+        raise ValueError(
+            f"arquivo alterado durante a leitura: {path} "
+            f"(stat {file_size} bytes, lidos {size})"
+        )
     return _FirmwareRead(digest.hexdigest(), streaming.result(), size, file_size)
 
 

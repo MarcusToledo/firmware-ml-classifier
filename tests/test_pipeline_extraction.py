@@ -87,6 +87,24 @@ def test_scan_timeout_kills_child_process(
     assert not marker.exists()
 
 
+def test_read_rejects_file_changed_during_stream(
+    tmp_path: Path, fake_toolchain: Toolchain, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Registra erro quando a leitura termina antes do tamanho medido."""
+    import pipeline.feature_extraction as pipeline
+
+    path = tmp_path / "firmware.bin"
+    path.write_bytes(b"0123456789")
+    monkeypatch.setattr(
+        pipeline, "iter_file_chunks", lambda path, limit, **kw: iter([b"abc"])
+    )
+    result = extract_features_from_path(
+        path, load_pipeline_config(None, {}), None, fake_toolchain
+    )
+    assert result.metadata["read_ok"] is False
+    assert "alterado durante a leitura" in result.metadata["error"]
+
+
 def test_empty_and_unreadable_skip_tools(
     tmp_path: Path, fake_toolchain: Toolchain
 ) -> None:
