@@ -30,8 +30,9 @@ _DETECTOR_PARTS: dict[str, list[object]] = {
         p._CRED_PAIR_RE,
         p._CRED_PAIR_WEAK,
     ],
-    p.DETECTOR_HARDCODED_IPS: [
-        p.find_hardcoded_ips,
+    p.DETECTOR_NON_PUBLIC_IPS: [
+        p.find_non_public_ips,
+        p._is_public,
         p._iter_contextual_ipv4,
         p._IPV4_RE,
         p._VERSION_IP_PREFIX_RE,
@@ -47,6 +48,7 @@ _DETECTOR_PARTS: dict[str, list[object]] = {
     ],
     p.DETECTOR_PUBLIC_IPS: [
         p.find_public_ips,
+        p._is_public,
         p._iter_contextual_ipv4,
         p._IPV4_RE,
         p._VERSION_IP_PREFIX_RE,
@@ -112,13 +114,13 @@ _EXPECTED: dict[str, tuple[str, str]] = {
         "1.0",
         "94ae0030d1b63c144cb2ec5cfc1651c7b13d0d3ff941b37a9d12612a42f25227",
     ),
-    p.DETECTOR_HARDCODED_IPS: (
+    p.DETECTOR_NON_PUBLIC_IPS: (
         "2.0",
-        "bee8d81858f59f759d078dde51df3277ccd9c0014b8e19be7c677c5b57b2a9e4",
+        "58caa5c909feaed8d93b6999fe234c8e380cbdd8c580d49b92f47889173cc522",
     ),
     p.DETECTOR_PUBLIC_IPS: (
         "2.0",
-        "b80b8db6486333a3bf344ff35c9ec9c9663a89f2f619b368c2aceb4fd1c17257",
+        "c7ad3f35eb6687b33017551f338ff6fc25a25197221fab83bfbfdba71a803e32",
     ),
     p.DETECTOR_TELNETD: (
         "1.0",

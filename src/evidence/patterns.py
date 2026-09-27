@@ -24,7 +24,7 @@ CONFIDENCE_LOW = "low"
 
 DETECTOR_HARDCODED_PASSWORDS = "hardcoded_passwords"
 DETECTOR_CREDENTIAL_PAIRS = "credential_pairs"
-DETECTOR_HARDCODED_IPS = "hardcoded_ips"
+DETECTOR_NON_PUBLIC_IPS = "non_public_ips"
 DETECTOR_PUBLIC_IPS = "public_ips"
 DETECTOR_TELNETD = "telnetd"
 DETECTOR_DEBUG_ACCOUNT = "debug_account"
@@ -37,7 +37,7 @@ DETECTOR_API_TOKENS = "api_tokens"
 DETECTOR_VERSIONS: dict[str, str] = {
     DETECTOR_HARDCODED_PASSWORDS: "2.0",
     DETECTOR_CREDENTIAL_PAIRS: "1.0",
-    DETECTOR_HARDCODED_IPS: "2.0",
+    DETECTOR_NON_PUBLIC_IPS: "2.0",
     DETECTOR_PUBLIC_IPS: "2.0",
     DETECTOR_TELNETD: "1.0",
     DETECTOR_DEBUG_ACCOUNT: "2.0",
@@ -341,46 +341,58 @@ def _iter_contextual_ipv4(s: str) -> Iterator[ipaddress.IPv4Address]:
         yield ipaddress.IPv4Address(bytes(octets))
 
 
-def find_hardcoded_ips(strings: list[str]) -> list[SecurityFinding]:
-    """Encontra strings que contêm endereços IPv4 válidos e não excluídos."""
+def _is_public(address: ipaddress.IPv4Address) -> bool:
+    """Indica IPv4 global pela IANA e fora de multicast."""
+    return address.is_global and not address.is_multicast
+
+
+def find_non_public_ips(strings: list[str]) -> list[SecurityFinding]:
+    """Encontra IPv4 contextuais que não são públicos.
+
+    Classe residual e disjunta de ``public_ips``: RFC 1918, CGNAT, link-local,
+    documentação, benchmark e multicast. Não significa endereço seguro.
+    """
     findings: list[SecurityFinding] = []
     for s in strings:
         for address in _iter_contextual_ipv4(s):
+            if _is_public(address):
+                continue
             findings.append(
                 SecurityFinding(
-                    type="hardcoded_ip",
+                    type="non_public_ip",
                     source=s,
-                    context=f"IPv4 address: {address}",
+                    context=f"non-public IPv4 address: {address}",
                     confidence=CONFIDENCE_LOW,
-                    detector=DETECTOR_HARDCODED_IPS,
-                    detector_version=DETECTOR_VERSIONS[DETECTOR_HARDCODED_IPS],
+                    detector=DETECTOR_NON_PUBLIC_IPS,
+                    detector_version=DETECTOR_VERSIONS[DETECTOR_NON_PUBLIC_IPS],
                 )
             )
     return findings
 
 
-def count_hardcoded_ips(strings: list[str]) -> int:
-    """Conta strings que contêm endereços IPv4 válidos e não excluídos."""
-    return len(find_hardcoded_ips(strings))
+def count_non_public_ips(strings: list[str]) -> int:
+    """Conta IPv4 contextuais que não são públicos."""
+    return len(find_non_public_ips(strings))
 
 
 def find_public_ips(strings: list[str]) -> list[SecurityFinding]:
-    """Encontra strings com IPv4 global hardcoded.
+    """Encontra IPv4 contextuais públicos.
 
     Exclui endereços não globais pela IANA (RFC 1918, loopback, link-local,
     CGNAT 100.64/10, documentação, benchmark e reservado/broadcast), além de
-    multicast. IPs globais em firmware indicam endpoints de C2 ou telemetria.
+    multicast. Um IP global é referência a destino externo, não prova de C2
+    ou de vulnerabilidade.
     """
     findings: list[SecurityFinding] = []
     for s in strings:
         for address in _iter_contextual_ipv4(s):
-            if not address.is_global or address.is_multicast:
+            if not _is_public(address):
                 continue
             findings.append(
                 SecurityFinding(
                     type="public_ip",
                     source=s,
-                    context=f"public (non-RFC-1918) IPv4 address: {address}",
+                    context=f"public (global) IPv4 address: {address}",
                     confidence=CONFIDENCE_HIGH,
                     detector=DETECTOR_PUBLIC_IPS,
                     detector_version=DETECTOR_VERSIONS[DETECTOR_PUBLIC_IPS],
@@ -390,7 +402,7 @@ def find_public_ips(strings: list[str]) -> list[SecurityFinding]:
 
 
 def count_public_ips(strings: list[str]) -> int:
-    """Conta strings com IPv4 público hardcoded (fora do RFC-1918)."""
+    """Conta IPv4 contextuais públicos."""
     return len(find_public_ips(strings))
 
 
@@ -634,7 +646,7 @@ def count_api_tokens(strings: list[str]) -> int:
 _COUNT_DETECTORS: dict[str, str] = {
     DETECTOR_HARDCODED_PASSWORDS: "count_hardcoded_passwords",
     DETECTOR_CREDENTIAL_PAIRS: "count_credential_pairs",
-    DETECTOR_HARDCODED_IPS: "count_hardcoded_ips",
+    DETECTOR_NON_PUBLIC_IPS: "count_non_public_ips",
     DETECTOR_PUBLIC_IPS: "count_public_ips",
     DETECTOR_URLS: "count_urls",
     DETECTOR_API_TOKENS: "count_api_tokens",
@@ -658,7 +670,7 @@ def scan_strings_findings(strings: list[str]) -> list[SecurityFinding]:
     findings: list[SecurityFinding] = []
     findings.extend(find_hardcoded_passwords(strings))
     findings.extend(find_credential_pairs(strings))
-    findings.extend(find_hardcoded_ips(strings))
+    findings.extend(find_non_public_ips(strings))
     findings.extend(find_public_ips(strings))
     findings.extend(find_telnetd(strings))
     findings.extend(find_debug_account(strings))
@@ -686,11 +698,11 @@ def findings_to_counts(findings: list[SecurityFinding]) -> dict[str, int | bool]
 def scan_strings(strings: list[str]) -> dict[str, int | bool]:
     """Roda todos os detectores e retorna um dicionário de features achatado.
 
-    Visão compatível com versões anteriores sobre ``scan_strings_findings``
-    + ``findings_to_counts``, com as mesmas chaves e semântica da
-    implementação anterior à camada de evidências. Chaves retornadas:
+    Visão achatada de ``scan_strings_findings`` + ``findings_to_counts``.
+    ``count_non_public_ips`` e ``count_public_ips`` são disjuntos. Chaves
+    retornadas:
         count_hardcoded_passwords, count_credential_pairs,
-        count_hardcoded_ips, count_public_ips,
+        count_non_public_ips, count_public_ips,
         has_telnetd, has_debug_account,
         has_outdated_libssl, has_outdated_busybox, has_outdated_dropbear,
         count_urls, count_api_tokens

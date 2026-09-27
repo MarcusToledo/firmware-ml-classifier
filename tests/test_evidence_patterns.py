@@ -3,15 +3,15 @@ import pytest
 from src.evidence.patterns import (
     count_api_tokens,
     count_credential_pairs,
-    count_hardcoded_ips,
     count_hardcoded_passwords,
+    count_non_public_ips,
     count_public_ips,
     count_urls,
     find_api_tokens,
     find_credential_pairs,
     find_debug_account,
-    find_hardcoded_ips,
     find_hardcoded_passwords,
+    find_non_public_ips,
     find_outdated_libssl,
     find_public_ips,
     find_telnetd,
@@ -117,56 +117,75 @@ def test_cred_pairs_finding_has_high_confidence() -> None:
 
 
 # ---------------------------------------------------------------------------
-# find_hardcoded_ips / count_hardcoded_ips
+# find_non_public_ips / count_non_public_ips
 # ---------------------------------------------------------------------------
 
 
 def test_ips_empty() -> None:
-    assert count_hardcoded_ips([]) == 0
+    assert count_non_public_ips([]) == 0
 
 
 def test_ips_valid_match() -> None:
-    assert count_hardcoded_ips(["server at 192.168.1.1"]) == 1
+    assert count_non_public_ips(["server at 192.168.1.1"]) == 1
 
 
 def test_ips_rejects_hostname_suffix() -> None:
-    assert count_hardcoded_ips(["https://8.8.8.8.example/"]) == 0
-    assert count_hardcoded_ips(["ip 8.8.8.8.foo"]) == 0
+    assert count_non_public_ips(["https://8.8.8.8.example/"]) == 0
+    assert count_non_public_ips(["ip 8.8.8.8.foo"]) == 0
 
 
 def test_ips_multiple() -> None:
-    assert count_hardcoded_ips(["ip 10.0.0.1 and 172.16.0.2"]) == 2
+    assert count_non_public_ips(["ip 10.0.0.1 and 172.16.0.2"]) == 2
 
 
 def test_ips_excludes_broadcast() -> None:
-    assert count_hardcoded_ips(["255.255.255.255"]) == 0
+    assert count_non_public_ips(["255.255.255.255"]) == 0
 
 
 def test_ips_excludes_all_zeros() -> None:
-    assert count_hardcoded_ips(["0.0.0.0"]) == 0
+    assert count_non_public_ips(["0.0.0.0"]) == 0
 
 
 def test_ips_excludes_loopback() -> None:
-    assert count_hardcoded_ips(["127.0.0.1"]) == 0
+    assert count_non_public_ips(["127.0.0.1"]) == 0
 
 
 def test_ips_invalid_octet() -> None:
-    assert count_hardcoded_ips(["999.0.0.1"]) == 0
+    assert count_non_public_ips(["999.0.0.1"]) == 0
 
 
 def test_ips_invalid_octet_256() -> None:
-    assert count_hardcoded_ips(["192.168.1.256"]) == 0
+    assert count_non_public_ips(["192.168.1.256"]) == 0
 
 
 def test_ips_no_match() -> None:
-    assert count_hardcoded_ips(["version 1.2.3"]) == 0
+    assert count_non_public_ips(["version 1.2.3"]) == 0
 
 
 def test_ips_finding_has_low_confidence() -> None:
-    findings = find_hardcoded_ips(["host 192.168.1.1"])
+    findings = find_non_public_ips(["host 192.168.1.1"])
     assert len(findings) == 1
     assert findings[0].confidence == "low"
-    assert findings[0].detector == "hardcoded_ips"
+    assert findings[0].detector == "non_public_ips"
+
+
+@pytest.mark.parametrize(
+    "text,non_public,public",
+    [
+        ("server 192.168.1.1", 1, 0),
+        ("gateway 100.64.0.1", 1, 0),
+        ("server 203.0.113.5", 1, 0),
+        ("group 224.0.0.1:5353", 1, 0),
+        ("dns 8.8.8.8", 0, 1),
+        ("dns 8.8.8.8 gateway 10.0.0.1", 1, 1),
+    ],
+)
+def test_non_public_and_public_ips_are_disjoint(
+    text: str, non_public: int, public: int
+) -> None:
+    result = scan_strings([text])
+    assert result["count_non_public_ips"] == non_public
+    assert result["count_public_ips"] == public
 
 
 # ---------------------------------------------------------------------------
@@ -540,7 +559,7 @@ def test_scan_strings_findings_returns_all_matches() -> None:
     findings = scan_strings_findings(strings)
     detectors = {f.detector for f in findings}
     assert "hardcoded_passwords" in detectors
-    assert "hardcoded_ips" in detectors
+    assert "non_public_ips" in detectors
     assert "telnetd" in detectors
 
 
@@ -560,7 +579,7 @@ def test_scan_strings_returns_all_keys() -> None:
     expected_keys = {
         "count_hardcoded_passwords",
         "count_credential_pairs",
-        "count_hardcoded_ips",
+        "count_non_public_ips",
         "count_public_ips",
         "has_telnetd",
         "has_debug_account",
@@ -576,7 +595,7 @@ def test_scan_strings_returns_all_keys() -> None:
 def test_scan_strings_empty_defaults() -> None:
     result = scan_strings([])
     assert result["count_hardcoded_passwords"] == 0
-    assert result["count_hardcoded_ips"] == 0
+    assert result["count_non_public_ips"] == 0
     assert result["has_telnetd"] is False
     assert result["has_debug_account"] is False
     assert result["has_outdated_libssl"] is False
@@ -596,7 +615,7 @@ def test_scan_strings_detects_features() -> None:
     ]
     result = scan_strings(strings)
     assert result["count_hardcoded_passwords"] >= 1
-    assert result["count_hardcoded_ips"] == 1
+    assert result["count_non_public_ips"] == 1
     assert result["has_telnetd"] is True
     assert result["has_outdated_libssl"] is True
     assert result["count_urls"] == 1
@@ -606,7 +625,7 @@ def test_ip_inside_url_counts_only_as_url() -> None:
     for url in ("http://8.8.8.8/", "https://10.0.0.1:8080/cgi"):
         result = scan_strings([url])
         assert result["count_urls"] == 1
-        assert result["count_hardcoded_ips"] == 0
+        assert result["count_non_public_ips"] == 0
         assert result["count_public_ips"] == 0
 
 

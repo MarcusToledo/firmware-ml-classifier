@@ -139,7 +139,7 @@ def _score_strings(features: dict[str, Any]) -> SignalResult:
     """Sub-score for suspicious string features."""
     passwords = features.get("count_hardcoded_passwords")
     cred_pairs = features.get("count_credential_pairs")
-    ips = features.get("count_hardcoded_ips")
+    non_public_ips = features.get("count_non_public_ips")
     public_ips = features.get("count_public_ips")
     outdated_libssl = features.get("has_outdated_libssl")
     outdated_busybox = features.get("has_outdated_busybox")
@@ -150,7 +150,7 @@ def _score_strings(features: dict[str, Any]) -> SignalResult:
         for v in [
             passwords,
             cred_pairs,
-            ips,
+            non_public_ips,
             public_ips,
             outdated_libssl,
             outdated_busybox,
@@ -174,10 +174,10 @@ def _score_strings(features: dict[str, Any]) -> SignalResult:
         parts.append(s)
         details.append(f"cred_pairs={cred_pairs}→{s:.2f}")
 
-    if ips is not None and ips > 0:
-        s = _sigmoid(ips, 2.0, 1.0)
+    if non_public_ips is not None and non_public_ips > 0:
+        s = _sigmoid(non_public_ips, 2.0, 1.0)
         parts.append(s)
-        details.append(f"ips={ips}→{s:.2f}")
+        details.append(f"non_public_ips={non_public_ips}→{s:.2f}")
 
     if public_ips is not None and public_ips > 0:
         s = _sigmoid(public_ips, 1.0, 2.5)
