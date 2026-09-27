@@ -125,15 +125,15 @@ rótulo.
 - `scripts/fetch_cves.py` procura um CPE oficial correspondente ao par
   fabricante/modelo; se não o encontra, consulta a NVD por texto. O cache
   guarda cada CVE com ID, CVSS, critério CPE, limites de versão e a
-  configuração lógica original. Uma CVE sem dados CPE é considerada
-  aplicável por padrão conservador.
+  configuração lógica original.
 - `src/labeling/version_match.py` compara segmentos numéricos e respeita
   limites inclusivos e exclusivos.
 - `src/labeling/cve_labels.py` avalia todas as CVEs e devolve duas listas:
-  aplicáveis e indeterminadas. Sem versão parseável, uma CVE cujas
-  configurações citam apenas outros produtos é descartada; as demais,
-  inclusive as sem `configurations`, ficam indeterminadas. Uma entrada
-  vazia continua sendo evidência de `sem_cve_conhecida`.
+  aplicáveis e indeterminadas. CVE sem `configurations` fica indeterminada,
+  com ou sem versão: sem faixa de produto e versão não há como decidir a
+  aplicabilidade. Sem versão parseável, uma CVE cujas configurações citam
+  apenas outros produtos é descartada; as demais ficam indeterminadas. Uma
+  entrada vazia continua sendo evidência de `sem_cve_conhecida`.
 - A versão CPE exata e os limites `versionStart*`/`versionEnd*` são
   normalizados pela mesma convenção da extração: remove-se `v`/`V`
   inicial; ASUS troca `_` por `.`; Netgear remove o pacote após `_`, mas
@@ -309,21 +309,22 @@ sem versão (`version_source` nulo).
   `asus/rt-n12-d1` tem zero, enquanto `asus/rt-n12` tem 13.
 - Cinco CVEs de 2024 não têm `configurations`:
   CVE-2024-28325 a CVE-2024-28328 em `asus/rt-n12` e CVE-2024-53623 em
-  `tp_link/archer-c7`. Pela decisão conservadora documentada, elas se
-  aplicam a qualquer versão; isso permanece uma limitação.
+  `tp_link/archer-c7`, todas com status NVD `Deferred`. Elas ficam
+  indeterminadas, com ou sem versão. Sobre o `labels_v2.csv` legado, a
+  regra muda 7 `firmware_id` de `cve_conhecida` para `indeterminado`
+  (5 Archer C7 v1/v2 e 2 RT-N12 com versão), e a distribuição passa de
+  429/120/101/49 para 429/127/101/42 (`sem_cve_conhecida`/`indeterminado`/
+  `cve_critica`/`cve_conhecida`).
 - Os 23 arquivos `*webflash*` provavelmente são DD-WRT (inferência).
   Não se deve atribuir versão a eles antes de verificar sua origem.
 - Trabalho futuro: firmwares sem versão viram `indeterminado` para todas
   as CVEs, mesmo quando há evidência que não depende de versão. São dois
   casos de natureza distinta. (i) CVE cujas configurações só citam outros
   produtos: descartá-la é exato e não atribui CVE nenhuma ao firmware.
-  (ii) CVE sem `configurations` (ainda não analisada pela NVD): tratá-la
-  como aplicável liga ao firmware uma CVE achada só por busca textual, sem
-  prova de que afeta aquele modelo e versão. Aplicar as duas regras
-  resolveria 13 `firmware_id` (7 para `sem_cve_conhecida` e 6 para
-  `cve_conhecida`; só a regra (ii) daria 5). Validar (ii) exigiria uma
-  amostra auditada manualmente contra advisories do fabricante, fora do
-  escopo atual.
+  (ii) CVE sem `configurations` (ainda não analisada pela NVD): a regra de
+  tratá-la como aplicável foi descartada. Ela aplicaria CVEs cujas
+  descrições citam outras revisões de hardware (Archer C7 v5; RT-N12+ B1)
+  a firmwares de revisões diferentes.
 
 ### Pendências conhecidas
 
