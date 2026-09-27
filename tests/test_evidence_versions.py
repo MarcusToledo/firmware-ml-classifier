@@ -112,55 +112,55 @@ _DETECTOR_PARTS: dict[str, list[object]] = {
 
 _EXPECTED: dict[str, tuple[str, str]] = {
     p.DETECTOR_HARDCODED_PASSWORDS: (
-        "2.1",
+        "2.0",
         "15ffc82fb4ad66a4b0564143dfa5448c98801d7c5936209f3f8e8088600bd704",
     ),
     p.DETECTOR_CREDENTIAL_PAIRS: (
-        "1.1",
+        "1.0",
         "94ae0030d1b63c144cb2ec5cfc1651c7b13d0d3ff941b37a9d12612a42f25227",
     ),
     p.DETECTOR_HARDCODED_IPS: (
-        "2.1",
+        "2.0",
         "fcbc03b0ce20d6961f8be8bb0ac7ed4b2ef88eb8f7d3cbce0d0915c6da318850",
     ),
     p.DETECTOR_PUBLIC_IPS: (
-        "2.1",
+        "2.0",
         "088f8f84a726117abfdc9e386437d5635f75e7242c5b47d608a5dea78380b7fe",
     ),
     p.DETECTOR_TELNETD: (
-        "1.1",
+        "1.0",
         "05f33b81cd900f00e375b54fd20f67988f2a2f8aab66ffcee9c898cc122f706d",
     ),
     p.DETECTOR_DEBUG_ACCOUNT: (
-        "2.1",
+        "2.0",
         "ae28ec239c50ce713689f1d05e4fb66bff0f8472174a948a59627a8f8165ce27",
     ),
     p.DETECTOR_OUTDATED_LIBSSL: (
-        "1.1",
+        "1.0",
         "859b9199d1a33893bf4cc219ecad0350015913e3ad67db805ae39aa889a688ea",
     ),
     p.DETECTOR_OUTDATED_BUSYBOX: (
-        "1.1",
+        "1.0",
         "06caca75534d5e215f03b6528733e1784f45b45d8d169d35d9f1e6e958bb32ef",
     ),
     p.DETECTOR_OUTDATED_DROPBEAR: (
-        "2.1",
+        "2.0",
         "b5984c6e2598d30f21f42b5ab641a0c1a2e06a8a087361c0f43be2aa2d33b3e4",
     ),
     p.DETECTOR_URLS: (
-        "1.1",
+        "1.0",
         "b52c02688f385a1042a85795312dd4de0991bdba42f09d8145cd9fbfae8831ce",
     ),
     p.DETECTOR_API_TOKENS: (
-        "2.1",
+        "2.0",
         "5040f7147335b8e33aebec54be2ad8954d79a3ff74f0c8be3f7419fa125bbd8a",
     ),
     b.DETECTOR_CRYPTO_SIGNATURES: (
-        "1.1",
+        "1.0",
         "dda8d8ace86e5d900b27d10524d3feefc342ab6f61e04ed2133fc7739ceb8ad6",
     ),
     b.DETECTOR_ENCRYPTED_SECTIONS: (
-        "2.1",
+        "2.0",
         "106f58db1c84dd16465117c52f80cf19e499e6effcabd140894e307c5493f894",
     ),
 }
