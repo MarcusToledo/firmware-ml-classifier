@@ -285,7 +285,7 @@ _MULTICAST_FIRST_MAX = 239
 _RESERVED_FIRST_MIN = 240
 
 _IPV4_RE = re.compile(
-    r"(?<![-_A-Za-z0-9.])(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?![-_A-Za-z0-9]|\.\d)"
+    r"(?<![-_A-Za-z0-9.])(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?![-_A-Za-z0-9]|\.[-_A-Za-z0-9])"
 )
 _VERSION_IP_PREFIX_RE = re.compile(r"(?:\bv|\bversion|\bLinux-)\s*$", re.IGNORECASE)
 _NETWORK_CONTEXT_WORDS: frozenset[str] = frozenset(

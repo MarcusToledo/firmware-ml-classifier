@@ -121,11 +121,11 @@ _EXPECTED: dict[str, tuple[str, str]] = {
     ),
     p.DETECTOR_HARDCODED_IPS: (
         "2.0",
-        "fcbc03b0ce20d6961f8be8bb0ac7ed4b2ef88eb8f7d3cbce0d0915c6da318850",
+        "7465363d7c4b4dfff03a46ad5261fdfe1d2ca83480c4b59d978d70121327a665",
     ),
     p.DETECTOR_PUBLIC_IPS: (
         "2.0",
-        "088f8f84a726117abfdc9e386437d5635f75e7242c5b47d608a5dea78380b7fe",
+        "dfcbafa396c061d5ea1521c5ee2bab35c3ff99109407368406c155af785af712",
     ),
     p.DETECTOR_TELNETD: (
         "1.0",

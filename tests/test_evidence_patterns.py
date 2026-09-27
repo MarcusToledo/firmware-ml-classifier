@@ -128,6 +128,11 @@ def test_ips_valid_match() -> None:
     assert count_hardcoded_ips(["server at 192.168.1.1"]) == 1
 
 
+def test_ips_rejects_hostname_suffix() -> None:
+    assert count_hardcoded_ips(["https://8.8.8.8.example/"]) == 0
+    assert count_hardcoded_ips(["ip 8.8.8.8.foo"]) == 0
+
+
 def test_ips_multiple() -> None:
     assert count_hardcoded_ips(["ip 10.0.0.1 and 172.16.0.2"]) == 2
 
@@ -174,6 +179,10 @@ def test_public_ips_empty() -> None:
 
 def test_public_ips_routable() -> None:
     assert count_public_ips(["dns server 8.8.8.8"]) == 1
+
+
+def test_public_ips_accepts_sentence_period() -> None:
+    assert count_public_ips(["connect to server 8.8.8.8."]) == 1
 
 
 def test_public_ips_c2_candidate() -> None:
