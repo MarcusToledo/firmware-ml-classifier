@@ -14,6 +14,34 @@ from src.labeling.cve_labels import (
     LABEL_NO_KNOWN_CVE,
 )
 
+_SIGNAL_STATS = "stats"
+_SIGNAL_STRINGS = "strings"
+_SIGNAL_BINWALK = "binwalk"
+_SCORING_SECTION = "scoring"
+_THRESHOLDS_SECTION = "thresholds"
+_WEIGHTS_SECTION = "weights"
+_HARD_RULES_SECTION = "hard_rules"
+_SUB_SCORES_SECTION = "sub_scores"
+
+_ENTROPY_FEATURE = "entropy"
+_COMPRESS_RATIO_FEATURE = "compress_ratio"
+_BYTE_MEAN_FEATURE = "byte_mean"
+_HARDCODED_PASSWORDS_FEATURE = "count_hardcoded_passwords"
+_ENCRYPTED_SECTIONS_FEATURE = "has_encrypted_sections"
+_CRYPTO_SIGNATURES_FEATURE = "n_crypto_signatures"
+_ENTROPY_VARIANCE_FEATURE = "entropy_variance_across_sections"
+_FS_TYPE_FEATURE = "fs_type"
+_COMPRESSION_TYPE_FEATURE = "compression_type"
+_FILESYSTEMS_FEATURE = "n_filesystems"
+_TELNETD_FEATURE = "has_telnetd"
+_DEBUG_ACCOUNT_FEATURE = "has_debug_account"
+_HARDCODED_PASSWORDS_RULE = "hardcoded_passwords"
+_LEVEL_NO_KNOWN_RANK = 0
+_LEVEL_KNOWN_RANK = 1
+_LEVEL_CRITICAL_RANK = 2
+_STATS_FEATURES = (_ENTROPY_FEATURE, _COMPRESS_RATIO_FEATURE, _BYTE_MEAN_FEATURE)
+
+
 # ---------------------------------------------------------------------------
 # Configuration dataclasses
 # ---------------------------------------------------------------------------
@@ -96,9 +124,9 @@ class ScoringConfig:
 # ---------------------------------------------------------------------------
 
 LEVEL_ORDER = {
-    LABEL_NO_KNOWN_CVE: 0,
-    LABEL_KNOWN_CVE: 1,
-    LABEL_CRITICAL_CVE: 2,
+    LABEL_NO_KNOWN_CVE: _LEVEL_NO_KNOWN_RANK,
+    LABEL_KNOWN_CVE: _LEVEL_KNOWN_RANK,
+    LABEL_CRITICAL_CVE: _LEVEL_CRITICAL_RANK,
 }
 LEVEL_FROM_INT = {v: k for k, v in LEVEL_ORDER.items()}
 
@@ -169,25 +197,21 @@ def _signal(
 
 def _score_stats(features: dict[str, Any], config: StatsSubScoreConfig) -> SignalResult:
     """Calcula o sinal estatístico ignorando valores ausentes."""
-    values, missing = _values(features, ("entropy", "compress_ratio", "byte_mean"))
+    values, missing = _values(features, _STATS_FEATURES)
     if not values:
-        return _signal("stats", [], ["no stats features"], False, missing)
+        return _signal(_SIGNAL_STATS, [], ["no stats features"], False, missing)
     parts: list[float] = []
     details: list[str] = []
-    if "entropy" in values:
-        entropy = values["entropy"]
-        s = max(
-            0.0,
-            min(
-                1.0,
-                (entropy - config.entropy_low)
-                / (config.entropy_high - config.entropy_low),
-            ),
+    if _ENTROPY_FEATURE in values:
+        entropy = values[_ENTROPY_FEATURE]
+        fraction = (entropy - config.entropy_low) / (
+            config.entropy_high - config.entropy_low
         )
+        s = max(0.0, min(1.0, fraction))
         parts.append(s)
         details.append(f"entropy={entropy:.2f}→{s:.2f}")
-    if "compress_ratio" in values:
-        ratio = values["compress_ratio"]
+    if _COMPRESS_RATIO_FEATURE in values:
+        ratio = values[_COMPRESS_RATIO_FEATURE]
         s = max(
             0.0,
             min(
@@ -198,8 +222,8 @@ def _score_stats(features: dict[str, Any], config: StatsSubScoreConfig) -> Signa
         )
         parts.append(s)
         details.append(f"compress_ratio={ratio:.3f}→{s:.2f}")
-    if "byte_mean" in values:
-        mean = values["byte_mean"]
+    if _BYTE_MEAN_FEATURE in values:
+        mean = values[_BYTE_MEAN_FEATURE]
         s = (
             max(
                 0.0,
@@ -209,7 +233,7 @@ def _score_stats(features: dict[str, Any], config: StatsSubScoreConfig) -> Signa
         )
         parts.append(s)
         details.append(f"byte_mean={mean:.1f}→{s:.2f}")
-    return _signal("stats", parts, details, True, missing)
+    return _signal(_SIGNAL_STATS, parts, details, True, missing)
 
 
 def _string_count_settings(
@@ -218,7 +242,7 @@ def _string_count_settings(
     """Relaciona contagens às curvas configuradas."""
     return (
         (
-            "count_hardcoded_passwords",
+            _HARDCODED_PASSWORDS_FEATURE,
             "passwords",
             config.hardcoded_passwords_midpoint,
             config.hardcoded_passwords_steepness,
@@ -258,7 +282,7 @@ def _score_strings(
         features, tuple(row[0] for row in counts) + tuple(row[0] for row in flags)
     )
     if not values:
-        return _signal("strings", [], ["no string features"], False, missing)
+        return _signal(_SIGNAL_STRINGS, [], ["no string features"], False, missing)
     parts: list[float] = []
     details: list[str] = []
     for key, name, midpoint, steepness in counts:
@@ -273,7 +297,7 @@ def _score_strings(
             s = config.outdated_lib_score if value else 0.0
             parts.append(s)
             details.append(f"{name}_outdated={value}→{s:.2f}")
-    return _signal("strings", parts, details, True, missing)
+    return _signal(_SIGNAL_STRINGS, parts, details, True, missing)
 
 
 def _binwalk_numeric_parts(
@@ -283,28 +307,33 @@ def _binwalk_numeric_parts(
     details: list[str],
 ) -> None:
     """Acumula sub-scores numéricos e o indicador de criptografia."""
-    if "has_encrypted_sections" in values:
-        value = values["has_encrypted_sections"]
+    if _ENCRYPTED_SECTIONS_FEATURE in values:
+        value = values[_ENCRYPTED_SECTIONS_FEATURE]
         s = config.encrypted_score if value else 0.0
         parts.append(s)
         details.append(f"encrypted={value}→{s:.2f}")
-    if "n_crypto_signatures" in values:
-        value = values["n_crypto_signatures"]
+    if _CRYPTO_SIGNATURES_FEATURE in values:
+        value = values[_CRYPTO_SIGNATURES_FEATURE]
         s = (
             min(1.0, value / config.crypto_signatures_saturation)
             * config.crypto_signatures_factor
         )
         parts.append(s)
         details.append(f"crypto_sigs={value}→{s:.2f}")
-    if "entropy_variance_across_sections" in values:
-        value = values["entropy_variance_across_sections"]
+    if _ENTROPY_VARIANCE_FEATURE in values:
+        value = values[_ENTROPY_VARIANCE_FEATURE]
         s = min(1.0, value / config.entropy_variance_saturation)
         parts.append(s)
         details.append(f"entropy_var={value:.2f}→{s:.2f}")
     for key, label, types, score in (
-        ("fs_type", "fs_type", config.legacy_fs_types, config.legacy_fs_score),
         (
-            "compression_type",
+            _FS_TYPE_FEATURE,
+            _FS_TYPE_FEATURE,
+            config.legacy_fs_types,
+            config.legacy_fs_score,
+        ),
+        (
+            _COMPRESSION_TYPE_FEATURE,
             "compression",
             config.legacy_compression_types,
             config.legacy_compression_score,
@@ -324,30 +353,30 @@ def _score_binwalk(
     values, missing = _values(
         features,
         (
-            "has_encrypted_sections",
-            "n_crypto_signatures",
-            "entropy_variance_across_sections",
-            "fs_type",
-            "compression_type",
-            "n_filesystems",
+            _ENCRYPTED_SECTIONS_FEATURE,
+            _CRYPTO_SIGNATURES_FEATURE,
+            _ENTROPY_VARIANCE_FEATURE,
+            _FS_TYPE_FEATURE,
+            _COMPRESSION_TYPE_FEATURE,
+            _FILESYSTEMS_FEATURE,
         ),
     )
     if not values or (
-        set(values) == {"n_filesystems"} and values["n_filesystems"] <= 0
+        set(values) == {_FILESYSTEMS_FEATURE} and values[_FILESYSTEMS_FEATURE] <= 0
     ):
-        return _signal("binwalk", [], ["no binwalk features"], False, missing)
+        return _signal(_SIGNAL_BINWALK, [], ["no binwalk features"], False, missing)
     parts: list[float] = []
     details: list[str] = []
     _binwalk_numeric_parts(values, config, parts, details)
-    if values.get("n_filesystems", 0) > 0:
-        value = values["n_filesystems"]
+    if values.get(_FILESYSTEMS_FEATURE, 0) > 0:
+        value = values[_FILESYSTEMS_FEATURE]
         s = (
             min(1.0, value / config.n_filesystems_saturation)
             * config.n_filesystems_factor
         )
         parts.append(s)
         details.append(f"n_filesystems={value}→{s:.2f}")
-    return _signal("binwalk", parts, details, True, missing)
+    return _signal(_SIGNAL_BINWALK, parts, details, True, missing)
 
 
 # ---------------------------------------------------------------------------
@@ -362,15 +391,15 @@ def _apply_hard_rules(
     triggered: list[str] = []
     applied: str | None = None
     for name, key, minimum in (
-        ("has_telnetd", "has_telnetd", config.hard_rules.has_telnetd_min_level),
+        (_TELNETD_FEATURE, _TELNETD_FEATURE, config.hard_rules.has_telnetd_min_level),
         (
-            "has_debug_account",
-            "has_debug_account",
+            _DEBUG_ACCOUNT_FEATURE,
+            _DEBUG_ACCOUNT_FEATURE,
             config.hard_rules.has_debug_account_min_level,
         ),
         (
-            "hardcoded_passwords",
-            "count_hardcoded_passwords",
+            _HARDCODED_PASSWORDS_RULE,
+            _HARDCODED_PASSWORDS_FEATURE,
             config.hard_rules.hardcoded_passwords_min_level,
         ),
     ):
@@ -378,7 +407,7 @@ def _apply_hard_rules(
         active = (
             value is not None
             and not _is_missing(value)
-            and (value > 0 if name == "hardcoded_passwords" else bool(value))
+            and (value > 0 if name == _HARDCODED_PASSWORDS_RULE else bool(value))
         )
         if active:
             triggered.append(name)
@@ -397,9 +426,9 @@ def score_firmware(
     O resultado não é ground truth; nenhum campo CVE participa do cálculo.
     """
     weights_map = {
-        "stats": config.weights.stats,
-        "strings": config.weights.strings,
-        "binwalk": config.weights.binwalk,
+        _SIGNAL_STATS: config.weights.stats,
+        _SIGNAL_STRINGS: config.weights.strings,
+        _SIGNAL_BINWALK: config.weights.binwalk,
     }
 
     signals: list[SignalResult] = [
@@ -461,7 +490,7 @@ def _number(value: Any, path: Path, key: str) -> float:
 
 def _thresholds(scoring: dict[str, Any], path: Path) -> ThresholdConfig:
     """Valida limites crescentes dentro do intervalo unitário."""
-    values = _section(scoring, path, "thresholds", ThresholdConfig)
+    values = _section(scoring, path, _THRESHOLDS_SECTION, ThresholdConfig)
     default = ThresholdConfig()
     low = _number(values.get("low", default.low), path, "scoring.thresholds.low")
     high = _number(values.get("high", default.high), path, "scoring.thresholds.high")
@@ -472,13 +501,13 @@ def _thresholds(scoring: dict[str, Any], path: Path) -> ThresholdConfig:
 
 def _weights(scoring: dict[str, Any], path: Path) -> WeightConfig:
     """Valida pesos não negativos e soma positiva."""
-    values = _section(scoring, path, "weights", WeightConfig)
+    values = _section(scoring, path, _WEIGHTS_SECTION, WeightConfig)
     default = WeightConfig()
     numbers = {
         name: _number(
             values.get(name, getattr(default, name)), path, f"scoring.weights.{name}"
         )
-        for name in ("stats", "strings", "binwalk")
+        for name in (_SIGNAL_STATS, _SIGNAL_STRINGS, _SIGNAL_BINWALK)
     }
     for name, value in numbers.items():
         if value < 0:
@@ -490,7 +519,7 @@ def _weights(scoring: dict[str, Any], path: Path) -> WeightConfig:
 
 def _hard_rules(scoring: dict[str, Any], path: Path) -> HardRuleConfig:
     """Valida níveis mínimos de cada regra."""
-    values = _section(scoring, path, "hard_rules", HardRuleConfig)
+    values = _section(scoring, path, _HARD_RULES_SECTION, HardRuleConfig)
     for key, level in values.items():
         if not isinstance(level, str) or level not in LEVEL_ORDER:
             raise ValueError(f"{path}: scoring.hard_rules.{key}: nível inválido")
@@ -528,7 +557,7 @@ def _sub_group(group: dict[str, Any], path: Path, key: str, cls: type[Any]) -> A
         ):
             raise ValueError(f"{path}: {full_key}: valor fora da faixa")
         parsed[name] = value
-    for prefix in ("entropy", "compress_ratio"):
+    for prefix in (_ENTROPY_FEATURE, _COMPRESS_RATIO_FEATURE):
         if (
             f"{prefix}_low" in parsed
             and not parsed[f"{prefix}_low"] < parsed[f"{prefix}_high"]
@@ -540,26 +569,26 @@ def _sub_group(group: dict[str, Any], path: Path, key: str, cls: type[Any]) -> A
 def _sub_scores(scoring: dict[str, Any], path: Path) -> SubScoreConfig:
     """Carrega e valida as três subseções de sub-scores."""
     values = _mapping(
-        scoring.get("sub_scores", {}),
+        scoring.get(_SUB_SCORES_SECTION, {}),
         path,
         "scoring.sub_scores",
-        {"stats", "strings", "binwalk"},
+        {_SIGNAL_STATS, _SIGNAL_STRINGS, _SIGNAL_BINWALK},
     )
     return SubScoreConfig(
         stats=_sub_group(
-            values.get("stats", {}),
+            values.get(_SIGNAL_STATS, {}),
             path,
             "scoring.sub_scores.stats",
             StatsSubScoreConfig,
         ),
         strings=_sub_group(
-            values.get("strings", {}),
+            values.get(_SIGNAL_STRINGS, {}),
             path,
             "scoring.sub_scores.strings",
             StringsSubScoreConfig,
         ),
         binwalk=_sub_group(
-            values.get("binwalk", {}),
+            values.get(_SIGNAL_BINWALK, {}),
             path,
             "scoring.sub_scores.binwalk",
             BinwalkSubScoreConfig,
@@ -569,14 +598,21 @@ def _sub_scores(scoring: dict[str, Any], path: Path) -> SubScoreConfig:
 
 def load_scoring_config(path: Path) -> ScoringConfig:
     """Carrega configuração validada do baseline a partir do YAML."""
-    data = _mapping(yaml.safe_load(path.read_text()), path, "scoring", {"scoring"})
-    if "scoring" not in data:
+    data = _mapping(
+        yaml.safe_load(path.read_text()), path, _SCORING_SECTION, {_SCORING_SECTION}
+    )
+    if _SCORING_SECTION not in data:
         raise ValueError(f"{path}: scoring: seção obrigatória")
     scoring = _mapping(
-        data["scoring"],
+        data[_SCORING_SECTION],
         path,
-        "scoring",
-        {"thresholds", "weights", "hard_rules", "sub_scores"},
+        _SCORING_SECTION,
+        {
+            _THRESHOLDS_SECTION,
+            _WEIGHTS_SECTION,
+            _HARD_RULES_SECTION,
+            _SUB_SCORES_SECTION,
+        },
     )
     return ScoringConfig(
         thresholds=_thresholds(scoring, path),
