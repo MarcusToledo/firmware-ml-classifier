@@ -46,6 +46,7 @@ from src.features.unpack import (
     UnpackLimits,
     isolated_env,
     iter_extracted_files,
+    stop_process_group,
     unpack_firmware,
 )
 from src.io_utils import iter_file_chunks
@@ -281,38 +282,43 @@ def load_doc2vec_model(path: Path | None) -> Doc2Vec | None:
     return load_doc2vec(str(path))
 
 
-def _run_binwalk_scan(
-    path: Path, toolchain: Toolchain
-) -> subprocess.CompletedProcess[str]:
-    """Roda a varredura de assinaturas com HOME e XDG temporários."""
+def _run_binwalk_scan(path: Path, toolchain: Toolchain) -> tuple[int, str]:
+    """Roda a varredura em grupo isolado e encerra seus processos órfãos."""
     with tempfile.TemporaryDirectory(prefix="fmc-scan-") as scratch:
         home = Path(scratch)
-        return subprocess.run(
+        process = subprocess.Popen(
             [toolchain.binwalk, str(path.absolute())],
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
             text=True,
             errors="replace",
-            timeout=_BINWALK_SCAN_TIMEOUT_SECONDS,
             env=isolated_env(toolchain, home, home),
-            check=False,
+            start_new_session=True,
         )
+        try:
+            stdout, _ = process.communicate(timeout=_BINWALK_SCAN_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired:
+            stop_process_group(process)
+            raise
+        stop_process_group(process)
+        return process.returncode, stdout
 
 
 def _scan_binwalk(path: Path, toolchain: Toolchain) -> tuple[list[str], str]:
     """Varre assinaturas e expõe erro ou timeout sem achados espúrios."""
     try:
-        result = _run_binwalk_scan(path, toolchain)
+        returncode, stdout = _run_binwalk_scan(path, toolchain)
     except subprocess.TimeoutExpired:
         LOGGER.warning("binwalk timeout para %s", path)
         return [], BINWALK_STATUS_TIMEOUT
     except OSError as exc:
         LOGGER.warning("binwalk erro para %s: código indisponível: %s", path, exc)
         return [], BINWALK_STATUS_ERROR
-    if result.returncode != 0:
-        LOGGER.warning("binwalk erro para %s: código %d", path, result.returncode)
+    if returncode != 0:
+        LOGGER.warning("binwalk erro para %s: código %d", path, returncode)
         return [], BINWALK_STATUS_ERROR
     descriptions = []
-    for line in result.stdout.splitlines():
+    for line in stdout.splitlines():
         parts = line.split(None, _BINWALK_DESCRIPTION_INDEX)
         if len(parts) == _BINWALK_FIELDS and parts[0].isdigit():
             descriptions.append(parts[_BINWALK_DESCRIPTION_INDEX].strip())

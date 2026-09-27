@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import os
+import time
 import tracemalloc
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -55,6 +57,34 @@ def test_full_read_and_filesystem_strings(
     assert result.features["count_hardcoded_passwords"] >= 1
     assert result.features["n_filesystems"] == 1
     assert "hardcoded_passwords" in {finding.detector for finding in result.findings}
+
+
+def test_scan_timeout_kills_child_process(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Encerra também o filho da varredura quando excede o prazo."""
+    import pipeline.feature_extraction as pipeline
+
+    path = tmp_path / "firmware.bin"
+    path.write_bytes(b"firmware\x00")
+    marker = tmp_path / "orphan-marker"
+    script = tmp_path / "binwalk"
+    script.write_text(
+        "#!/bin/sh\n"
+        'case "$1" in\n'
+        "  -e) exit 0;;\n"
+        f'  *) (sleep 2; touch "{marker}") & sleep 10;;\n'
+        "esac\n"
+    )
+    script.chmod(0o755)
+    toolchain = Toolchain(str(script), dict(os.environ), {"binwalk": "fake"})
+    monkeypatch.setattr(pipeline, "_BINWALK_SCAN_TIMEOUT_SECONDS", 1)
+    result = extract_features_from_path(
+        path, load_pipeline_config(None, {}), None, toolchain
+    )
+    assert result.metadata["binwalk_status"] == "timeout"
+    time.sleep(2.5)
+    assert not marker.exists()
 
 
 def test_empty_and_unreadable_skip_tools(

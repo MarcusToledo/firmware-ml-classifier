@@ -17,7 +17,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import BinaryIO
+from typing import Any, BinaryIO
 
 LOGGER = logging.getLogger(__name__)
 STATUS_OK = "ok"
@@ -227,7 +227,7 @@ def _grant_owner_access(root: Path) -> None:
             )
 
 
-def _stop_process(process: subprocess.Popen[bytes]) -> None:
+def stop_process_group(process: subprocess.Popen[Any]) -> None:
     """Mata o grupo inteiro do extrator, inclusive órfãos de um líder já morto."""
     with suppress(ProcessLookupError):
         os.killpg(process.pid, signal.SIGKILL)
@@ -312,7 +312,7 @@ def _run_extractor(
         try:
             status = _monitor(process, out, limits, started)
         finally:
-            _stop_process(process)
+            stop_process_group(process)
         status = status or _final_status(process, out, limits)
         error = _stderr_tail(stderr) if status == STATUS_FAILURE else None
     return status, error
