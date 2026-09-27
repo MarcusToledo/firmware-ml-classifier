@@ -36,6 +36,40 @@ DEFAULT_DELAY_WITH_KEY = 1
 # every single one, since a full JSON rewrite grows with the cache size.
 SAVE_INTERVAL = 10
 
+CACHE_SCHEMA_VERSION = 3
+_CACHE_SCHEMA_FIELD = "schema_version"
+_DEFAULT_CACHE_PATH = "dataset/processed/cve_cache_v2.json"
+_EXIT_MISSING_PAIRS = 2
+_EXIT_FETCH_FAILURE = 1
+_CPE_FIELD_COUNT = 13
+_CPE_WILDCARD_FIELD_COUNT = 8
+_CPE_PART_INDEX = 2
+_CPE_VENDOR_INDEX = 3
+_CPE_MODEL_INDEX = 4
+_CPE_WILDCARD_START = 5
+_CPE_FORMAT_VERSION = "2.3"
+_CPE_HARDWARE_PART = "h"
+_CPE_SOFTWARE_PART = "o"
+_NVD_REQUEST_TIMEOUT_SECONDS = 30
+_BRAND_COLUMN = "meta_brand"
+_MODEL_COLUMN = "meta_model"
+_NVD_API_KEY_ENV = "NVD_API_KEY"
+_NVD_TOTAL_RESULTS_FIELD = "totalResults"
+_CVSS_V2_METRIC = "cvssMetricV2"
+_CVSS_DATA_FIELD = "cvssData"
+_CVSS_SCORE_FIELD = "baseScore"
+_KEYWORD_SEARCH_PARAM = "keywordSearch"
+_CVSS_SEVERITY_FIELD = "baseSeverity"
+_NO_CVSS_SCORE = 0.0
+_CVE_ITEMS_FIELD = "cves"
+_CVE_MAX_SCORE_FIELD = "cvss_max"
+_STATS_FETCHED = "fetched"
+_STATS_CACHED = "cached"
+_STATS_FAILED = "failed"
+_STATS_TOTAL_CVES = "total_cves"
+_TIMESTAMP_PRECISION = "seconds"
+
+
 # Maps internal brand names to the vendor name NVD uses in CVE descriptions.
 VENDOR_ALIASES: dict[str, str] = {
     "dlink": "d-link",
@@ -93,17 +127,19 @@ def normalize_model(model: str) -> str:
 def extract_cvss(cve: dict[str, Any]) -> tuple[float, str]:
     """Seleciona o maior score da primeira versão CVSS disponível."""
     metrics = cve.get("metrics", {})
-    for key in ("cvssMetricV31", "cvssMetricV30", "cvssMetricV2"):
+    for key in ("cvssMetricV31", "cvssMetricV30", _CVSS_V2_METRIC):
         entries = metrics.get(key, [])
         if entries:
-            entry = max(entries, key=lambda item: item["cvssData"]["baseScore"])
-            severity = (
-                entry.get("baseSeverity", "MEDIUM")
-                if key == "cvssMetricV2"
-                else entry["cvssData"]["baseSeverity"]
+            entry = max(
+                entries, key=lambda item: item[_CVSS_DATA_FIELD][_CVSS_SCORE_FIELD]
             )
-            return entry["cvssData"]["baseScore"], severity
-    return 0.0, "NONE"
+            severity = (
+                entry.get(_CVSS_SEVERITY_FIELD, "MEDIUM")
+                if key == _CVSS_V2_METRIC
+                else entry[_CVSS_DATA_FIELD][_CVSS_SEVERITY_FIELD]
+            )
+            return entry[_CVSS_DATA_FIELD][_CVSS_SCORE_FIELD], severity
+    return _NO_CVSS_SCORE, "NONE"
 
 
 # ---------------------------------------------------------------------------
@@ -114,7 +150,7 @@ def extract_cvss(cve: dict[str, Any]) -> tuple[float, str]:
 def _build_headers() -> dict[str, str]:
     """Build request headers, including API key if available."""
     headers = {"Accept": "application/json"}
-    api_key = os.environ.get("NVD_API_KEY", "")
+    api_key = os.environ.get(_NVD_API_KEY_ENV, "")
     if api_key:
         headers["apiKey"] = api_key
     return headers
@@ -132,7 +168,7 @@ def _fetch_page(
     url = f"{NVD_API_URL}?{params}"
     req = urllib.request.Request(url, headers=headers)
 
-    with urllib.request.urlopen(req, timeout=30) as resp:
+    with urllib.request.urlopen(req, timeout=_NVD_REQUEST_TIMEOUT_SECONDS) as resp:
         result: dict[str, Any] = json.loads(resp.read().decode())
         return result
 
@@ -142,11 +178,14 @@ def _fetch_cpe_page(
 ) -> dict[str, Any]:
     """Consulta uma página do dicionário oficial de nomes CPE da NVD."""
     params = (
-        f"keywordSearch={url_quote(keyword)}&resultsPerPage={RESULTS_PER_PAGE}"
+        f"{_KEYWORD_SEARCH_PARAM}={url_quote(keyword)}"
+        f"&resultsPerPage={RESULTS_PER_PAGE}"
         f"&startIndex={start_index}"
     )
     request = urllib.request.Request(f"{NVD_CPE_API_URL}?{params}", headers=headers)
-    with urllib.request.urlopen(request, timeout=30) as response:
+    with urllib.request.urlopen(
+        request, timeout=_NVD_REQUEST_TIMEOUT_SECONDS
+    ) as response:
         result: dict[str, Any] = json.loads(response.read().decode())
         return result
 
@@ -154,6 +193,35 @@ def _fetch_cpe_page(
 def _canonical_cpe_token(value: str) -> str:
     """Normaliza um campo CPE para comparação sem caixa nem pontuação."""
     return re.sub(r"[^a-z0-9]", "", value.lower())
+
+
+def _matching_cpe_name(
+    product: dict[str, Any], vendor: str, model: str
+) -> tuple[tuple[str, str, str], str] | None:
+    """Retorna chave e CPE generalizado quando fornecedor e modelo coincidem."""
+    name = product.get("cpe", {}).get("cpeName")
+    if not isinstance(name, str):
+        return None
+    parts = name.split(":")
+    if len(parts) != _CPE_FIELD_COUNT or parts[:_CPE_PART_INDEX] != [
+        "cpe",
+        _CPE_FORMAT_VERSION,
+    ]:
+        return None
+    if parts[_CPE_PART_INDEX] not in (_CPE_SOFTWARE_PART, _CPE_HARDWARE_PART):
+        return None
+    cpe_vendor = _canonical_cpe_token(parts[_CPE_VENDOR_INDEX])
+    cpe_model = _canonical_cpe_token(parts[_CPE_MODEL_INDEX]).removesuffix("firmware")
+    if cpe_vendor != vendor or cpe_model != model:
+        return None
+    key = (
+        parts[_CPE_PART_INDEX],
+        parts[_CPE_VENDOR_INDEX],
+        parts[_CPE_MODEL_INDEX],
+    )
+    return key, ":".join(
+        parts[:_CPE_WILDCARD_START] + ["*"] * _CPE_WILDCARD_FIELD_COUNT
+    )
 
 
 def resolve_cpe_name(
@@ -171,25 +239,19 @@ def resolve_cpe_name(
         data = _fetch_cpe_page(keyword, start_index, headers)
         products = data.get("products", [])
         for product in products:
-            name = product.get("cpe", {}).get("cpeName")
-            if not isinstance(name, str):
-                continue
-            parts = name.split(":")
-            if len(parts) != 13 or parts[:2] != ["cpe", "2.3"]:
-                continue
-            if parts[2] not in ("o", "h"):
-                continue
-            cpe_vendor = _canonical_cpe_token(parts[3])
-            cpe_model = _canonical_cpe_token(parts[4]).removesuffix("firmware")
-            if cpe_vendor == expected_vendor and cpe_model == expected_model:
-                accepted[(parts[2], parts[3], parts[4])] = ":".join(
-                    parts[:5] + ["*"] * 8
-                )
+            match = _matching_cpe_name(product, expected_vendor, expected_model)
+            if match is not None:
+                key, name = match
+                accepted[key] = name
         start_index += len(products)
-        if not products or start_index >= data.get("totalResults", 0):
+        if not products or start_index >= data.get(_NVD_TOTAL_RESULTS_FIELD, 0):
             break
         time.sleep(delay)
-    part = "o" if any(key[0] == "o" for key in accepted) else "h"
+    part = (
+        _CPE_SOFTWARE_PART
+        if any(key[0] == _CPE_SOFTWARE_PART for key in accepted)
+        else _CPE_HARDWARE_PART
+    )
     names = sorted(name for key, name in accepted.items() if key[0] == part)
     if len(names) == 1:
         return names[0], []
@@ -204,7 +266,7 @@ def _fetch_all_pages(
     cves: list[dict[str, Any]] = []
     while True:
         data = _fetch_page(query_params, start_index, headers)
-        total_results = data.get("totalResults", 0)
+        total_results = data.get(_NVD_TOTAL_RESULTS_FIELD, 0)
         vulnerabilities = data.get("vulnerabilities", [])
         for item in vulnerabilities:
             cve = item.get("cve", {})
@@ -212,7 +274,7 @@ def _fetch_all_pages(
             cves.append(
                 {
                     "id": cve.get("id", ""),
-                    "cvss_max": score,
+                    _CVE_MAX_SCORE_FIELD: score,
                     "severity": severity_bucket(severity),
                     "configurations": cve.get("configurations", []),
                 }
@@ -237,20 +299,22 @@ def fetch_cves_for_pair(
         source = "cpe"
     else:
         keyword = f"{normalize_vendor(vendor)} {normalize_model(model)}"
-        query_params = f"keywordSearch={url_quote(keyword)}"
+        query_params = f"{_KEYWORD_SEARCH_PARAM}={url_quote(keyword)}"
         source = "keyword"
     if delay > 0:
         time.sleep(delay)
     cves = _fetch_all_pages(query_params, headers, delay)
     return {
-        "schema_version": 3,
-        "fetched_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        _CACHE_SCHEMA_FIELD: CACHE_SCHEMA_VERSION,
+        "fetched_at": datetime.now(timezone.utc).isoformat(
+            timespec=_TIMESTAMP_PRECISION
+        ),
         "cpe_candidates": candidates,
         "source": source,
         "vendor": normalize_vendor(vendor),
         "model": normalize_model(model),
         "cpe_name": cpe_name,
-        "cves": cves,
+        _CVE_ITEMS_FIELD: cves,
     }
 
 
@@ -282,8 +346,8 @@ def extract_pairs(df: pd.DataFrame) -> list[tuple[str, str]]:
     """Extrai pares únicos de fabricante/modelo ordenados das features."""
     # fillna before stringifying so missing values (None/NaN, regardless of
     # column dtype) normalize to "" instead of the literal string "nan".
-    brand = df["meta_brand"].fillna("").astype(str).str.strip().str.lower()
-    model = df["meta_model"].fillna("").astype(str).str.strip().str.lower()
+    brand = df[_BRAND_COLUMN].fillna("").astype(str).str.strip().str.lower()
+    model = df[_MODEL_COLUMN].fillna("").astype(str).str.strip().str.lower()
     valid = (brand != "") & (model != "")
     LOGGER.info(
         "Linhas descartadas por fabricante ou modelo nulo ou vazio: %d",
@@ -313,8 +377,8 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--output",
-        default="dataset/processed/cve_cache_v2.json",
-        help="Path to CVE cache JSON (default: dataset/processed/cve_cache_v2.json)",
+        default=_DEFAULT_CACHE_PATH,
+        help=f"Path to CVE cache JSON (default: {_DEFAULT_CACHE_PATH})",
     )
     parser.add_argument(
         "--delay",
@@ -339,14 +403,14 @@ def _resolve_delay(args: argparse.Namespace) -> float:
         return float(args.delay)
     return (
         DEFAULT_DELAY_WITH_KEY
-        if os.environ.get("NVD_API_KEY")
+        if os.environ.get(_NVD_API_KEY_ENV)
         else DEFAULT_DELAY_NO_KEY
     )
 
 
 def _load_pairs(path: Path) -> list[tuple[str, str]]:
     """Lê apenas as colunas de identidade e exige pares válidos."""
-    df = pd.read_parquet(path, columns=["meta_brand", "meta_model"])
+    df = pd.read_parquet(path, columns=[_BRAND_COLUMN, _MODEL_COLUMN])
     LOGGER.info("Loaded %d records from %s", len(df), path)
     pairs = extract_pairs(df)
     LOGGER.info("Found %d unique vendor/model pairs", len(pairs))
@@ -356,7 +420,7 @@ def _load_pairs(path: Path) -> list[tuple[str, str]]:
             "--label-from-path",
             path,
         )
-        raise SystemExit(2)
+        raise SystemExit(_EXIT_MISSING_PAIRS)
     return pairs
 
 
@@ -385,32 +449,35 @@ def _fetch_one_pair(
     key = f"{vendor}/{model}"
     if key in cache and not force:
         entry = cache[key]
-        version = entry.get("schema_version") if isinstance(entry, dict) else None
-        if version != 3:
+        version = entry.get(_CACHE_SCHEMA_FIELD) if isinstance(entry, dict) else None
+        if version != CACHE_SCHEMA_VERSION:
             raise ValueError(
                 f"Cache CVE em schema antigo para {key}: "
                 f"schema_version={version}; rode com --force"
             )
-        if not isinstance(entry.get("cves"), list):
+        if not isinstance(entry.get(_CVE_ITEMS_FIELD), list):
             raise ValueError(f"Cache CVE inválido para {key}: cves não é uma lista")
         LOGGER.info("[SKIP] %d/%d %s (cached)", index, total, key)
-        stats["cached"] += 1
-        stats["total_cves"] += len(entry["cves"])
+        stats[_STATS_CACHED] += 1
+        stats[_STATS_TOTAL_CVES] += len(entry[_CVE_ITEMS_FIELD])
         return
     try:
         LOGGER.info("[FETCH] %d/%d %s", index, total, key)
         result = fetch_cves_for_pair(vendor, model, headers, delay)
         cache[key] = result
-        stats["fetched"] += 1
-        stats["total_cves"] += len(result["cves"])
+        stats[_STATS_FETCHED] += 1
+        stats[_STATS_TOTAL_CVES] += len(result[_CVE_ITEMS_FIELD])
         LOGGER.info(
             "  -> %d CVEs (max CVSS: %.1f)",
-            len(result["cves"]),
-            max((cve["cvss_max"] for cve in result["cves"]), default=0.0),
+            len(result[_CVE_ITEMS_FIELD]),
+            max(
+                (cve[_CVE_MAX_SCORE_FIELD] for cve in result[_CVE_ITEMS_FIELD]),
+                default=_NO_CVSS_SCORE,
+            ),
         )
     except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as exc:
         LOGGER.error("[FAIL] %s: %s", key, exc)
-        stats["failed"] += 1
+        stats[_STATS_FAILED] += 1
         if force:
             cache.pop(key, None)
 
@@ -430,7 +497,7 @@ def _fetch_all_pairs(
     headers = _build_headers()
     try:
         for index, (vendor, model) in enumerate(pairs, 1):
-            fetched_before = stats["fetched"]
+            fetched_before = stats[_STATS_FETCHED]
             _fetch_one_pair(
                 vendor,
                 model,
@@ -442,7 +509,9 @@ def _fetch_all_pairs(
                 force,
                 stats,
             )
-            if stats["fetched"] > fetched_before and _should_save(stats["fetched"]):
+            if stats[_STATS_FETCHED] > fetched_before and _should_save(
+                stats[_STATS_FETCHED]
+            ):
                 save_cache(cache, output)
                 _write_run_metadata(args, output, started_at, stats)
             if index < len(pairs):
@@ -455,10 +524,10 @@ def _fetch_all_pairs(
 def _log_summary(stats: dict[str, int]) -> None:
     """Registra a quantidade consultada, reaproveitada e falha."""
     LOGGER.info("--- Summary ---")
-    LOGGER.info("  Fetched: %d", stats["fetched"])
-    LOGGER.info("  Cached:  %d", stats["cached"])
-    LOGGER.info("  Failed:  %d", stats["failed"])
-    LOGGER.info("  Total CVEs: %d", stats["total_cves"])
+    LOGGER.info("  Fetched: %d", stats[_STATS_FETCHED])
+    LOGGER.info("  Cached:  %d", stats[_STATS_CACHED])
+    LOGGER.info("  Failed:  %d", stats[_STATS_FAILED])
+    LOGGER.info("  Total CVEs: %d", stats[_STATS_TOTAL_CVES])
 
 
 def _write_run_metadata(
@@ -476,10 +545,12 @@ def _write_run_metadata(
         "output_path": str(output),
         "code_commit": code_commit(),
         "started_at": started_at,
-        "finished_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "pairs_fetched": stats["fetched"],
-        "pairs_skipped": stats["cached"],
-        "pairs_failed": stats["failed"],
+        "finished_at": datetime.now(timezone.utc).isoformat(
+            timespec=_TIMESTAMP_PRECISION
+        ),
+        "pairs_fetched": stats[_STATS_FETCHED],
+        "pairs_skipped": stats[_STATS_CACHED],
+        "pairs_failed": stats[_STATS_FAILED],
     }
     path = output.with_name(f"{output.stem}.meta.json")
     path.write_text(json.dumps(metadata, indent=2, ensure_ascii=False) + "\n")
@@ -489,14 +560,19 @@ def main() -> None:
     """Orquestra a busca e sinaliza falhas depois de salvar os artefatos."""
     args = _parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-    started_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    started_at = datetime.now(timezone.utc).isoformat(timespec=_TIMESTAMP_PRECISION)
     delay = _resolve_delay(args)
     pairs = _load_pairs(Path(args.features))
     if args.dry_run:
         _show_dry_run(pairs)
         return
     output = Path(args.output)
-    stats = {"fetched": 0, "cached": 0, "failed": 0, "total_cves": 0}
+    stats = {
+        _STATS_FETCHED: 0,
+        _STATS_CACHED: 0,
+        _STATS_FAILED: 0,
+        _STATS_TOTAL_CVES: 0,
+    }
     try:
         _fetch_all_pairs(pairs, output, delay, args.force, stats, args, started_at)
     except BaseException:
@@ -505,8 +581,8 @@ def main() -> None:
         raise
     _log_summary(stats)
     _write_run_metadata(args, output, started_at, stats)
-    if stats["failed"]:
-        raise SystemExit(1)
+    if stats[_STATS_FAILED]:
+        raise SystemExit(_EXIT_FETCH_FAILURE)
 
 
 if __name__ == "__main__":
