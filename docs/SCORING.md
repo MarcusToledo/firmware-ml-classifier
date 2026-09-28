@@ -51,7 +51,7 @@ atribuir `sem_cve_conhecida`.
 ```bash
 uv run python scripts/generate_labels.py \
   --features dataset/processed/features.parquet \
-  --cves dataset/cve_cache.json \
+  --cves dataset/processed/cve_cache_v2.json \
   --output dataset/processed/labels_v2.csv
 ```
 
