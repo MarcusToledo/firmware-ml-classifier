@@ -59,13 +59,15 @@ Extrair features via CLI instalada:
 > `generate-labels` falha com contexto; não inventa um rótulo negativo.
 
 Gerar cache de CVEs por fabricante/modelo (obrigatório para rotulagem):
-- `uv run python scripts/fetch_cves.py --features dataset/processed/features.parquet --output dataset/cve_cache.json`
+- `uv run python scripts/fetch_cves.py --features dataset/processed/features.parquet`
+- Sem `--output`, grava `dataset/processed/cve_cache_v2.json` e
+  `dataset/processed/cve_cache_v2.meta.json`; entrada com schema antigo exige `--force`.
 - Usa a API pública da NVD v2.0; sem `NVD_API_KEY` no ambiente, o delay entre requisições é de
   6s (1s com a key). Pares já presentes no cache são pulados automaticamente (use `--force`
   para refazer). `--dry-run` lista os pares vendor/model sem fazer requisições.
 
 Gerar rótulos a partir do cache de CVEs:
-- `uv run python scripts/generate_labels.py --features dataset/processed/features.parquet --cves dataset/cve_cache.json`
+- `uv run python scripts/generate_labels.py --features dataset/processed/features.parquet --cves dataset/processed/cve_cache_v2.json`
 - Sem `--output`, grava `dataset/processed/labels_v2.csv`. Ao lado da tabela ficam
   `<nome>_aliases.jsonl` (aliases e CVEs aplicáveis/indeterminadas por alias) e
   `<nome>.meta.json` (limiar, SHA256 das entradas, commit do código e data).

@@ -14,6 +14,10 @@ from scripts import extract_features as cli
 from src.features.unpack import Toolchain
 
 _EXIT_USAGE = 2
+# Corta o firmware (72 bytes) sem cortar o config do rootfs simulado
+# ("password=secret\n", 16 bytes), que precisa ser lido inteiro.
+_OVERRIDE_MAX_BYTES = 32
+_FIRMWARE_REPEATS = 8
 
 
 def _invoke(
@@ -108,7 +112,7 @@ def test_cli_csv_findings_and_override(
 ) -> None:
     """Grava CSV, JSONL ligado ao firmware_id e aplica override registrado."""
     firmware = tmp_path / "firmware.bin"
-    firmware.write_bytes(b"firmware\x00")
+    firmware.write_bytes(b"firmware\x00" * _FIRMWARE_REPEATS)
     monkeypatch.setattr(cli, "resolve_toolchain", lambda: fake_toolchain)
     output = tmp_path / "out.csv"
     findings = tmp_path / "findings.jsonl"
@@ -121,12 +125,15 @@ def test_cli_csv_findings_and_override(
         "--findings-output",
         str(findings),
         "--override",
-        "max_bytes=4",
+        f"max_bytes={_OVERRIDE_MAX_BYTES}",
         "--workers",
         "1",
     )
     row = pd.read_csv(output).iloc[0]
-    assert (row["meta_max_bytes"], row["meta_bytes_used"]) == (4, 4)
+    assert (row["meta_max_bytes"], row["meta_bytes_used"]) == (
+        _OVERRIDE_MAX_BYTES,
+        _OVERRIDE_MAX_BYTES,
+    )
     assert row["meta_file_size"] == firmware.stat().st_size
     records = [json.loads(line) for line in findings.read_text().splitlines()]
     assert "hardcoded_passwords" in {record["detector"] for record in records}
