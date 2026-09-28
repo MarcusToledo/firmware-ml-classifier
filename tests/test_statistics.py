@@ -1,62 +1,52 @@
-import math
-import os
+"""Compara acumulador em blocos com cálculos independentes em memória."""
 
-from src.features.statistics import (
-    BLOCK_SIZE,
-    byte_mean,
-    compress_ratio,
-    entropy_variance_across_sections,
-    shannon_entropy,
-)
+import zlib
 
+import numpy as np
+import pytest
 
-def test_entropy_empty_returns_zero() -> None:
-    assert shannon_entropy(b"") == 0.0
+from src.features.statistics import BLOCK_SIZE, StreamingStats, shannon_entropy
+
+_BYTE_VALUES = 256
+_COMPRESSION_LEVEL = 9
 
 
-def test_byte_mean_empty_returns_zero() -> None:
-    assert byte_mean(b"") == 0.0
+def test_empty_stats_keep_defined_values() -> None:
+    """Mantém resultado definido para arquivo vazio."""
+    result = StreamingStats().result()
+    assert (
+        result.entropy,
+        result.byte_mean,
+        result.compress_ratio,
+        result.entropy_variance_across_sections,
+    ) == (0.0, 0.0, 1.0, 0.0)
 
 
-def test_compress_ratio_empty_returns_one() -> None:
-    assert compress_ratio(b"") == 1.0
-
-
-def test_compress_ratio_level_affects_output() -> None:
-    payload = b"A" * 100
-    ratio_default = compress_ratio(payload)
-    ratio_fast = compress_ratio(payload, level=1)
-
-    assert ratio_default <= ratio_fast
-
-
-def test_entropy_known_distribution() -> None:
-    payload = b"\x00\x01"
-    assert math.isclose(shannon_entropy(payload), 1.0, rel_tol=1e-6)
-
-
-# -- entropy_variance_across_sections ----------------------------------------
-
-
-def test_entropy_variance_empty() -> None:
-    assert entropy_variance_across_sections(b"") == 0.0
-
-
-def test_entropy_variance_too_small() -> None:
-    # Less than 2 blocks → 0.0
-    assert entropy_variance_across_sections(b"\x00" * BLOCK_SIZE) == 0.0
-
-
-def test_entropy_variance_uniform_blocks() -> None:
-    # Two identical blocks → variance should be 0.0
-    data = b"\x00" * (BLOCK_SIZE * 2)
-    assert entropy_variance_across_sections(data) == 0.0
-
-
-def test_entropy_variance_different_blocks() -> None:
-    # One low-entropy block + one high-entropy block → positive variance
-    low_entropy = b"\x00" * BLOCK_SIZE
-    high_entropy = os.urandom(BLOCK_SIZE)
-    data = low_entropy + high_entropy
-    variance = entropy_variance_across_sections(data)
-    assert variance > 0.0
+@pytest.mark.parametrize("chunk_size", [1, 4093, BLOCK_SIZE, BLOCK_SIZE + 1])
+def test_streamed_statistics_match_full_reference(chunk_size: int) -> None:
+    """Independe do tamanho dos pedaços, inclusive sobre bordas de 64 KiB."""
+    data = (
+        np.random.default_rng(42)
+        .integers(0, _BYTE_VALUES, size=BLOCK_SIZE * 2 + 113, dtype=np.uint8)
+        .tobytes()
+    )
+    stats = StreamingStats()
+    for index in range(0, len(data), chunk_size):
+        stats.update(data[index : index + chunk_size])
+    result = stats.result()
+    counts = np.bincount(np.frombuffer(data, dtype=np.uint8), minlength=_BYTE_VALUES)
+    probabilities = counts[counts > 0] / len(data)
+    expected_entropy = float(-(probabilities * np.log2(probabilities)).sum())
+    section_entropies = [
+        shannon_entropy(data[index : index + BLOCK_SIZE]) for index in (0, BLOCK_SIZE)
+    ]
+    assert result.entropy == pytest.approx(expected_entropy, rel=1e-12)
+    assert result.byte_mean == pytest.approx(
+        float(np.frombuffer(data, dtype=np.uint8).mean()), rel=1e-12
+    )
+    assert result.compress_ratio == len(zlib.compress(data, _COMPRESSION_LEVEL)) / len(
+        data
+    )
+    assert result.entropy_variance_across_sections == pytest.approx(
+        float(np.var(section_entropies)), rel=1e-12
+    )

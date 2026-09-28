@@ -1,81 +1,176 @@
+"""Exercita leitura, fallback, estado e identidade em lote."""
+
+from __future__ import annotations
+
+import hashlib
+import os
+import time
+import tracemalloc
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
 from pipeline.feature_extraction import (
+    STRINGS_BLOB,
+    STRINGS_FILESYSTEM,
+    THIRD_PARTY_DDWRT,
+    VERSION_SOURCE_DIRECTORY,
+    VERSION_SOURCE_FILENAME,
     extract_features_batch,
     extract_features_from_path,
     load_pipeline_config,
 )
-
-
-def test_extract_features_from_path_valid_file(tmp_path: Path) -> None:
-    firmware_path = tmp_path / "firmware.bin"
-    firmware_path.write_bytes(b"firmware-data")
-
-    config = load_pipeline_config(tmp_path / "missing.yaml", overrides={})
-
-    result = extract_features_from_path(
-        firmware_path,
-        config,
-        model=None,
-    )
-
-    assert result.metadata["read_ok"] is True
-    assert result.metadata["byte_len"] == len(b"firmware-data")
-    assert result.metadata["bytes_used"] == len(b"firmware-data")
-    assert result.metadata["max_bytes"] is None
-    assert result.firmware_id is not None
-    assert result.metadata["doc2vec_used"] is False
-    assert result.metadata["brand"] is None
-    assert result.metadata["model"] is None
-    assert result.metadata["label"] is None
-    assert result.metadata["version"] is None
-    assert result.metadata["version_source"] is None
-
-
-@pytest.mark.parametrize(
-    ("version", "version_source"),
-    [
-        ("1.0", None),
-        (None, "directory"),
-    ],
+from src.features.unpack import (
+    STATUS_FAILURE,
+    STATUS_FILES,
+    STATUS_NO_FILESYSTEM,
+    STATUS_NOT_RUN,
+    STATUS_OK,
+    STATUS_SIZE,
+    STATUS_TIME,
+    Toolchain,
+    UnpackResult,
 )
-def test_extract_features_rejects_inconsistent_version_metadata(
-    tmp_path: Path,
-    version: str | None,
-    version_source: str | None,
+
+
+def test_full_read_and_filesystem_strings(
+    tmp_path: Path, fake_toolchain: Toolchain
 ) -> None:
-    firmware_path = tmp_path / "firmware.bin"
-    config = load_pipeline_config(tmp_path / "missing.yaml", overrides={})
-
-    with pytest.raises(ValueError) as exc_info:
-        extract_features_from_path(
-            firmware_path,
-            config,
-            model=None,
-            version=version,
-            version_source=version_source,
-        )
-
-    assert str(firmware_path) in str(exc_info.value)
-
-
-def test_classifier_features_exclude_cve_and_identity_fields(tmp_path: Path) -> None:
-    firmware_path = (
-        tmp_path / "raw" / "zyxel" / "NWA110AX_7.10(ABTG.4)C0" / "firmware.bin"
+    """Lê arquivo inteiro para hash/estatísticas e varre strings do rootfs."""
+    path = tmp_path / "firmware.bin"
+    path.write_bytes(b"header\x00OpenWrt\x00")
+    result = extract_features_from_path(
+        path, load_pipeline_config(None, {}), None, fake_toolchain
     )
-    firmware_path.parent.mkdir(parents=True)
-    firmware_path.write_bytes(b"firmware-data")
-    config = load_pipeline_config(tmp_path / "missing.yaml", overrides={})
+    assert result.firmware_id == hashlib.sha256(path.read_bytes()).hexdigest()
+    assert (
+        result.metadata["file_size"]
+        == result.metadata["bytes_used"]
+        == path.stat().st_size
+    )
+    assert result.metadata["binwalk_status"] == STATUS_OK
+    assert result.metadata["unpack_status"] == STATUS_OK
+    assert result.metadata["strings_source"] == STRINGS_FILESYSTEM
+    assert result.metadata["third_party"] is None
+    assert result.features["count_hardcoded_passwords"] >= 1
+    assert result.features["n_filesystems"] == 1
+    assert "hardcoded_passwords" in {finding.detector for finding in result.findings}
 
-    result = extract_features_batch([firmware_path], config, max_workers=1)[0]
 
+def test_scan_timeout_kills_child_process(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Encerra também o filho da varredura quando excede o prazo."""
+    import pipeline.feature_extraction as pipeline
+
+    path = tmp_path / "firmware.bin"
+    path.write_bytes(b"firmware\x00")
+    marker = tmp_path / "orphan-marker"
+    script = tmp_path / "binwalk"
+    script.write_text(
+        "#!/bin/sh\n"
+        'case "$1" in\n'
+        "  -e) exit 0;;\n"
+        f'  *) (sleep 2; touch "{marker}") & sleep 10;;\n'
+        "esac\n"
+    )
+    script.chmod(0o755)
+    toolchain = Toolchain(str(script), dict(os.environ), {"binwalk": "fake"})
+    monkeypatch.setattr(pipeline, "_BINWALK_SCAN_TIMEOUT_SECONDS", 1)
+    result = extract_features_from_path(
+        path, load_pipeline_config(None, {}), None, toolchain
+    )
+    assert result.metadata["binwalk_status"] == "timeout"
+    time.sleep(2.5)
+    assert not marker.exists()
+
+
+def test_read_rejects_file_changed_during_stream(
+    tmp_path: Path, fake_toolchain: Toolchain, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Registra erro quando a leitura termina antes do tamanho medido."""
+    import pipeline.feature_extraction as pipeline
+
+    path = tmp_path / "firmware.bin"
+    path.write_bytes(b"0123456789")
+    monkeypatch.setattr(
+        pipeline, "iter_file_chunks", lambda path, limit, **kw: iter([b"abc"])
+    )
+    result = extract_features_from_path(
+        path, load_pipeline_config(None, {}), None, fake_toolchain
+    )
+    assert result.metadata["read_ok"] is False
+    assert "alterado durante a leitura" in result.metadata["error"]
+
+
+def test_empty_and_unreadable_skip_tools(
+    tmp_path: Path, fake_toolchain: Toolchain
+) -> None:
+    """Mantém linha de falha e status não executado em leitura impossível."""
+    empty = tmp_path / "empty.bin"
+    empty.touch()
+    missing = tmp_path / "missing.bin"
+    empty_result, missing_result = extract_features_batch(
+        [empty, missing], load_pipeline_config(None, {}), fake_toolchain, max_workers=1
+    )
+    assert empty_result.metadata["error"] == "empty firmware"
+    assert empty_result.metadata["file_size"] == 0
+    assert missing_result.metadata["error"].startswith("[Errno 2]")
+    assert missing_result.metadata["file_size"] is None
+    for result in (empty_result, missing_result):
+        assert result.metadata["read_ok"] is False
+        assert result.firmware_id is None
+        assert result.metadata["binwalk_status"] == STATUS_NOT_RUN
+        assert result.metadata["unpack_status"] == STATUS_NOT_RUN
+        assert result.metadata["strings_source"] == STATUS_NOT_RUN
+
+
+def test_error_row_keeps_identity_and_batch_continues(
+    tmp_path: Path, fake_toolchain: Toolchain
+) -> None:
+    """Arquivo ilegível vira linha de erro com a identidade do path relativo."""
+    root = tmp_path / "raw"
+    good = root / "zyxel" / "NWA110AX_7.10(ABTG.4)C0" / "firmware.bin"
+    good.parent.mkdir(parents=True)
+    good.write_bytes(b"firmware-data\x00")
+    missing = root / "dlink" / "dsr1000n_1.2" / "firmware.bin"
+    good_result, missing_result = extract_features_batch(
+        [good, missing],
+        load_pipeline_config(None, {}),
+        fake_toolchain,
+        max_workers=1,
+        dataset_root=root,
+    )
+    assert good_result.metadata["read_ok"] is True
+    assert missing_result.metadata["read_ok"] is False
+    assert missing_result.metadata["path"] == "dlink/dsr1000n_1.2/firmware.bin"
+    assert (
+        missing_result.metadata["brand"],
+        missing_result.metadata["model"],
+        missing_result.metadata["version"],
+        missing_result.metadata["version_source"],
+    ) == ("dlink", "dsr1000n", "1.2", VERSION_SOURCE_DIRECTORY)
+
+
+def test_classifier_features_exclude_cve_and_identity_fields(
+    tmp_path: Path, fake_toolchain: Toolchain
+) -> None:
+    """Identidade e campos de CVE ficam só nos metadados (constituição III)."""
+    root = tmp_path / "raw"
+    path = root / "zyxel" / "NWA110AX_7.10(ABTG.4)C0" / "firmware.bin"
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"firmware-data\x00")
+    result = extract_features_batch(
+        [path],
+        load_pipeline_config(None, {}),
+        fake_toolchain,
+        max_workers=1,
+        dataset_root=root,
+    )[0]
     assert result.metadata["brand"] == "zyxel"
-    assert result.metadata["model"] == "nwa110ax"
     assert result.metadata["version"] == "7.10(ABTG.4)C0"
-    assert result.metadata["version_source"] == "directory"
     forbidden = {
         "cvss_max",
         "cve_total",
@@ -85,269 +180,226 @@ def test_classifier_features_exclude_cve_and_identity_fields(tmp_path: Path) -> 
         "cve_count_low",
         "brand",
         "model",
+        "label",
         "version",
         "version_source",
-        "meta_brand",
-        "meta_model",
-        "meta_version",
-        "meta_version_source",
+        "third_party",
+        "path",
     }
     assert forbidden.isdisjoint(result.features)
+    assert not any(key.startswith("meta_") for key in result.features)
 
 
-def test_error_result_preserves_version_from_path(tmp_path: Path) -> None:
-    """A via de erro preserva version e version_source no metadata.
+@pytest.mark.parametrize(
+    "version,source", [("1.0", None), (None, VERSION_SOURCE_FILENAME)]
+)
+def test_inconsistent_version_metadata_is_rejected(
+    tmp_path: Path,
+    fake_toolchain: Toolchain,
+    version: str | None,
+    source: str | None,
+) -> None:
+    """Exige versão e origem juntas, citando o arquivo."""
+    path = tmp_path / "firmware.bin"
+    with pytest.raises(ValueError, match=str(path)):
+        extract_features_from_path(
+            path,
+            load_pipeline_config(None, {}),
+            None,
+            fake_toolchain,
+            version=version,
+            version_source=source,
+        )
 
-    Um path inexistente forca read_binary a levantar excecao e exercita
-    o branch de erro de _process_path.
-    """
-    missing_path = tmp_path / "raw" / "dlink" / "dsr1000n_1.2" / "firmware.bin"
-    config = load_pipeline_config(tmp_path / "missing.yaml", overrides={})
 
-    result = extract_features_batch([missing_path], config, max_workers=1)[0]
+def test_detected_filesystem_not_extracted_is_failure(
+    tmp_path: Path, fake_toolchain: Toolchain, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Filesystem visto na varredura sem raiz extraída é falha, não ausência."""
+    import pipeline.feature_extraction as pipeline
 
-    assert result.metadata["read_ok"] is False
-    assert result.firmware_id is None
-    assert result.metadata["brand"] == "dlink"
-    assert result.metadata["model"] == "dsr1000n"
-    assert result.metadata["version"] == "1.2"
-    assert result.metadata["version_source"] == "directory"
+    path = tmp_path / "firmware.bin"
+    path.write_bytes(b"password=secret\x00")
 
+    @contextmanager
+    def unpack(
+        _path: Path, _limits: object, _toolchain: Toolchain
+    ) -> Iterator[UnpackResult]:
+        """Simula recorte cramfs mantido sem ``cramfsck``."""
+        yield UnpackResult(STATUS_NO_FILESYSTEM, None)
 
-def test_extract_features_from_path_empty_file(tmp_path: Path) -> None:
-    firmware_path = tmp_path / "empty.bin"
-    firmware_path.write_bytes(b"")
-
-    config = load_pipeline_config(tmp_path / "missing.yaml", overrides={})
-
+    monkeypatch.setattr(pipeline, "unpack_firmware", unpack)
+    monkeypatch.setattr(
+        pipeline, "_scan_binwalk", lambda path, tool: (["CramFS filesystem"], STATUS_OK)
+    )
     result = extract_features_from_path(
-        firmware_path,
-        config,
-        model=None,
+        path, load_pipeline_config(None, {}), None, fake_toolchain
     )
-
-    assert result.metadata["read_ok"] is False
-    assert result.firmware_id is None
-    assert result.metadata["error"] is not None
-    assert result.metadata["brand"] is None
-    assert result.metadata["model"] is None
-    assert result.metadata["label"] is None
+    assert result.features["fs_type"] == "cramfs"
+    assert result.metadata["unpack_status"] == STATUS_FAILURE
+    assert result.metadata["strings_source"] == STRINGS_BLOB
 
 
-def test_extract_features_from_path_max_bytes_zero(tmp_path: Path) -> None:
-    firmware_path = tmp_path / "firmware.bin"
-    firmware_path.write_bytes(b"abc")
+def test_batch_preserves_relative_identity_and_order(
+    tmp_path: Path, fake_toolchain: Toolchain
+) -> None:
+    """Mantém ordem e versão inferida relativa à raiz também com workers."""
+    root = tmp_path / "dataset" / "raw"
+    paths = [
+        root / "netgear" / "r6250" / "R6250-V1.0.1.80_1.0.75.chk",
+        root / "dlink" / "dir-300" / "fw.bin",
+    ]
+    for path in paths:
+        path.parent.mkdir(parents=True)
+        path.write_bytes(b"firmware\x00")
+    results = extract_features_batch(
+        paths,
+        load_pipeline_config(None, {}),
+        fake_toolchain,
+        max_workers=2,
+        dataset_root=root,
+    )
+    assert [result.metadata["path"] for result in results] == [
+        "netgear/r6250/R6250-V1.0.1.80_1.0.75.chk",
+        "dlink/dir-300/fw.bin",
+    ]
+    assert results[0].metadata["version"] == "1.0.1.80"
+    assert results[1].metadata["brand"] == "dlink"
 
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text("max_bytes: 0\n")
 
-    config = load_pipeline_config(config_path, overrides={})
+@pytest.mark.parametrize(
+    "status,source",
+    [
+        (STATUS_NO_FILESYSTEM, STRINGS_BLOB),
+        (STATUS_FAILURE, STRINGS_BLOB),
+        (STATUS_SIZE, STRINGS_BLOB),
+        (STATUS_FILES, STRINGS_BLOB),
+        (STATUS_TIME, STATUS_NOT_RUN),
+    ],
+)
+def test_unpack_fallback_or_timeout(
+    tmp_path: Path,
+    fake_toolchain: Toolchain,
+    monkeypatch: pytest.MonkeyPatch,
+    status: str,
+    source: str,
+) -> None:
+    """Só faz fallback sobre blob quando não houve limite de tempo."""
+    import pipeline.feature_extraction as pipeline
 
+    path = tmp_path / "firmware.bin"
+    path.write_bytes(b"password=secret\x00DD-WRT\x00")
+
+    @contextmanager
+    def unpack(
+        _path: Path, _limits: object, _toolchain: Toolchain
+    ) -> Iterator[UnpackResult]:
+        """Reproduz o status reportado pelo monitor real."""
+        yield UnpackResult(status, None)
+
+    monkeypatch.setattr(pipeline, "unpack_firmware", unpack)
+    monkeypatch.setattr(pipeline, "_scan_binwalk", lambda path, tool: ([], STATUS_OK))
     result = extract_features_from_path(
-        firmware_path,
-        config,
-        model=None,
+        path, load_pipeline_config(None, {}), None, fake_toolchain
     )
-
-    assert result.metadata["read_ok"] is False
-    assert result.metadata["byte_len"] == 0
-    assert result.metadata["bytes_used"] == 0
-    assert result.metadata["max_bytes"] == 0
-    assert result.metadata["brand"] is None
-    assert result.metadata["model"] is None
-    assert result.metadata["label"] is None
-
-
-def test_extract_features_batch_continues_on_error(tmp_path: Path) -> None:
-    good_path = tmp_path / "good.bin"
-    good_path.write_bytes(b"good")
-    missing_path = tmp_path / "missing.bin"
-
-    config = load_pipeline_config(tmp_path / "missing.yaml", overrides={})
-
-    results = extract_features_batch([good_path, missing_path], config)
-
-    assert len(results) == 2
-    assert results[0].metadata["read_ok"] is True
-    assert results[0].metadata["brand"] is None
-    assert results[0].metadata["model"] is None
-    assert results[0].metadata["label"] is None
-    assert results[1].metadata["read_ok"] is False
-    assert results[1].metadata["brand"] is None
-    assert results[1].metadata["model"] is None
-    assert results[1].metadata["label"] is None
-    assert results[1].firmware_id is None
-
-
-def test_extract_features_includes_binwalk_keys(tmp_path: Path) -> None:
-    """Binwalk feature keys are always present even without binwalk3."""
-    firmware_path = tmp_path / "firmware.bin"
-    firmware_path.write_bytes(b"firmware-data")
-
-    config = load_pipeline_config(tmp_path / "missing.yaml", overrides={})
-    result = extract_features_from_path(firmware_path, config, model=None)
-
-    expected_keys = {
-        "n_filesystems",
-        "n_crypto_signatures",
-        "has_encrypted_sections",
-        "fs_type",
-        "compression_type",
-        "entropy_variance_across_sections",
-    }
-    assert expected_keys.issubset(result.features.keys())
-
-
-def test_extract_features_includes_string_pattern_keys(tmp_path: Path) -> None:
-    """String pattern feature keys are always present after extraction."""
-    firmware_path = tmp_path / "firmware.bin"
-    firmware_path.write_bytes(b"firmware-data")
-
-    config = load_pipeline_config(tmp_path / "missing.yaml", overrides={})
-    result = extract_features_from_path(firmware_path, config, model=None)
-
-    expected_keys = {
-        "count_hardcoded_passwords",
-        "count_non_public_ips",
-        "has_telnetd",
-        "has_debug_account",
-        "has_outdated_libssl",
-        "has_outdated_busybox",
-        "has_outdated_dropbear",
-        "count_urls",
-        "count_api_tokens",
-    }
-    assert expected_keys.issubset(result.features.keys())
-
-
-def test_extract_features_from_path_calls_extract_ascii_strings_once(
-    tmp_path: Path, monkeypatch
-) -> None:
-    """Regressao: extract_ascii_strings deve rodar 1x por arquivo, nao 2x.
-
-    Antes da correcao, o doc2vec (via extract_features) e o scan_strings
-    (string_patterns) chamavam extract_ascii_strings separadamente sobre os
-    mesmos bytes, dobrando o custo dessa etapa em firmwares grandes.
-    """
-    import src.feature_extraction as fe
-
-    firmware_path = tmp_path / "firmware.bin"
-    firmware_path.write_bytes(b"firmware-data-with-strings")
-
-    config = load_pipeline_config(tmp_path / "missing.yaml", overrides={})
-
-    call_count = 0
-    original = fe.extract_ascii_strings
-
-    def counting_wrapper(*args, **kwargs):
-        nonlocal call_count
-        call_count += 1
-        return original(*args, **kwargs)
-
-    monkeypatch.setattr(fe, "extract_ascii_strings", counting_wrapper)
-
-    extract_features_from_path(firmware_path, config, model=None)
-
-    assert call_count == 1
-
-
-def test_extract_features_batch_empty_list_returns_empty(tmp_path: Path) -> None:
-    config = load_pipeline_config(tmp_path / "missing.yaml", overrides={})
-
-    assert extract_features_batch([], config) == []
-
-
-def test_extract_features_batch_sequential_mode(tmp_path: Path) -> None:
-    """max_workers=1 forca o caminho sequencial (sem process pool)."""
-    good_path = tmp_path / "good.bin"
-    good_path.write_bytes(b"good")
-
-    config = load_pipeline_config(tmp_path / "missing.yaml", overrides={})
-
-    results = extract_features_batch([good_path], config, max_workers=1)
-
-    assert len(results) == 1
-    assert results[0].metadata["read_ok"] is True
-
-
-def test_extract_features_batch_preserves_order_with_multiple_workers(
-    tmp_path: Path,
-) -> None:
-    """Com workers>1, a ordem dos resultados deve seguir a ordem de entrada,
-    independente da ordem em que os processos terminam."""
-    paths = []
-    for i in range(4):
-        firmware_path = tmp_path / f"firmware_{i}.bin"
-        firmware_path.write_bytes(f"firmware-{i}".encode())
-        paths.append(firmware_path)
-
-    config = load_pipeline_config(tmp_path / "missing.yaml", overrides={})
-
-    results = extract_features_batch(paths, config, max_workers=2)
-
-    assert len(results) == 4
-    for path, result in zip(paths, results):
-        assert result.metadata["path"] == str(path)
-        assert result.metadata["read_ok"] is True
-
-
-def test_extract_features_with_mocked_binwalk(tmp_path: Path) -> None:
-    """Binwalk features are populated when binwalk CLI returns results."""
-    import subprocess
-
-    firmware_path = tmp_path / "firmware.bin"
-    firmware_path.write_bytes(b"firmware-data")
-
-    fake_stdout = (
-        "DECIMAL       HEXADECIMAL     DESCRIPTION\n"
-        "--------------------------------------------------------------------------------\n"
-        "0             0x0             Squashfs filesystem, little endian\n"
-        "64            0x40            gzip compressed data, from Unix\n"
-        "128           0x80            AES encrypted block\n"
+    assert result.metadata["unpack_status"] == status
+    assert result.metadata["strings_source"] == source
+    assert result.metadata["third_party"] == (
+        THIRD_PARTY_DDWRT if source == STRINGS_BLOB else None
     )
-    fake_completed = subprocess.CompletedProcess(
-        args=[], returncode=0, stdout=fake_stdout, stderr=""
+    if source == STRINGS_BLOB:
+        assert result.features["count_hardcoded_passwords"] >= 1
+    else:
+        assert result.features["count_hardcoded_passwords"] == 0
+
+
+def test_webflash_name_removes_version_but_banner_does_not(
+    tmp_path: Path, fake_toolchain: Toolchain, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Marca terceiros sem apagar versão inferida quando só o banner aparece."""
+    import pipeline.feature_extraction as pipeline
+
+    @contextmanager
+    def unpack(
+        _path: Path, _limits: object, _toolchain: Toolchain
+    ) -> Iterator[UnpackResult]:
+        """Indica que a imagem exige fallback às strings brutas."""
+        yield UnpackResult(STATUS_NO_FILESYSTEM, None)
+
+    monkeypatch.setattr(pipeline, "unpack_firmware", unpack)
+    root = tmp_path / "raw"
+    for name, content, expected_version, expected_third in [
+        ("WNDR4300-V1.0.1.30.img", b"OpenWrt\x00", "1.0.1.30", None),
+        ("WNDR4300-V1.0.1.31.img", b"DD-WRT\x00", "1.0.1.31", THIRD_PARTY_DDWRT),
+        ("WNDR4300-webflash.img", b"firmware\x00", None, THIRD_PARTY_DDWRT),
+    ]:
+        path = root / "netgear" / "wndr4300" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+        result = extract_features_batch(
+            [path],
+            load_pipeline_config(None, {}),
+            fake_toolchain,
+            max_workers=1,
+            dataset_root=root,
+        )[0]
+        assert result.metadata["version"] == expected_version
+        assert result.metadata["third_party"] == expected_third
+
+
+def test_bounded_peak_for_large_file(
+    tmp_path: Path, fake_toolchain: Toolchain, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Lê 64 MiB sem reter os bytes da imagem em memória."""
+    import pipeline.feature_extraction as pipeline
+
+    @contextmanager
+    def unpack(
+        _path: Path, _limits: object, _toolchain: Toolchain
+    ) -> Iterator[UnpackResult]:
+        """Evita strings do blob para medir apenas a leitura incremental."""
+        yield UnpackResult(STATUS_TIME, None)
+
+    monkeypatch.setattr(pipeline, "unpack_firmware", unpack)
+    monkeypatch.setattr(pipeline, "_scan_binwalk", lambda path, tool: ([], STATUS_OK))
+    path = tmp_path / "large.bin"
+    with path.open("wb") as handle:
+        for _ in range(64):
+            handle.write(b"\x00" * (1 << 20))
+    tracemalloc.start()
+    result = extract_features_from_path(
+        path, load_pipeline_config(None, {}), None, fake_toolchain
     )
-
-    config = load_pipeline_config(tmp_path / "missing.yaml", overrides={})
-
-    with (
-        patch("shutil.which", return_value="/usr/bin/binwalk"),
-        patch("subprocess.run", return_value=fake_completed),
-    ):
-        result = extract_features_from_path(firmware_path, config, model=None)
-
-    assert result.features["n_filesystems"] == 1
-    assert result.features["n_crypto_signatures"] == 1
-    assert result.features["has_encrypted_sections"] is True
-    assert result.features["fs_type"] == "squashfs"
-    assert result.features["compression_type"] == "gzip"
+    _, peak = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+    assert result.metadata["bytes_used"] == 64 << 20
+    assert peak < 32 << 20
 
 
-def test_extract_features_from_path_includes_structured_findings(
-    tmp_path: Path,
+def test_bounded_peak_for_many_unique_strings(
+    tmp_path: Path, fake_toolchain: Toolchain, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """PipelineResult carrega achados estruturados, nao so contagens."""
-    firmware_path = tmp_path / "firmware.bin"
-    firmware_path.write_bytes(b"password=admin telnetd")
+    """Strings únicas além do limite do documento não acumulam na memória."""
+    import pipeline.feature_extraction as pipeline
 
-    config = load_pipeline_config(tmp_path / "missing.yaml", overrides={})
-    result = extract_features_from_path(firmware_path, config, model=None)
+    @contextmanager
+    def unpack(
+        _path: Path, _limits: object, _toolchain: Toolchain
+    ) -> Iterator[UnpackResult]:
+        """Força a varredura do blob inteiro."""
+        yield UnpackResult(STATUS_NO_FILESYSTEM, None)
 
-    assert isinstance(result.findings, list)
-    detectors = {f.detector for f in result.findings}
-    assert "hardcoded_passwords" in detectors
-    assert "telnetd" in detectors
-
-
-def test_extract_features_from_path_empty_file_has_no_findings(
-    tmp_path: Path,
-) -> None:
-    """Erro de leitura nao deve quebrar o campo findings (fica vazio)."""
-    firmware_path = tmp_path / "empty.bin"
-    firmware_path.write_bytes(b"")
-
-    config = load_pipeline_config(tmp_path / "missing.yaml", overrides={})
-    result = extract_features_from_path(firmware_path, config, model=None)
-
-    assert result.findings == []
+    monkeypatch.setattr(pipeline, "unpack_firmware", unpack)
+    monkeypatch.setattr(pipeline, "_scan_binwalk", lambda path, tool: ([], STATUS_OK))
+    path = tmp_path / "strings.bin"
+    count = 300_000
+    path.write_bytes(b"".join(b"u%07d\x00" % index for index in range(count)))
+    config = load_pipeline_config(
+        None, {"feature.max_strings": "100", "feature.max_doc_chars": "100000"}
+    )
+    tracemalloc.start()
+    result = extract_features_from_path(path, config, None, fake_toolchain)
+    _, peak = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+    assert result.metadata["truncated"] is True
+    assert peak < 16 << 20

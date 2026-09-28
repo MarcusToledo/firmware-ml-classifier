@@ -240,7 +240,13 @@ def _verify_path_version(row: dict[str, Any]) -> str | None:
 
     Retorna a origem da versão; levanta ValueError pedindo reextração quando divergem.
     """
-    meta = infer_brand_model_label_from_path(Path(row["meta_path"]))
+    meta_path = Path(row["meta_path"])
+    if meta_path.is_absolute():
+        raise ValueError(
+            f"meta_path absoluto ({row['meta_path']!r}); reextraia as features "
+            "com --label-from-path e --dataset-root (004/FR-016)"
+        )
+    meta = infer_brand_model_label_from_path(meta_path)
     feature_version = _none_if_missing(row.get("meta_version"))
     if meta.version != feature_version:
         raise _path_mismatch_error(

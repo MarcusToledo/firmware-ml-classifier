@@ -1,383 +1,153 @@
+"""Exercita validações anteriores ao lote e a gravação com raiz ancorada."""
+
+from __future__ import annotations
+
 import json
-import re
-import subprocess
 import sys
 from pathlib import Path
 
 import pandas as pd
+import pytest
+
+from pipeline.feature_extraction import BINWALK_STATUS_TIMEOUT, STRINGS_FILESYSTEM
+from scripts import extract_features as cli
+from src.features.unpack import Toolchain
+
+_EXIT_USAGE = 2
+# Corta o firmware (72 bytes) sem cortar o config do rootfs simulado
+# ("password=secret\n", 16 bytes), que precisa ser lido inteiro.
+_OVERRIDE_MAX_BYTES = 32
+_FIRMWARE_REPEATS = 8
 
 
-def test_cli_reports_elapsed_time(tmp_path: Path) -> None:
-    firmware_path = tmp_path / "firmware.bin"
-    firmware_path.write_bytes(b"firmware")
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text("")
-    output_path = tmp_path / "features.parquet"
-
-    result = subprocess.run(
+def _invoke(
+    monkeypatch: pytest.MonkeyPatch, input_path: Path, output: Path, *extra: str
+) -> None:
+    """Executa o mesmo main da CLI com argumentos explícitos."""
+    monkeypatch.setattr(
+        sys,
+        "argv",
         [
-            sys.executable,
-            "scripts/extract_features.py",
-            "--config",
-            str(config_path),
+            "extract_features.py",
             "--input",
-            str(firmware_path),
+            str(input_path),
             "--output",
-            str(output_path),
+            str(output),
+            *extra,
         ],
-        check=False,
-        capture_output=True,
-        text=True,
+    )
+    cli.main()
+
+
+def test_cli_rejects_missing_root_before_toolchain(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Exige raiz para arquivo isolado, independentemente dos extratores."""
+    firmware = tmp_path / "firmware.bin"
+    firmware.write_bytes(b"firmware")
+    with pytest.raises(SystemExit) as exc:
+        _invoke(monkeypatch, firmware, tmp_path / "result.parquet", "--label-from-path")
+    assert exc.value.code == _EXIT_USAGE
+
+
+def test_cli_rejects_off_layout_before_toolchain(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Lista paths fora do layout mesmo que as ferramentas faltem."""
+    root = tmp_path / "raw"
+    root.mkdir()
+    path = root / "dlink" / "loose.bin"
+    path.parent.mkdir()
+    path.write_bytes(b"firmware")
+    with pytest.raises(SystemExit) as exc:
+        _invoke(monkeypatch, root, tmp_path / "out.parquet", "--label-from-path")
+    assert exc.value.code == _EXIT_USAGE
+    assert str(path) in caplog.text
+
+
+def test_cli_relative_paths_and_unlabelled_identity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fake_toolchain: Toolchain
+) -> None:
+    """Mantém meta_path relativo com raiz, mas oculta identidade sem flag."""
+    root = tmp_path / "raw"
+    firmware = root / "netgear" / "r6250" / "R6250-V1.0.1.80_1.0.75.chk"
+    firmware.parent.mkdir(parents=True)
+    firmware.write_bytes(b"firmware\x00")
+    monkeypatch.setattr(cli, "resolve_toolchain", lambda: fake_toolchain)
+    output = tmp_path / "result.parquet"
+    _invoke(monkeypatch, root, output)
+    unlabelled = pd.read_parquet(output).iloc[0]
+    assert unlabelled["meta_path"] == "netgear/r6250/R6250-V1.0.1.80_1.0.75.chk"
+    assert pd.isna(unlabelled["meta_version"])
+    _invoke(monkeypatch, root, output, "--label-from-path")
+    labelled = pd.read_parquet(output).iloc[0]
+    assert labelled["meta_version"] == "1.0.1.80"
+    assert labelled["meta_brand"] == "netgear"
+    assert labelled["meta_strings_source"] == STRINGS_FILESYSTEM
+
+
+def test_cli_timeout_writes_output_before_nonzero_exit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fake_toolchain: Toolchain
+) -> None:
+    """Preserva tabela e status para retentativa após timeout binwalk."""
+    import pipeline.feature_extraction as pipeline
+
+    firmware = tmp_path / "firmware.bin"
+    firmware.write_bytes(b"firmware\x00")
+    monkeypatch.setattr(cli, "resolve_toolchain", lambda: fake_toolchain)
+    monkeypatch.setattr(
+        pipeline, "_scan_binwalk", lambda path, tool: ([], BINWALK_STATUS_TIMEOUT)
+    )
+    output = tmp_path / "out.parquet"
+    with pytest.raises(SystemExit) as exc:
+        _invoke(monkeypatch, firmware, output, "--workers", "1")
+    assert exc.value.code == 1
+    assert (
+        pd.read_parquet(output).iloc[0]["meta_binwalk_status"] == BINWALK_STATUS_TIMEOUT
     )
 
-    assert result.returncode == 0
-    output = result.stdout + result.stderr
-    match = re.search(
-        r"Extraction of 1 file\(s\) completed in (\d+\.\d{2})s "
-        r"\(avg (\d+\.\d{3})s/file\)",
+
+def test_cli_csv_findings_and_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fake_toolchain: Toolchain
+) -> None:
+    """Grava CSV, JSONL ligado ao firmware_id e aplica override registrado."""
+    firmware = tmp_path / "firmware.bin"
+    firmware.write_bytes(b"firmware\x00" * _FIRMWARE_REPEATS)
+    monkeypatch.setattr(cli, "resolve_toolchain", lambda: fake_toolchain)
+    output = tmp_path / "out.csv"
+    findings = tmp_path / "findings.jsonl"
+    _invoke(
+        monkeypatch,
+        firmware,
         output,
+        "--format",
+        "csv",
+        "--findings-output",
+        str(findings),
+        "--override",
+        f"max_bytes={_OVERRIDE_MAX_BYTES}",
+        "--workers",
+        "1",
     )
-    assert match is not None, output
-    assert float(match.group(1)) >= 0.0
-    assert float(match.group(2)) >= 0.0
-
-    success_match = re.search(
-        r"Extraction succeeded: 1 record\(s\) written to .+ in (\d+\.\d{2})s",
-        output,
+    row = pd.read_csv(output).iloc[0]
+    assert (row["meta_max_bytes"], row["meta_bytes_used"]) == (
+        _OVERRIDE_MAX_BYTES,
+        _OVERRIDE_MAX_BYTES,
     )
-    assert success_match is not None, output
-    assert float(success_match.group(1)) >= 0.0
+    assert row["meta_file_size"] == firmware.stat().st_size
+    records = [json.loads(line) for line in findings.read_text().splitlines()]
+    assert "hardcoded_passwords" in {record["detector"] for record in records}
+    assert {record["firmware_id"] for record in records} == {row["firmware_id"]}
 
 
-def test_cli_basic_file(tmp_path: Path) -> None:
-    firmware_path = tmp_path / "firmware.bin"
-    firmware_path.write_bytes(b"firmware")
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text("")
-    output_path = tmp_path / "features.parquet"
-
-    result = subprocess.run(
-        [
-            sys.executable,
-            "scripts/extract_features.py",
-            "--config",
-            str(config_path),
-            "--input",
-            str(firmware_path),
-            "--output",
-            str(output_path),
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode == 0
-    assert "read_ok" in result.stdout + result.stderr
-    assert output_path.exists()
-
-    df = pd.read_parquet(output_path)
-    assert not df.empty
-    assert "meta_path" in df.columns
-    assert "meta_brand" in df.columns
-    assert "meta_model" in df.columns
-    assert "meta_label" in df.columns
-    assert "meta_version" in df.columns
-    assert "meta_version_source" in df.columns
-    assert "meta_bytes_used" in df.columns
-    assert "meta_max_bytes" in df.columns
-    assert df["meta_label"].isna().to_numpy().all()
-    assert df["meta_version"].isna().to_numpy().all()
-    assert df["meta_version_source"].isna().to_numpy().all()
-
-
-def test_cli_with_override(tmp_path: Path) -> None:
-    firmware_path = tmp_path / "firmware.bin"
-    firmware_path.write_bytes(b"firmware")
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text("")
-    output_path = tmp_path / "features.parquet"
-
-    result = subprocess.run(
-        [
-            sys.executable,
-            "scripts/extract_features.py",
-            "--config",
-            str(config_path),
-            "--input",
-            str(firmware_path),
-            "--override",
-            "feature.max_single_string_len=8",
-            "--output",
-            str(output_path),
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode == 0
-    assert "read_ok" in result.stdout + result.stderr
-    assert output_path.exists()
-
-    df = pd.read_parquet(output_path)
-    assert not df.empty
-    assert "meta_path" in df.columns
-    assert "meta_brand" in df.columns
-    assert "meta_model" in df.columns
-    assert "meta_label" in df.columns
-    assert "meta_bytes_used" in df.columns
-    assert "meta_max_bytes" in df.columns
-    assert df["meta_label"].isna().to_numpy().all()
-
-
-def test_cli_directory_input(tmp_path: Path) -> None:
-    firmware_dir = tmp_path / "firmwares"
-    firmware_dir.mkdir()
-    (firmware_dir / "one.bin").write_bytes(b"one")
-    (firmware_dir / "two.bin").write_bytes(b"two")
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text("")
-    output_path = tmp_path / "features.parquet"
-
-    result = subprocess.run(
-        [
-            sys.executable,
-            "scripts/extract_features.py",
-            "--config",
-            str(config_path),
-            "--input",
-            str(firmware_dir),
-            "--output",
-            str(output_path),
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode == 0
-    assert "read_ok" in result.stdout + result.stderr
-    assert output_path.exists()
-
-    df = pd.read_parquet(output_path)
-    assert not df.empty
-    assert "meta_path" in df.columns
-    assert "meta_brand" in df.columns
-    assert "meta_model" in df.columns
-    assert "meta_label" in df.columns
-    assert "meta_bytes_used" in df.columns
-    assert "meta_max_bytes" in df.columns
-    assert df["meta_label"].isna().to_numpy().all()
-
-
-def test_cli_label_from_path(tmp_path: Path) -> None:
-    base_dir = tmp_path / "dataset" / "raw" / "dlink" / "DIR300"
-    base_dir.mkdir(parents=True)
-    firmware_path = base_dir / "firmware.bin"
-    firmware_path.write_bytes(b"firmware")
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text("")
-    output_path = tmp_path / "features.parquet"
-
-    result = subprocess.run(
-        [
-            sys.executable,
-            "scripts/extract_features.py",
-            "--config",
-            str(config_path),
-            "--input",
-            str(firmware_path),
-            "--output",
-            str(output_path),
-            "--label-from-path",
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode == 0
-    assert "read_ok" in result.stdout + result.stderr
-    assert output_path.exists()
-
-    df = pd.read_parquet(output_path)
-    assert not df.empty
-    assert df["meta_brand"].iloc[0] == "dlink"
-    assert df["meta_model"].iloc[0] == "dir300"
-    assert df["meta_label"].iloc[0] == "dlink_dir300"
-
-
-def test_cli_without_label_from_path_zeroes_version(tmp_path: Path) -> None:
-    """A raw/vendor/model_version path has a real version to extract, but
-    without --label-from-path it must still come out null -- same
-    inference-mode guard as brand/model/label."""
-    base_dir = tmp_path / "dataset" / "raw" / "zyxel" / "NWA110AX_7.10(ABTG.4)C0"
-    base_dir.mkdir(parents=True)
-    firmware_path = base_dir / "firmware.bin"
-    firmware_path.write_bytes(b"firmware")
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text("")
-    output_path = tmp_path / "features.parquet"
-
-    result = subprocess.run(
-        [
-            sys.executable,
-            "scripts/extract_features.py",
-            "--config",
-            str(config_path),
-            "--input",
-            str(firmware_path),
-            "--output",
-            str(output_path),
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode == 0
-    df = pd.read_parquet(output_path)
-    assert pd.isna(df["meta_version"].iloc[0])
-    assert pd.isna(df["meta_version_source"].iloc[0])
-
-
-def test_cli_label_from_path_extracts_version(tmp_path: Path) -> None:
-    base_dir = tmp_path / "dataset" / "raw" / "zyxel" / "NWA110AX_7.10(ABTG.4)C0"
-    base_dir.mkdir(parents=True)
-    firmware_path = base_dir / "firmware.bin"
-    firmware_path.write_bytes(b"firmware")
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text("")
-    output_path = tmp_path / "features.parquet"
-
-    result = subprocess.run(
-        [
-            sys.executable,
-            "scripts/extract_features.py",
-            "--config",
-            str(config_path),
-            "--input",
-            str(firmware_path),
-            "--output",
-            str(output_path),
-            "--label-from-path",
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode == 0
-    df = pd.read_parquet(output_path)
-    assert df["meta_brand"].iloc[0] == "zyxel"
-    assert df["meta_model"].iloc[0] == "nwa110ax"
-    assert df["meta_version"].iloc[0] == "7.10(ABTG.4)C0"
-    assert df["meta_version_source"].iloc[0] == "directory"
-
-
-def test_cli_findings_output(tmp_path: Path) -> None:
-    """--findings-output grava os achados estruturados (SecurityFinding),
-    correlacionaveis ao features.parquet via firmware_id."""
-    firmware_path = tmp_path / "firmware.bin"
-    firmware_path.write_bytes(b"password=admin telnetd")
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text("")
-    output_path = tmp_path / "features.parquet"
-    findings_path = tmp_path / "findings.jsonl"
-
-    result = subprocess.run(
-        [
-            sys.executable,
-            "scripts/extract_features.py",
-            "--config",
-            str(config_path),
-            "--input",
-            str(firmware_path),
-            "--output",
-            str(output_path),
-            "--findings-output",
-            str(findings_path),
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode == 0
-    assert findings_path.exists()
-
-    lines = findings_path.read_text(encoding="utf-8").strip().splitlines()
-    records = [json.loads(line) for line in lines]
-    detectors = {r["detector"] for r in records}
-    assert "hardcoded_passwords" in detectors
-    assert "telnetd" in detectors
-    assert all("firmware_id" in r and "path" in r for r in records)
-
-
-def test_cli_without_findings_output_does_not_write_file(tmp_path: Path) -> None:
-    """Sem --findings-output, nenhum arquivo de achados e criado (opt-in)."""
-    firmware_path = tmp_path / "firmware.bin"
-    firmware_path.write_bytes(b"password=admin telnetd")
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text("")
-    output_path = tmp_path / "features.parquet"
-
-    result = subprocess.run(
-        [
-            sys.executable,
-            "scripts/extract_features.py",
-            "--config",
-            str(config_path),
-            "--input",
-            str(firmware_path),
-            "--output",
-            str(output_path),
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode == 0
-    assert list(tmp_path.glob("*.jsonl")) == []
-
-
-def test_cli_csv_output(tmp_path: Path) -> None:
-    firmware_path = tmp_path / "firmware.bin"
-    firmware_path.write_bytes(b"firmware")
-    config_path = tmp_path / "config.yaml"
-    config_path.write_text("")
-    output_path = tmp_path / "features.csv"
-
-    result = subprocess.run(
-        [
-            sys.executable,
-            "scripts/extract_features.py",
-            "--config",
-            str(config_path),
-            "--input",
-            str(firmware_path),
-            "--output",
-            str(output_path),
-            "--format",
-            "csv",
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.returncode == 0
-    assert "read_ok" in result.stdout + result.stderr
-    assert output_path.exists()
-
-    df = pd.read_csv(output_path)
-    assert not df.empty
-    assert "meta_path" in df.columns
-    assert "meta_brand" in df.columns
-    assert "meta_model" in df.columns
-    assert "meta_label" in df.columns
-    assert "meta_bytes_used" in df.columns
-    assert "meta_max_bytes" in df.columns
-    assert df["meta_label"].isna().to_numpy().all()
+def test_cli_without_findings_output_writes_only_table(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fake_toolchain: Toolchain
+) -> None:
+    """Sem --findings-output, só a tabela é gravada."""
+    firmware = tmp_path / "in" / "firmware.bin"
+    firmware.parent.mkdir()
+    firmware.write_bytes(b"firmware\x00")
+    monkeypatch.setattr(cli, "resolve_toolchain", lambda: fake_toolchain)
+    out_dir = tmp_path / "out"
+    _invoke(monkeypatch, firmware, out_dir / "features.parquet", "--workers", "1")
+    assert [path.name for path in out_dir.iterdir()] == ["features.parquet"]

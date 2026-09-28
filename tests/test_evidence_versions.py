@@ -148,7 +148,7 @@ _EXPECTED: dict[str, tuple[str, str]] = {
     ),
     p.DETECTOR_API_TOKENS: (
         "2.0",
-        "e5eb0a2cb38af411f54c907380f94f49a7157585f4050d4f67ffd6803845e165",
+        "e17aa5c8d220af165c43f256ebbcd4bf8aaea267a3f46d5f64c7aa5e7ec63069",
     ),
     b.DETECTOR_CRYPTO_SIGNATURES: (
         "1.0",

@@ -1,4 +1,8 @@
-max_bytes: 5242880
+max_bytes: 268435456
+unpack:
+  max_total_bytes: 2147483648
+  max_files: 100000
+  timeout_seconds: 300
 feature:
   min_string_len: 4
   max_single_string_len: 1024

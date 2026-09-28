@@ -10,6 +10,10 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from pipeline.feature_extraction import (
+    VERSION_SOURCE_DIRECTORY,
+    VERSION_SOURCE_FILENAME,
+)
 from scripts.generate_labels import _aggregate_firmware_label, _lookup_cve_entry, main
 from src.labeling.cve_labels import (
     LABEL_CRITICAL_CVE,
@@ -220,20 +224,20 @@ def test_cli_filters_version_before_aggregating_aliases(
     rows = [
         {
             "firmware_id": "shared",
-            "meta_path": "/dataset/raw/dlink/dir300/fw_2.0.bin",
+            "meta_path": "dlink/dir300/fw_2.0.bin",
             "meta_brand": "dlink",
             "meta_model": "dir300",
             "meta_version": "2.0",
-            "meta_version_source": "filename",
+            "meta_version_source": VERSION_SOURCE_FILENAME,
             "entropy": 7.9,
         },
         {
             "firmware_id": "shared",
-            "meta_path": "/dataset/raw/dlink/dir300b_1.0/fw.bin",
+            "meta_path": "dlink/dir300b_1.0/fw.bin",
             "meta_brand": "dlink",
             "meta_model": "dir300b",
             "meta_version": "1.0",
-            "meta_version_source": "directory",
+            "meta_version_source": VERSION_SOURCE_DIRECTORY,
             "entropy": 0.1,
         },
     ]
@@ -269,7 +273,10 @@ def test_cli_filters_version_before_aggregating_aliases(
     assert labels["security_level"].tolist() == ["cve_conhecida", "cve_conhecida"]
     assert labels["cve_total"].tolist() == [1, 1]
     assert "entropy" not in labels.columns
-    assert labels["version_source"].tolist() == ["filename", "directory"]
+    assert labels["version_source"].tolist() == [
+        VERSION_SOURCE_FILENAME,
+        VERSION_SOURCE_DIRECTORY,
+    ]
 
 
 def test_cli_missing_version_writes_indeterminate(
@@ -281,7 +288,7 @@ def test_cli_missing_version_writes_indeterminate(
         [
             {
                 "firmware_id": "fw",
-                "meta_path": "/dataset/raw/dlink/dir300/fw.bin",
+                "meta_path": "dlink/dir300/fw.bin",
                 "meta_brand": "dlink",
                 "meta_model": "dir300",
                 "meta_version": None,
@@ -294,6 +301,24 @@ def test_cli_missing_version_writes_indeterminate(
     assert labels["version_source"].isna().tolist() == [True]
 
 
+def test_cli_rejects_absolute_meta_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Exige reextração quando os metadados ainda contêm path absoluto."""
+    row = {
+        "firmware_id": "fw-legacy",
+        "meta_path": "/dataset/raw/dlink/dir300/fw.bin",
+        "meta_brand": "dlink",
+        "meta_model": "dir300",
+        "meta_version": None,
+        "meta_version_source": None,
+    }
+    with pytest.raises(
+        ValueError, match="meta_path absoluto.*reextraia.*--dataset-root"
+    ):
+        _run_cli(tmp_path, monkeypatch, [row], {"dlink/dir300": _cache_entry([])})
+
+
 def test_cli_rejects_version_divergent_from_meta_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -304,11 +329,11 @@ def test_cli_rejects_version_divergent_from_meta_path(
             [
                 {
                     "firmware_id": "fw-divergent",
-                    "meta_path": "/dataset/raw/dlink/dir300_2.0/fw.bin",
+                    "meta_path": "dlink/dir300_2.0/fw.bin",
                     "meta_brand": "dlink",
                     "meta_model": "dir300",
                     "meta_version": "1.0",
-                    "meta_version_source": "directory",
+                    "meta_version_source": VERSION_SOURCE_DIRECTORY,
                 }
             ],
             {"dlink/dir300": _cache_entry([])},
@@ -331,11 +356,11 @@ def test_cli_rejects_missing_version_when_meta_path_has_version(
             [
                 {
                     "firmware_id": "fw-missing-version",
-                    "meta_path": "/dataset/raw/dlink/dir300_2.0/fw.bin",
+                    "meta_path": "dlink/dir300_2.0/fw.bin",
                     "meta_brand": "dlink",
                     "meta_model": "dir300",
                     "meta_version": None,
-                    "meta_version_source": "directory",
+                    "meta_version_source": VERSION_SOURCE_DIRECTORY,
                 }
             ],
             {"dlink/dir300": _cache_entry([])},
@@ -357,11 +382,11 @@ def test_cli_reports_missing_identity_before_version_divergence(
             [
                 {
                     "firmware_id": "fw-without-label",
-                    "meta_path": "/dataset/raw/dlink/dir300_2.0/fw.bin",
+                    "meta_path": "dlink/dir300_2.0/fw.bin",
                     "meta_brand": None,
                     "meta_model": None,
                     "meta_version": "1.0",
-                    "meta_version_source": "directory",
+                    "meta_version_source": VERSION_SOURCE_DIRECTORY,
                 }
             ],
             {},
@@ -394,11 +419,11 @@ def test_cli_rejects_duplicate_rows(
 ) -> None:
     row = {
         "firmware_id": "fw",
-        "meta_path": "/dataset/raw/dlink/dir300_1.0/fw.bin",
+        "meta_path": "dlink/dir300_1.0/fw.bin",
         "meta_brand": "dlink",
         "meta_model": "dir300",
         "meta_version": "1.0",
-        "meta_version_source": "directory",
+        "meta_version_source": VERSION_SOURCE_DIRECTORY,
     }
     with pytest.raises(ValueError, match="duplicad"):
         _run_cli(
@@ -414,11 +439,11 @@ def test_cli_rejects_version_source_divergent_from_meta_path(
 ) -> None:
     row = {
         "firmware_id": "fw-divergent",
-        "meta_path": "/dataset/raw/dlink/dir300/fw_2.0.bin",
+        "meta_path": "dlink/dir300/fw_2.0.bin",
         "meta_brand": "dlink",
         "meta_model": "dir300",
         "meta_version": "2.0",
-        "meta_version_source": "directory",
+        "meta_version_source": VERSION_SOURCE_DIRECTORY,
     }
     with pytest.raises(ValueError) as exc_info:
         _run_cli(tmp_path, monkeypatch, [row], {"dlink/dir300": _cache_entry([])})
@@ -434,7 +459,7 @@ def test_cli_rejects_missing_version_source_when_path_has_one(
 ) -> None:
     row = {
         "firmware_id": "fw-missing-source",
-        "meta_path": "/dataset/raw/dlink/dir300/fw_2.0.bin",
+        "meta_path": "dlink/dir300/fw_2.0.bin",
         "meta_brand": "dlink",
         "meta_model": "dir300",
         "meta_version": "2.0",
@@ -451,7 +476,7 @@ def test_cli_rejects_features_without_version_source_column(
     rows = [
         {
             "firmware_id": "fw",
-            "meta_path": "/dataset/raw/dlink/dir300/fw_2.0.bin",
+            "meta_path": "dlink/dir300/fw_2.0.bin",
             "meta_brand": "dlink",
             "meta_model": "dir300",
             "meta_version": "2.0",
@@ -477,23 +502,23 @@ def _audit_inputs() -> tuple[list[dict], dict]:
     rows = [
         {
             "firmware_id": "shared",
-            "meta_path": "/dataset/raw/dlink/dir300/fw_2.0.bin",
+            "meta_path": "dlink/dir300/fw_2.0.bin",
             "meta_brand": "dlink",
             "meta_model": "dir300",
             "meta_version": "2.0",
-            "meta_version_source": "filename",
+            "meta_version_source": VERSION_SOURCE_FILENAME,
         },
         {
             "firmware_id": "shared",
-            "meta_path": "/dataset/raw/dlink/dir300b_1.0/fw.bin",
+            "meta_path": "dlink/dir300b_1.0/fw.bin",
             "meta_brand": "dlink",
             "meta_model": "dir300b",
             "meta_version": "1.0",
-            "meta_version_source": "directory",
+            "meta_version_source": VERSION_SOURCE_DIRECTORY,
         },
         {
             "firmware_id": "solo",
-            "meta_path": "/dataset/raw/dlink/dir600/fw.bin",
+            "meta_path": "dlink/dir600/fw.bin",
             "meta_brand": "dlink",
             "meta_model": "dir600",
             "meta_version": None,
@@ -569,15 +594,15 @@ def test_cli_marks_versions_differ_for_null_against_value(
     rows = [
         {
             "firmware_id": "shared",
-            "meta_path": "/dataset/raw/dlink/dir300_1.0/fw.bin",
+            "meta_path": "dlink/dir300_1.0/fw.bin",
             "meta_brand": "dlink",
             "meta_model": "dir300",
             "meta_version": "1.0",
-            "meta_version_source": "directory",
+            "meta_version_source": VERSION_SOURCE_DIRECTORY,
         },
         {
             "firmware_id": "shared",
-            "meta_path": "/dataset/raw/dlink/dir300/fw.bin",
+            "meta_path": "dlink/dir300/fw.bin",
             "meta_brand": "dlink",
             "meta_model": "dir300",
             "meta_version": None,

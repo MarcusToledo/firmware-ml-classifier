@@ -1,37 +1,81 @@
-from __future__ import annotations
+"""Valida identidade apenas sobre paths relativos de três segmentos."""
 
 from pathlib import Path
 
-from pipeline.feature_extraction import infer_brand_model_label_from_path
+import pytest
+
+from pipeline.feature_extraction import (
+    THIRD_PARTY_DDWRT,
+    VERSION_SOURCE_DIRECTORY,
+    VERSION_SOURCE_FILENAME,
+    find_off_layout_paths,
+    infer_brand_model_label_from_path,
+    is_third_party_name,
+    relative_to_root,
+)
 
 
-def test_infer_path_strips_version_suffix() -> None:
-    """Zyxel-style version suffixes should be stripped at extraction time,
-    but the raw version must be preserved, not discarded."""
-    path = Path("dataset/raw/zyxel/NWA110AX_7.10(ABTG.4)C0/file.bin")
-    metadata = infer_brand_model_label_from_path(path)
-    assert metadata.brand == "zyxel"
-    assert metadata.model == "nwa110ax"
-    assert metadata.label == "zyxel_nwa110ax"
-    assert metadata.version == "7.10(ABTG.4)C0"
-    assert metadata.version_source == "directory"
+@pytest.mark.parametrize(
+    "path,brand,model,version,source",
+    [
+        (
+            "zyxel/NWA110AX_7.10(ABTG.4)C0/file.bin",
+            "zyxel",
+            "nwa110ax",
+            "7.10(ABTG.4)C0",
+            VERSION_SOURCE_DIRECTORY,
+        ),
+        ("dlink/dir-300/file.bin", "dlink", "dir-300", None, None),
+        (
+            "belkin/f5d7234_4/f5d7234-4_ww_4.00.05.bin",
+            "belkin",
+            "f5d7234_4",
+            "4.00.05",
+            VERSION_SOURCE_FILENAME,
+        ),
+        (
+            "asus/rt-ac68u/RT-AC68U_3.0.0.4_384_45717-gadd52a8.trx",
+            "asus",
+            "rt-ac68u",
+            "3.0.0.4.384.45717",
+            VERSION_SOURCE_FILENAME,
+        ),
+        (
+            "dlink/dsr1000n_1.2/DSR-1000N_FW_9.99_WW",
+            "dlink",
+            "dsr1000n",
+            "1.2",
+            VERSION_SOURCE_DIRECTORY,
+        ),
+        ("dlink/dir-1760/DIR_1760_FW101B04.BIN", "dlink", "dir-1760", None, None),
+    ],
+)
+def test_infer_relative_identity(
+    path: str, brand: str, model: str, version: str | None, source: str | None
+) -> None:
+    """Preserva precedência de versão e rejeita inferências ambíguas."""
+    identity = infer_brand_model_label_from_path(Path(path))
+    assert (
+        identity.brand,
+        identity.model,
+        identity.label,
+        identity.version,
+        identity.version_source,
+    ) == (brand, model, f"{brand}_{model}", version, source)
 
 
-def test_infer_path_preserves_normal_model() -> None:
-    """Normal model names without version suffix should be preserved, and
-    have no extractable version."""
-    path = Path("dataset/raw/dlink/dir-300/file.bin")
-    metadata = infer_brand_model_label_from_path(path)
-    assert metadata.brand == "dlink"
-    assert metadata.model == "dir-300"
-    assert metadata.label == "dlink_dir-300"
-    assert metadata.version is None
-    assert metadata.version_source is None
-
-
-def test_infer_path_no_raw_segment_returns_all_none() -> None:
-    path = Path("some/other/dir/file.bin")
-    assert infer_brand_model_label_from_path(path) == (
+@pytest.mark.parametrize(
+    "path",
+    [
+        "dlink/file.bin",
+        "dlink/model/folder/file.bin",
+        "dataset/raw/dlink/model/file.bin",
+        "/tmp/dlink/model/file.bin",
+    ],
+)
+def test_invalid_relative_layout_has_no_identity(path: str) -> None:
+    """Recusa componente ausente, pasta extra e path absoluto."""
+    assert infer_brand_model_label_from_path(Path(path)) == (
         None,
         None,
         None,
@@ -40,56 +84,26 @@ def test_infer_path_no_raw_segment_returns_all_none() -> None:
     )
 
 
-def test_infer_path_version_suffix_with_simple_digits() -> None:
-    """A simpler version suffix ('dsr1000n_1.2') should also split cleanly."""
-    path = Path("dataset/raw/dlink/dsr1000n_1.2/file.bin")
-    metadata = infer_brand_model_label_from_path(path)
-    assert metadata.brand == "dlink"
-    assert metadata.model == "dsr1000n"
-    assert metadata.version == "1.2"
-    assert metadata.version_source == "directory"
+def test_relative_to_root_uses_actual_root_and_rejects_escape(tmp_path: Path) -> None:
+    """Não utiliza o primeiro segmento raw de um path ancestral."""
+    root = tmp_path / "raw" / "project" / "dataset" / "raw"
+    root.mkdir(parents=True)
+    inside = root / "dlink" / "dir300" / "fw.bin"
+    outside = tmp_path / "raw" / "outside.bin"
+    assert relative_to_root(inside, root) == Path("dlink/dir300/fw.bin")
+    assert relative_to_root(outside, root) is None
+    assert find_off_layout_paths(
+        [inside, root / "dlink" / "loose.bin", outside], root
+    ) == [root / "dlink" / "loose.bin", outside]
 
 
-def test_infer_path_directory_version_with_hyphenated_model() -> None:
-    path = Path("dataset/raw/asus/rt-ac68u_3.0.0.4/file.bin")
-    metadata = infer_brand_model_label_from_path(path)
-    assert metadata.model == "rt-ac68u"
-    assert metadata.version == "3.0.0.4"
-    assert metadata.version_source == "directory"
-
-
-def test_infer_path_hardware_revision_suffix_is_part_of_model() -> None:
-    """Belkin 'f5d7234_4' e o modelo F5D7234-4 (hardware v4), nao versao 4."""
-    path = Path("dataset/raw/belkin/f5d7234_4/f5d7234-4_ww_4.00.05.bin")
-    metadata = infer_brand_model_label_from_path(path)
-    assert metadata.model == "f5d7234_4"
-    assert metadata.version_source != "directory"
-
-
-def test_infer_path_falls_back_to_version_in_filename() -> None:
-    """Diretorio sem versao: a versao vem do nome do arquivo."""
-    path = Path("dataset/raw/asus/rt-ac68u/RT-AC68U_3.0.0.4_384_45717-gadd52a8.trx")
-    metadata = infer_brand_model_label_from_path(path)
-    assert (metadata.brand, metadata.model, metadata.label) == (
-        "asus",
-        "rt-ac68u",
-        "asus_rt-ac68u",
+def test_webflash_only_removes_version_from_name() -> None:
+    """Marca DD-WRT pelo nome sem descartar identidade do modelo."""
+    identity = infer_brand_model_label_from_path(
+        Path("tp_link/tl-wr710v1_1.2/tl-wr710v1-WEBFLASH.bin")
     )
-    assert metadata.version == "3.0.0.4.384.45717"
-    assert metadata.version_source == "filename"
-
-
-def test_infer_path_directory_version_wins_over_filename() -> None:
-    """A versao do diretorio tem prioridade sobre a do nome do arquivo."""
-    path = Path("dataset/raw/dlink/dsr1000n_1.2/DSR-1000N_FW_9.99_WW")
-    metadata = infer_brand_model_label_from_path(path)
-    assert metadata.model == "dsr1000n"
-    assert metadata.version == "1.2"
-    assert metadata.version_source == "directory"
-
-
-def test_infer_path_ambiguous_filename_has_no_version() -> None:
-    path = Path("dataset/raw/dlink/dir-1760/DIR_1760_FW101B04.BIN")
-    metadata = infer_brand_model_label_from_path(path)
-    assert metadata.version is None
-    assert metadata.version_source is None
+    assert identity.label == "tp_link_tl-wr710v1"
+    assert (identity.version, identity.version_source) == (None, None)
+    assert is_third_party_name("TL-WR710V1-webflash.bin")
+    assert THIRD_PARTY_DDWRT == "dd-wrt"
+    assert not is_third_party_name("OpenWrt-official.bin")
