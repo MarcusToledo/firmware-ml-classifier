@@ -12,3 +12,33 @@ scoring:
     has_telnetd_min_level: "cve_conhecida"
     has_debug_account_min_level: "cve_conhecida"
     hardcoded_passwords_min_level: "cve_conhecida"
+
+  sub_scores:
+    stats:
+      entropy_low: 6.0
+      entropy_high: 8.0
+      compress_ratio_low: 0.80
+      compress_ratio_high: 1.0
+      byte_mean_center: 127.5
+      byte_mean_factor: 0.3
+    strings:
+      hardcoded_passwords_midpoint: 1.0
+      hardcoded_passwords_steepness: 2.0
+      credential_pairs_midpoint: 1.0
+      credential_pairs_steepness: 3.0
+      non_public_ips_midpoint: 2.0
+      non_public_ips_steepness: 1.0
+      public_ips_midpoint: 1.0
+      public_ips_steepness: 2.5
+      outdated_lib_score: 0.6
+    binwalk:
+      encrypted_score: 0.8
+      crypto_signatures_saturation: 5.0
+      crypto_signatures_factor: 0.5
+      entropy_variance_saturation: 3.0
+      legacy_fs_score: 0.4
+      legacy_fs_types: [cramfs, jffs2]
+      legacy_compression_score: 0.2
+      legacy_compression_types: [gzip]
+      n_filesystems_saturation: 3.0
+      n_filesystems_factor: 0.3
