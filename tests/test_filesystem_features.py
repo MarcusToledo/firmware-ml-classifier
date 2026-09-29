@@ -197,6 +197,16 @@ def test_only_library_has_no_pie_denominator(tmp_path: Path) -> None:
     assert result.features["unpacked_prop_nx"] == 1.0
 
 
+def test_library_with_dt_debug_is_not_executable(tmp_path: Path) -> None:
+    """Mantém DT_DEBUG de biblioteca fora do denominador de PIE."""
+    root = _root(tmp_path)
+    _copy(root, "lib_dtdebug.so")
+    result = _extract(root)
+    assert result.features["unpacked_n_elf_lib"] == 1
+    assert result.features["unpacked_n_elf_exec"] == 0
+    assert result.features["unpacked_prop_pie"] is None
+
+
 @pytest.mark.parametrize(
     "fixtures,arch",
     [

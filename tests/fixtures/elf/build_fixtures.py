@@ -7,6 +7,7 @@ import json
 import logging
 import struct
 import subprocess
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
@@ -152,6 +153,48 @@ def compile_fixtures() -> tuple[list[dict[str, Any]], bool]:
     return fixtures, static_omitted
 
 
+def make_lib_dtdebug() -> dict[str, Any]:
+    """Insere DT_DEBUG antes do terminador, preservando uma entrada DT_NULL."""
+    data = bytearray((ROOT / "lib_hardened.so").read_bytes())
+    with BytesIO(data) as handle:
+        elf = ELFFile(handle)
+        section = elf.get_section_by_name(".dynamic")
+        if elf.elfclass != 64 or section is None:
+            raise RuntimeError("lib_dtdebug.so: seção .dynamic ELF64 ausente")
+        offset = section["sh_offset"]
+        end = offset + section["sh_size"]
+        if section["sh_entsize"] != 16 or end > len(data):
+            raise RuntimeError("lib_dtdebug.so: entradas .dynamic inválidas")
+        tag_format = "<QQ" if elf.little_endian else ">QQ"
+    for position in range(offset, end - 16, 16):
+        tag, _ = struct.unpack_from(tag_format, data, position)
+        next_tag, _ = struct.unpack_from(tag_format, data, position + 16)
+        if tag == next_tag == 0:
+            struct.pack_into(tag_format, data, position, 21, 0)
+            (ROOT / "lib_dtdebug.so").write_bytes(data)
+            return {
+                "file": "lib_dtdebug.so",
+                "command": ["patch-dynamic", "lib_hardened.so", "DT_NULL", "DT_DEBUG"],
+                "expected": {
+                    "malformed": False,
+                    "kind": "lib",
+                    "machine": "EM_X86_64",
+                    "static": False,
+                    "nx": True,
+                    "pie": False,
+                    "relro": "full",
+                    "canary": True,
+                },
+                "checksec_divergence": {
+                    "pie": (
+                        "criterio PT_INTERP sem DT_SONAME; "
+                        "checksec 2.7.1 usa DT_DEBUG"
+                    )
+                },
+            }
+    raise RuntimeError("lib_dtdebug.so: DT_NULL sobressalente ausente em .dynamic")
+
+
 def make_mips() -> dict[str, Any]:
     """Monta um ELF32 MIPS big-endian executável sem dependência de compilador."""
     ident = b"\x7fELF" + bytes((1, 2, 1, 0)) + bytes(8)
@@ -250,9 +293,13 @@ def check_expected(fixture: dict[str, Any], oracle: dict[str, str]) -> None:
     for field, value in mapped.items():
         if value is None or oracle[field] not in valid_values[field]:
             raise ValueError(f"{name}: checksec retornou {field}={oracle[field]!r}")
+        if name == "lib_dtdebug.so" and field == "pie" and oracle[field] != "yes":
+            raise ValueError(f"{name}: pie: checksec deveria retornar 'yes'")
         if name == "exec_static" and field in ("relro", "canary"):
             expected[field] = value
-        elif expected[field] != value:
+        elif expected[field] != value and field not in fixture.get(
+            "checksec_divergence", {}
+        ):
             raise ValueError(
                 f"{name}: {field}: esperado {expected[field]!r}, "
                 f"checksec {oracle[field]!r}"
@@ -266,7 +313,7 @@ def build(checksec: str | None) -> None:
         ["gcc", "--version"], check=True, capture_output=True, text=True
     ).stdout.splitlines()[0]
     fixtures, static_omitted = compile_fixtures()
-    fixtures.extend((make_mips(), make_truncated()))
+    fixtures.extend((make_lib_dtdebug(), make_mips(), make_truncated()))
     for fixture in fixtures:
         if fixture["expected"]["malformed"]:
             continue

@@ -186,6 +186,34 @@
     },
     {
       "checksec": {
+        "canary": "yes",
+        "nx": "yes",
+        "pie": "yes",
+        "relro": "full"
+      },
+      "checksec_divergence": {
+        "pie": "criterio PT_INTERP sem DT_SONAME; checksec 2.7.1 usa DT_DEBUG"
+      },
+      "command": [
+        "patch-dynamic",
+        "lib_hardened.so",
+        "DT_NULL",
+        "DT_DEBUG"
+      ],
+      "expected": {
+        "canary": true,
+        "kind": "lib",
+        "machine": "EM_X86_64",
+        "malformed": false,
+        "nx": true,
+        "pie": false,
+        "relro": "full",
+        "static": false
+      },
+      "file": "lib_dtdebug.so"
+    },
+    {
+      "checksec": {
         "canary": "no",
         "nx": "yes",
         "pie": "no",

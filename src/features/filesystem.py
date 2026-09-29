@@ -79,6 +79,17 @@ def bind_now(tags: Iterable[tuple[str, int]]) -> bool:
     )
 
 
+def _classify_kind(elf_type: str, has_interp: bool, has_soname: bool) -> str:
+    """Distingue executável de biblioteca sem confiar na tag DT_DEBUG."""
+    if elf_type == "ET_EXEC":
+        return KIND_EXEC
+    if elf_type != "ET_DYN":
+        return KIND_OTHER
+    # Desvio do checksec 2.7.1: libs MIPS/uClibc reais têm DT_DEBUG;
+    # ET_DYN sem PT_INTERP (inclusive static-pie) é contado como biblioteca.
+    return KIND_EXEC if has_interp and not has_soname else KIND_LIB
+
+
 def _elf_info(elf: ELFFile) -> ElfInfo:
     """Calcula as proteções enquanto o descritor do ELF permanece aberto."""
     segments = list(elf.iter_segments())
@@ -89,11 +100,10 @@ def _elf_info(elf: ELFFile) -> ElfInfo:
         else []
     )
     elf_type = elf["e_type"]
-    has_debug = any(tag == "DT_DEBUG" for tag, _ in tags)
-    kind = (
-        KIND_EXEC
-        if elf_type == "ET_EXEC" or (elf_type == "ET_DYN" and has_debug)
-        else KIND_LIB if elf_type == "ET_DYN" else KIND_OTHER
+    kind = _classify_kind(
+        elf_type,
+        any(seg["p_type"] == "PT_INTERP" for seg in segments),
+        any(tag == "DT_SONAME" for tag, _ in tags),
     )
     static = kind in (KIND_EXEC, KIND_LIB) and dynamic is None
     nx = any(
@@ -117,7 +127,7 @@ def _elf_info(elf: ELFFile) -> ElfInfo:
         elf["e_machine"],
         static,
         nx,
-        kind == KIND_EXEC and elf_type == "ET_DYN" and has_debug,
+        kind == KIND_EXEC and elf_type == "ET_DYN",
         relro,
         canary,
     )
