@@ -1,0 +1,226 @@
+{
+  "checksec": "2.7.1",
+  "fixtures": [
+    {
+      "checksec": {
+        "canary": "yes",
+        "nx": "yes",
+        "pie": "yes",
+        "relro": "full"
+      },
+      "command": [
+        "gcc",
+        "-O0",
+        "-fPIE",
+        "-pie",
+        "-fstack-protector-all",
+        "-Wl,-z,relro,-z,now",
+        "-Wl,-z,noexecstack",
+        "src/prog.c",
+        "-o",
+        "exec_hardened"
+      ],
+      "expected": {
+        "canary": true,
+        "kind": "exec",
+        "machine": "EM_X86_64",
+        "malformed": false,
+        "nx": true,
+        "pie": true,
+        "relro": "full",
+        "static": false
+      },
+      "file": "exec_hardened"
+    },
+    {
+      "checksec": {
+        "canary": "no",
+        "nx": "yes",
+        "pie": "no",
+        "relro": "partial"
+      },
+      "command": [
+        "gcc",
+        "-O0",
+        "-fno-pie",
+        "-no-pie",
+        "-fno-stack-protector",
+        "-Wl,-z,relro,-z,lazy",
+        "-Wl,-z,noexecstack",
+        "src/prog.c",
+        "-o",
+        "exec_partial"
+      ],
+      "expected": {
+        "canary": false,
+        "kind": "exec",
+        "machine": "EM_X86_64",
+        "malformed": false,
+        "nx": true,
+        "pie": false,
+        "relro": "partial",
+        "static": false
+      },
+      "file": "exec_partial"
+    },
+    {
+      "checksec": {
+        "canary": "no",
+        "nx": "no",
+        "pie": "no",
+        "relro": "no"
+      },
+      "command": [
+        "gcc",
+        "-O0",
+        "-fno-pie",
+        "-no-pie",
+        "-fno-stack-protector",
+        "-Wl,-z,norelro",
+        "-Wl,-z,execstack",
+        "src/prog.c",
+        "-o",
+        "exec_weak"
+      ],
+      "expected": {
+        "canary": false,
+        "kind": "exec",
+        "machine": "EM_X86_64",
+        "malformed": false,
+        "nx": false,
+        "pie": false,
+        "relro": "none",
+        "static": false
+      },
+      "file": "exec_weak"
+    },
+    {
+      "checksec": {
+        "canary": "yes",
+        "nx": "yes",
+        "pie": "dso",
+        "relro": "full"
+      },
+      "command": [
+        "gcc",
+        "-O0",
+        "-shared",
+        "-fPIC",
+        "-fstack-protector-all",
+        "-Wl,-z,relro,-z,now",
+        "-Wl,-z,noexecstack",
+        "src/lib.c",
+        "-o",
+        "lib_hardened.so"
+      ],
+      "expected": {
+        "canary": true,
+        "kind": "lib",
+        "machine": "EM_X86_64",
+        "malformed": false,
+        "nx": true,
+        "pie": false,
+        "relro": "full",
+        "static": false
+      },
+      "file": "lib_hardened.so"
+    },
+    {
+      "checksec": {
+        "canary": "no",
+        "nx": "yes",
+        "pie": "no",
+        "relro": "partial"
+      },
+      "command": [
+        "gcc",
+        "-O0",
+        "-static",
+        "-fno-pie",
+        "-no-pie",
+        "-fstack-protector-all",
+        "-Wl,-z,noexecstack",
+        "-s",
+        "src/prog.c",
+        "-o",
+        "exec_static"
+      ],
+      "expected": {
+        "canary": false,
+        "kind": "exec",
+        "machine": "EM_X86_64",
+        "malformed": false,
+        "nx": true,
+        "pie": false,
+        "relro": "partial",
+        "static": true
+      },
+      "file": "exec_static"
+    },
+    {
+      "checksec": {
+        "canary": "yes",
+        "nx": "n/a",
+        "pie": "rel",
+        "relro": "n/a"
+      },
+      "command": [
+        "gcc",
+        "-O0",
+        "-c",
+        "src/lib.c",
+        "-o",
+        "obj_rel.o"
+      ],
+      "expected": {
+        "canary": false,
+        "kind": "outro",
+        "machine": "EM_X86_64",
+        "malformed": false,
+        "nx": false,
+        "pie": false,
+        "relro": "none",
+        "static": false
+      },
+      "file": "obj_rel.o"
+    },
+    {
+      "checksec": {
+        "canary": "no",
+        "nx": "yes",
+        "pie": "no",
+        "relro": "no"
+      },
+      "command": [
+        "struct",
+        "ELF32",
+        "big-endian"
+      ],
+      "expected": {
+        "canary": false,
+        "kind": "exec",
+        "machine": "EM_MIPS",
+        "malformed": false,
+        "nx": true,
+        "pie": false,
+        "relro": "none",
+        "static": true
+      },
+      "file": "mips_be_static"
+    },
+    {
+      "checksec": null,
+      "command": [
+        "truncate",
+        "exec_hardened",
+        "120"
+      ],
+      "expected": {
+        "malformed": true
+      },
+      "file": "truncated_elf"
+    }
+  ],
+  "gcc": "gcc (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0",
+  "generator": "tests/fixtures/elf/build_fixtures.py"
+}
