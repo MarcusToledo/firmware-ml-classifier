@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import time
 import tracemalloc
@@ -22,6 +23,7 @@ from pipeline.feature_extraction import (
     extract_features_from_path,
     load_pipeline_config,
 )
+from src.features.filesystem import UNPACKED_COLUMNS
 from src.features.unpack import (
     STATUS_FAILURE,
     STATUS_FILES,
@@ -57,6 +59,51 @@ def test_full_read_and_filesystem_strings(
     assert result.features["count_hardcoded_passwords"] >= 1
     assert result.features["n_filesystems"] == 1
     assert "hardcoded_passwords" in {finding.detector for finding in result.findings}
+    assert set(UNPACKED_COLUMNS) <= result.features.keys()
+    assert result.features["unpacked_n_files"] == 1
+    assert result.features["unpacked_n_elf"] == 0
+    assert result.features["unpacked_prop_nx"] is None
+    assert result.metadata["fs_status"] == "ok"
+    assert result.metadata["fs_elf_malformed"] == 0
+    assert result.metadata["fs_arch"] is None
+
+
+def test_filesystem_error_keeps_row(
+    tmp_path: Path, fake_toolchain: Toolchain, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mantém strings e linha do firmware quando a leitura do fs falha."""
+    import src.features.filesystem as filesystem
+
+    def fail(_root: Path) -> Iterator[Path]:
+        """Simula falha de E/S durante o percurso da árvore extraída."""
+        raise OSError("boom")
+        yield from ()
+
+    monkeypatch.setattr(filesystem, "iter_extracted_files", fail)
+    path = tmp_path / "firmware.bin"
+    path.write_bytes(b"firmware-data\x00")
+    result = extract_features_from_path(
+        path, load_pipeline_config(None, {}), None, fake_toolchain
+    )
+    assert result.metadata["fs_status"] == "erro"
+    assert "boom" in result.metadata["fs_error"]
+    assert all(result.features[column] is None for column in UNPACKED_COLUMNS)
+    assert result.features["count_hardcoded_passwords"] >= 1
+
+
+def test_batch_logs_filesystem_summary(
+    tmp_path: Path, fake_toolchain: Toolchain, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Registra os totais do lote após processar o filesystem extraído."""
+
+    path = tmp_path / "firmware.bin"
+    path.write_bytes(b"firmware-data\x00")
+    with caplog.at_level(logging.INFO, logger="pipeline.feature_extraction"):
+        extract_features_batch(
+            [path], load_pipeline_config(None, {}), fake_toolchain, max_workers=1
+        )
+    assert "1/1 firmwares com fs_status=ok" in caplog.text
+    assert "malformados=0" in caplog.text
 
 
 def test_scan_timeout_kills_child_process(
@@ -125,6 +172,10 @@ def test_empty_and_unreadable_skip_tools(
         assert result.metadata["binwalk_status"] == STATUS_NOT_RUN
         assert result.metadata["unpack_status"] == STATUS_NOT_RUN
         assert result.metadata["strings_source"] == STATUS_NOT_RUN
+        assert result.metadata["fs_status"] == "nao_executado"
+        assert result.metadata["fs_error"] is None
+        assert result.metadata["fs_elf_malformed"] is None
+        assert result.metadata["fs_arch"] is None
 
 
 def test_error_row_keeps_identity_and_batch_continues(
@@ -188,6 +239,10 @@ def test_classifier_features_exclude_cve_and_identity_fields(
     }
     assert forbidden.isdisjoint(result.features)
     assert not any(key.startswith("meta_") for key in result.features)
+    assert {key for key in result.features if key.startswith("unpacked_")} == set(
+        UNPACKED_COLUMNS
+    )
+    assert "fs_arch" not in result.features
 
 
 @pytest.mark.parametrize(
@@ -311,6 +366,8 @@ def test_unpack_fallback_or_timeout(
         assert result.features["count_hardcoded_passwords"] >= 1
     else:
         assert result.features["count_hardcoded_passwords"] == 0
+    assert all(result.features[column] is None for column in UNPACKED_COLUMNS)
+    assert result.metadata["fs_status"] == "nao_executado"
 
 
 def test_webflash_name_removes_version_but_banner_does_not(
