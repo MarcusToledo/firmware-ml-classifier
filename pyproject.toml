@@ -11,11 +11,12 @@ requires-python = ">=3.9"
 dependencies = [
     "numpy>=1.21",
     "pandas>=1.4",
-    "scikit-learn>=1.1",
+    "scikit-learn>=1.6",
     "gensim>=4.2",
     "tqdm>=4.64",
     "matplotlib>=3.6",
     "pyyaml>=6.0",
+    "pyelftools<0.33",
     "pyarrow>=8.0",
     "binwalk @ git+https://github.com/ReFirmLabs/binwalk@cddfede795971045d99422bd7a9676c8803ec5ee",
     "jefferson>=0.4.1",
