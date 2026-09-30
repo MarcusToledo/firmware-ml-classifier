@@ -370,6 +370,29 @@ def unpack_firmware(
         _remove_sandbox(path, base)
 
 
+def find_filesystem_roots(out: Path) -> list[Path]:
+    """Localiza raízes reais do filesystem sem duplicar raízes aninhadas.
+
+    Propaga falhas de percurso para que a extração registre o erro.
+    """
+    roots: list[Path] = []
+    stack = [out]
+    while stack:
+        directory = stack.pop()
+        with os.scandir(directory) as entries:
+            for entry in entries:
+                if not entry.is_dir(follow_symlinks=False):
+                    continue
+                path = Path(entry.path)
+                if not _is_real_dir(path):
+                    continue
+                if _ROOT_RE.fullmatch(entry.name):
+                    roots.append(path)
+                else:
+                    stack.append(path)
+    return sorted(roots, key=lambda path: path.relative_to(out).as_posix())
+
+
 def iter_extracted_files(root: Path) -> list[Path]:
     """Ordena arquivos regulares extraídos sem seguir nenhum symlink."""
     files: list[Path] = []

@@ -34,6 +34,11 @@ from src.features.binwalk import (
     detect_fs_type,
 )
 from src.features.doc2vec import Doc2VecConfig, load_doc2vec
+from src.features.filesystem import (
+    FilesystemResult,
+    filesystem_features,
+    unavailable_filesystem,
+)
 from src.features.statistics import ByteStats, StreamingStats
 from src.features.strings import DocumentBuilder, iter_ascii_strings
 from src.features.unpack import (
@@ -414,8 +419,8 @@ def _string_features(
     toolchain: Toolchain,
     document: DocumentBuilder,
     fs_type: str | None,
-) -> tuple[list[SecurityFinding], bool, str, str, int]:
-    """Prefere filesystem; faz fallback bruto exceto após limite de tempo."""
+) -> tuple[list[SecurityFinding], bool, str, str, int, FilesystemResult]:
+    """Prefere filesystem, incluindo suas features; usa blob fora do status ok."""
     with unpack_firmware(path, config.unpack, toolchain) as unpack:
         status = _effective_unpack_status(unpack.status, fs_type)
         if status != unpack.status:
@@ -427,17 +432,18 @@ def _string_features(
             )
         if status == STATUS_OK:
             assert unpack.root is not None
+            fs = filesystem_features(unpack.root, config.max_bytes)
             findings, banner, cut = _scan_extracted(unpack.root, config, document)
-            return findings, banner, status, STRINGS_FILESYSTEM, cut
+            return findings, banner, status, STRINGS_FILESYSTEM, cut, fs
         if status == STATUS_TIME:
-            return [], False, status, STATUS_NOT_RUN, 0
+            return [], False, status, STATUS_NOT_RUN, 0, unavailable_filesystem()
     strings = iter_ascii_strings(
         iter_file_chunks(path, config.max_bytes),
         config.feature.min_string_len,
         config.feature.max_string_len,
     )
     findings, banner = _scan_string_stream(strings, document)
-    return findings, banner, status, STRINGS_BLOB, 0
+    return findings, banner, status, STRINGS_BLOB, 0, unavailable_filesystem()
 
 
 def _structural_features(
@@ -480,6 +486,7 @@ class _StringScan:
     unpack_status: str
     strings_source: str
     files_cut: int
+    filesystem: FilesystemResult
 
 
 def _build_result(
@@ -509,6 +516,7 @@ def _build_result(
             descriptions, read.stats.entropy_variance_across_sections
         ),
         **findings_to_counts(scan.findings),
+        **scan.filesystem.features,
     }
     findings = [
         *scan.findings,
@@ -530,6 +538,7 @@ def _build_result(
         "strings_source": scan.strings_source,
         "unpack_files_cut": scan.files_cut,
         **_identity_metadata(path, meta_path, identity, scan.banner),
+        **scan.filesystem.metadata,
     }
     return PipelineResult(read.firmware_id, features, metadata, findings)
 
@@ -605,6 +614,7 @@ def _build_error_result(
         "strings_source": STATUS_NOT_RUN,
         "unpack_files_cut": 0,
         **_identity_metadata(path, meta_path or str(path), identity, False),
+        **unavailable_filesystem().metadata,
     }
     return PipelineResult(None, {}, metadata, [])
 
@@ -666,6 +676,22 @@ def _process_path_in_worker(path: Path) -> PipelineResult:
     )
 
 
+def _log_filesystem_summary(results: list[PipelineResult]) -> None:
+    """Registra os totais de filesystems válidos e ELF processados no lote."""
+    valid = [row for row in results if row.metadata["fs_status"] == STATUS_OK]
+    unique = sum(cast(int, row.features["unpacked_n_elf"]) for row in valid)
+    malformed = sum(row.metadata["fs_elf_malformed"] for row in valid)
+    LOGGER.info(
+        "Features do filesystem: %d/%d firmwares com fs_status=ok; "
+        "ELF únicos=%d, lidos=%d, malformados=%d",
+        len(valid),
+        len(results),
+        unique,
+        unique - malformed,
+        malformed,
+    )
+
+
 def extract_features_batch(
     paths: Iterable[Path],
     config: PipelineConfig,
@@ -687,20 +713,23 @@ def extract_features_batch(
     )
     if workers == 1:
         model = load_doc2vec_model(config.doc2vec_model_path)
-        return [
+        results = [
             _process_path(path, config, model, toolchain, dataset_root)
             for path in path_list
         ]
-    results: list[PipelineResult | None] = [None] * len(path_list)
-    with ProcessPoolExecutor(
-        max_workers=workers,
-        initializer=_init_worker,
-        initargs=(config, toolchain, dataset_root),
-    ) as executor:
-        futures = {
-            executor.submit(_process_path_in_worker, path): index
-            for index, path in enumerate(path_list)
-        }
-        for future in as_completed(futures):
-            results[futures[future]] = future.result()
-    return cast(list[PipelineResult], results)
+    else:
+        pending: list[PipelineResult | None] = [None] * len(path_list)
+        with ProcessPoolExecutor(
+            max_workers=workers,
+            initializer=_init_worker,
+            initargs=(config, toolchain, dataset_root),
+        ) as executor:
+            futures = {
+                executor.submit(_process_path_in_worker, path): index
+                for index, path in enumerate(path_list)
+            }
+            for future in as_completed(futures):
+                pending[futures[future]] = future.result()
+        results = cast(list[PipelineResult], pending)
+    _log_filesystem_summary(results)
+    return results
