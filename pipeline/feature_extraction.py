@@ -419,31 +419,30 @@ def _string_features(
     toolchain: Toolchain,
     document: DocumentBuilder,
     fs_type: str | None,
-) -> tuple[list[SecurityFinding], bool, str, str, int, FilesystemResult]:
-    """Prefere filesystem, incluindo suas features; usa blob fora do status ok."""
+) -> tuple[list[SecurityFinding], bool, str, str | None, str, int, FilesystemResult]:
+    """Prefere filesystem e devolve o motivo de falha junto das strings."""
     with unpack_firmware(path, config.unpack, toolchain) as unpack:
         status = _effective_unpack_status(unpack.status, fs_type)
+        error = unpack.error
+        if status == STATUS_FAILURE and not error:
+            error = "extrator falhou sem diagnóstico"
         if status != unpack.status:
-            LOGGER.warning(
-                "Filesystem %s detectado e não extraído em %s: %s",
-                fs_type,
-                path,
-                unpack.error,
-            )
+            error = f"filesystem {fs_type} detectado e não extraído"
+            LOGGER.warning("%s em %s: %s", error, path, unpack.error)
         if status == STATUS_OK:
             assert unpack.root is not None
             fs = filesystem_features(unpack.root, config.max_bytes)
             findings, banner, cut = _scan_extracted(unpack.root, config, document)
-            return findings, banner, status, STRINGS_FILESYSTEM, cut, fs
+            return findings, banner, status, None, STRINGS_FILESYSTEM, cut, fs
         if status == STATUS_TIME:
-            return [], False, status, STATUS_NOT_RUN, 0, unavailable_filesystem()
+            return [], False, status, error, STATUS_NOT_RUN, 0, unavailable_filesystem()
     strings = iter_ascii_strings(
         iter_file_chunks(path, config.max_bytes),
         config.feature.min_string_len,
         config.feature.max_string_len,
     )
     findings, banner = _scan_string_stream(strings, document)
-    return findings, banner, status, STRINGS_BLOB, 0, unavailable_filesystem()
+    return findings, banner, status, error, STRINGS_BLOB, 0, unavailable_filesystem()
 
 
 def _structural_features(
@@ -484,6 +483,7 @@ class _StringScan:
     findings: list[SecurityFinding]
     banner: bool
     unpack_status: str
+    unpack_error: str | None
     strings_source: str
     files_cut: int
     filesystem: FilesystemResult
@@ -535,6 +535,7 @@ def _build_result(
         "error": None,
         "binwalk_status": binwalk_status,
         "unpack_status": scan.unpack_status,
+        "unpack_error": scan.unpack_error,
         "strings_source": scan.strings_source,
         "unpack_files_cut": scan.files_cut,
         **_identity_metadata(path, meta_path, identity, scan.banner),
@@ -611,6 +612,7 @@ def _build_error_result(
         "error": str(exc),
         "binwalk_status": STATUS_NOT_RUN,
         "unpack_status": STATUS_NOT_RUN,
+        "unpack_error": None,
         "strings_source": STATUS_NOT_RUN,
         "unpack_files_cut": 0,
         **_identity_metadata(path, meta_path or str(path), identity, False),
@@ -732,4 +734,9 @@ def extract_features_batch(
                 pending[futures[future]] = future.result()
         results = cast(list[PipelineResult], pending)
     _log_filesystem_summary(results)
+    counts: dict[str, int] = {}
+    for result in results:
+        status = result.metadata["unpack_status"]
+        counts[status] = counts.get(status, 0) + 1
+    LOGGER.info("Status do unpack: %s", dict(sorted(counts.items())))
     return results

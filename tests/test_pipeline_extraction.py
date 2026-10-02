@@ -25,6 +25,7 @@ from pipeline.feature_extraction import (
 )
 from src.features.filesystem import UNPACKED_COLUMNS
 from src.features.unpack import (
+    STATUS_ENCRYPTED,
     STATUS_FAILURE,
     STATUS_FILES,
     STATUS_NO_FILESYSTEM,
@@ -54,6 +55,7 @@ def test_full_read_and_filesystem_strings(
     )
     assert result.metadata["binwalk_status"] == STATUS_OK
     assert result.metadata["unpack_status"] == STATUS_OK
+    assert result.metadata["unpack_error"] is None
     assert result.metadata["strings_source"] == STRINGS_FILESYSTEM
     assert result.metadata["third_party"] is None
     assert result.features["count_hardcoded_passwords"] >= 1
@@ -104,6 +106,23 @@ def test_batch_logs_filesystem_summary(
         )
     assert "1/1 firmwares com fs_status=ok" in caplog.text
     assert "malformados=0" in caplog.text
+    assert "Status do unpack: {'ok': 1}" in caplog.text
+
+
+def test_batch_logs_sorted_unpack_counts(
+    tmp_path: Path, fake_toolchain: Toolchain, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Contabiliza por status inclusive a linha de erro em ordem alfabética."""
+    path = tmp_path / "firmware.bin"
+    path.write_bytes(b"firmware-data\x00")
+    with caplog.at_level(logging.INFO, logger="pipeline.feature_extraction"):
+        extract_features_batch(
+            [path, tmp_path / "missing.bin"],
+            load_pipeline_config(None, {}),
+            fake_toolchain,
+            max_workers=1,
+        )
+    assert "Status do unpack: {'nao_executado': 1, 'ok': 1}" in caplog.text
 
 
 def test_scan_timeout_kills_child_process(
@@ -171,6 +190,7 @@ def test_empty_and_unreadable_skip_tools(
         assert result.firmware_id is None
         assert result.metadata["binwalk_status"] == STATUS_NOT_RUN
         assert result.metadata["unpack_status"] == STATUS_NOT_RUN
+        assert result.metadata["unpack_error"] is None
         assert result.metadata["strings_source"] == STATUS_NOT_RUN
         assert result.metadata["fs_status"] == "nao_executado"
         assert result.metadata["fs_error"] is None
@@ -292,6 +312,9 @@ def test_detected_filesystem_not_extracted_is_failure(
     )
     assert result.features["fs_type"] == "cramfs"
     assert result.metadata["unpack_status"] == STATUS_FAILURE
+    assert result.metadata["unpack_error"] == (
+        "filesystem cramfs detectado e não extraído"
+    )
     assert result.metadata["strings_source"] == STRINGS_BLOB
 
 
@@ -327,6 +350,7 @@ def test_batch_preserves_relative_identity_and_order(
     [
         (STATUS_NO_FILESYSTEM, STRINGS_BLOB),
         (STATUS_FAILURE, STRINGS_BLOB),
+        (STATUS_ENCRYPTED, STRINGS_BLOB),
         (STATUS_SIZE, STRINGS_BLOB),
         (STATUS_FILES, STRINGS_BLOB),
         (STATUS_TIME, STATUS_NOT_RUN),
@@ -350,7 +374,8 @@ def test_unpack_fallback_or_timeout(
         _path: Path, _limits: object, _toolchain: Toolchain
     ) -> Iterator[UnpackResult]:
         """Reproduz o status reportado pelo monitor real."""
-        yield UnpackResult(status, None)
+        error = "marcador de criptografia b'Salted__' no offset 116"
+        yield UnpackResult(status, None, error if status == STATUS_ENCRYPTED else None)
 
     monkeypatch.setattr(pipeline, "unpack_firmware", unpack)
     monkeypatch.setattr(pipeline, "_scan_binwalk", lambda path, tool: ([], STATUS_OK))
@@ -358,6 +383,14 @@ def test_unpack_fallback_or_timeout(
         path, load_pipeline_config(None, {}), None, fake_toolchain
     )
     assert result.metadata["unpack_status"] == status
+    if status == STATUS_ENCRYPTED:
+        assert result.metadata["unpack_error"] == (
+            "marcador de criptografia b'Salted__' no offset 116"
+        )
+    elif status == STATUS_FAILURE:
+        assert result.metadata["unpack_error"]
+    else:
+        assert result.metadata["unpack_error"] is None
     assert result.metadata["strings_source"] == source
     assert result.metadata["third_party"] == (
         THIRD_PARTY_DDWRT if source == STRINGS_BLOB else None

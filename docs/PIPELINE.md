@@ -98,9 +98,12 @@ alvo de classificação embutido.
 - `src/features/binwalk.py` (sinais estruturais: filesystem, compressão)
 - `src/features/unpack.py` (desempacota a imagem com `binwalk -e` em
   diretório temporário, com limites de tamanho, arquivos e tempo; grava
-  `meta_unpack_status`: `ok`, `sem_filesystem`, `falha`,
+  `meta_unpack_status`: `ok`, `sem_filesystem`, `falha`, `criptografado`,
   `limite_tamanho`, `limite_arquivos`, `limite_tempo` ou
-  `nao_executado`). Com `ok`, as strings vêm dos arquivos extraídos
+  `nao_executado`). `criptografado` marca a imagem da qual o binwalk não
+  extraiu nenhum arquivo e que traz o marcador OpenSSL `Salted__` nos
+  primeiros 4096 bytes. Em `falha` e `criptografado`, o motivo fica em
+  `meta_unpack_error`. Com `ok`, as strings vêm dos arquivos extraídos
   (`meta_strings_source=filesystem`); com `limite_tempo`, as strings não
   são varridas (`nao_executado`); nos demais casos, vêm do blob bruto
   (`blob`).

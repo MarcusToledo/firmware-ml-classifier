@@ -14,6 +14,7 @@ import pytest
 
 import src.features.unpack as unpack_module
 from src.features.unpack import (
+    STATUS_ENCRYPTED,
     STATUS_FAILURE,
     STATUS_FILES,
     STATUS_NO_FILESYSTEM,
@@ -112,6 +113,66 @@ def test_unpack_status_and_cleanup(
     assert not sandboxes[0].exists()
 
 
+@pytest.mark.parametrize(
+    "marker_offset,extracts,status,expected_error",
+    [
+        (
+            116,
+            False,
+            STATUS_ENCRYPTED,
+            "marcador de criptografia b'Salted__' no offset 116",
+        ),
+        (None, False, STATUS_FAILURE, "binwalk saiu com código 0"),
+        (116, True, STATUS_OK, None),
+        (4096, False, STATUS_FAILURE, "binwalk saiu com código 0"),
+    ],
+)
+def test_encryption_marker_only_classifies_failed_empty_extraction(
+    tmp_path: Path,
+    marker_offset: int | None,
+    extracts: bool,
+    status: str,
+    expected_error: str | None,
+) -> None:
+    """Distingue criptografia de falha sem sobrepor sucesso ou ler além do prefixo."""
+    path = tmp_path / "firmware.bin"
+    prefix = os.urandom(marker_offset or 116)
+    path.write_bytes(prefix + (b"Salted__" if marker_offset is not None else b""))
+    body = (
+        _EXTRACT_DIR + 'mkdir -p "$1/squashfs-root"; echo x > "$1/squashfs-root/f"\n'
+        if extracts
+        else "exit 0\n"
+    )
+    with unpack_firmware(
+        path, UnpackLimits(1000, 10, 5), _script_toolchain(tmp_path, body)
+    ) as result:
+        assert result.status == status
+        if expected_error is None:
+            assert result.error is None
+        else:
+            assert expected_error in result.error
+
+
+@pytest.mark.parametrize(
+    "body,expected",
+    [
+        ("echo erro-do-binwalk >&2; exit 3\n", "erro-do-binwalk"),
+        ("exit 3\n", "binwalk saiu com código 3"),
+    ],
+)
+def test_extractor_failure_records_stderr_or_exit_code(
+    tmp_path: Path, body: str, expected: str
+) -> None:
+    """Preserva stderr e usa código de saída quando o extrator silencia."""
+    path = tmp_path / "firmware.bin"
+    path.write_bytes(b"firmware sem marcador")
+    with unpack_firmware(
+        path, UnpackLimits(1000, 10, 5), _script_toolchain(tmp_path, body)
+    ) as result:
+        assert result.status == STATUS_FAILURE
+        assert expected in result.error
+
+
 def test_restricted_dirs_are_read_and_removed_without_touching_link_targets(
     tmp_path: Path, sandboxes: list[Path]
 ) -> None:
@@ -154,6 +215,7 @@ def test_replaced_output_symlink_does_not_change_victim(
     ) as result:
         assert result.status == STATUS_FAILURE
         assert result.root is None
+        assert result.error == "saída do extrator substituída por link"
     assert stat.S_IMODE(victim.stat().st_mode) == 0o555
     assert file.exists()
     assert not sandboxes[0].exists()
