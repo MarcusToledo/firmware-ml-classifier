@@ -19,10 +19,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, BinaryIO
 
+from src.io_utils import iter_file_chunks
+
 LOGGER = logging.getLogger(__name__)
 STATUS_OK = "ok"
 STATUS_NO_FILESYSTEM = "sem_filesystem"
 STATUS_FAILURE = "falha"
+STATUS_ENCRYPTED = "criptografado"
 STATUS_SIZE = "limite_tamanho"
 STATUS_FILES = "limite_arquivos"
 STATUS_TIME = "limite_tempo"
@@ -40,6 +43,7 @@ _SANDBOX_HOME = "home"
 _SANDBOX_TMP = "tmp"
 _SANDBOX_OUT = "out"
 _ROOT_RE = re.compile(r"^[a-z0-9]+-root(-\d+)?$")
+_ENCRYPTION_MARKERS = (b"Salted__",)
 # A tag upstream v2.3.4 aponta para cddfede, mas setup.py mantém 2.3.3.
 _BINWALK_V234_COMMIT = "cddfede"
 _REQUIRED_TOOLS = (
@@ -277,21 +281,37 @@ def _monitor(
         )
 
 
+def _encryption_error(path: Path) -> str | None:
+    """Localiza marcador de criptografia nos primeiros 4096 bytes da imagem."""
+    prefix = b"".join(iter_file_chunks(path, 4096))
+    for marker in _ENCRYPTION_MARKERS:
+        offset = prefix.find(marker)
+        if offset >= 0:
+            return f"marcador de criptografia {marker!r} no offset {offset}"
+    return None
+
+
 def _final_status(
-    process: subprocess.Popen[bytes], out: Path, limits: UnpackLimits
-) -> str:
-    """Classifica a saída completa depois de normalizar as permissões."""
+    process: subprocess.Popen[bytes], path: Path, out: Path, limits: UnpackLimits
+) -> tuple[str, str | None]:
+    """Classifica a saída completa e registra a causa da falha."""
     if not _is_real_dir(out):
         LOGGER.warning("Saída do extrator substituída por link: %s", out)
-        return STATUS_FAILURE
+        return STATUS_FAILURE, "saída do extrator substituída por link"
     _grant_owner_access(out)
     total, count, regular, filesystem = _inventory(out, strict=True)
     limit = _limit_status(total, count, 0.0, limits)
     if limit:
-        return limit
-    if process.returncode != 0 or not regular:
-        return STATUS_FAILURE
-    return STATUS_OK if filesystem else STATUS_NO_FILESYSTEM
+        return limit, None
+    if not regular:
+        marker_error = _encryption_error(path)
+        if marker_error:
+            return STATUS_ENCRYPTED, marker_error
+    if process.returncode != 0:
+        return STATUS_FAILURE, f"binwalk saiu com código {process.returncode}"
+    if not regular:
+        return STATUS_FAILURE, "binwalk saiu com código 0 sem arquivo regular extraído"
+    return (STATUS_OK if filesystem else STATUS_NO_FILESYSTEM), None
 
 
 def _stderr_tail(handle: BinaryIO) -> str:
@@ -333,8 +353,11 @@ def _run_extractor(
             status = _monitor(process, out, limits, started)
         finally:
             stop_process_group(process)
-        status = status or _final_status(process, out, limits)
-        error = _stderr_tail(stderr) if status == STATUS_FAILURE else None
+        if status is None:
+            status, reason = _final_status(process, path, out, limits)
+        else:
+            reason = None
+        error = (_stderr_tail(stderr) or reason) if status == STATUS_FAILURE else reason
     return status, error
 
 
