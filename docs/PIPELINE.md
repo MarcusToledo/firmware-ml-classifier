@@ -27,6 +27,9 @@ graph TD
     STR["strings.py<br/>strings ASCII"]
     D2V["doc2vec.py<br/>embeddings"]
     BW["binwalk.py<br/>filesystem, compressão"]
+    UNP["unpack.py<br/>desempacota com binwalk -e"]
+    FS["filesystem.py<br/>inventário e hardening de ELF"]
+    UNP --> FS
   end
 
   FW --> EXT
@@ -44,6 +47,8 @@ graph TD
   STATS --> FEAT
   D2V --> FEAT
   CNT --> FEAT
+  FS --> FEAT
+  UNP --> STR
 
   KEY["fabricante/modelo/versão<br/>metadados, nunca features"]
   NVD["fetch_cves.py<br/>CPE oficial ou busca por texto"]
@@ -91,6 +96,27 @@ alvo de classificação embutido.
 - `src/features/statistics.py` (entropia, byte_mean, compress_ratio)
 - `src/features/strings.py`, `src/features/doc2vec.py`
 - `src/features/binwalk.py` (sinais estruturais: filesystem, compressão)
+- `src/features/unpack.py` (desempacota a imagem com `binwalk -e` em
+  diretório temporário, com limites de tamanho, arquivos e tempo; grava
+  `meta_unpack_status`: `ok`, `sem_filesystem`, `falha`,
+  `limite_tamanho`, `limite_arquivos`, `limite_tempo` ou
+  `nao_executado`). Com `ok`, as strings vêm dos arquivos extraídos
+  (`meta_strings_source=filesystem`); com `limite_tempo`, as strings não
+  são varridas (`nao_executado`); nos demais casos, vêm do blob bruto
+  (`blob`).
+- `src/features/filesystem.py` (com unpack `ok`, lê com pyelftools os ELF
+  das raízes de filesystem, sem executá-los). Grava 10 colunas:
+  `unpacked_n_files`, `unpacked_n_elf`, `unpacked_n_elf_exec`,
+  `unpacked_n_elf_lib`, `unpacked_n_elf_static` e as proporções
+  `unpacked_prop_nx`, `unpacked_prop_pie`, `unpacked_prop_relro_full`,
+  `unpacked_prop_relro_partial` e `unpacked_prop_canary`. NX, RELRO e
+  canary seguem os critérios do checksec 2.7.1. É executável o ELF
+  `ET_EXEC` ou `ET_DYN` com `PT_INTERP` e sem `DT_SONAME`; os demais
+  `ET_DYN` são bibliotecas (bibliotecas MIPS/uClibc trazem `DT_DEBUG`, que o
+  checksec trata como PIE). Sem unpack `ok`, as 10 colunas ficam nulas,
+  nunca zero. Metadados fora do vetor: `meta_fs_status` (`ok`, `erro`,
+  `nao_executado`), `meta_fs_error`, `meta_fs_elf_malformed` e
+  `meta_fs_arch` (`e_machine` mais frequente).
 
 ### 2. Camada de evidências
 
