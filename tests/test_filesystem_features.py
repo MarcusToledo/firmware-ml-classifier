@@ -207,6 +207,17 @@ def test_library_with_dt_debug_is_not_executable(tmp_path: Path) -> None:
     assert result.features["unpacked_prop_pie"] is None
 
 
+def test_missing_dt_symtab_is_read_not_malformed(tmp_path: Path) -> None:
+    """Lê canary pela seção ou dá sem canary quando falta DT_SYMTAB."""
+    root = _root(tmp_path)
+    _copy(root, "lib_nodtsymtab.so")
+    _copy(root, "lib_nodtsymtab_noshdr.so")
+    result = _extract(root)
+    assert result.metadata["fs_elf_malformed"] == 0
+    assert result.features["unpacked_n_elf_lib"] == 2
+    assert result.features["unpacked_prop_canary"] == 0.5
+
+
 @pytest.mark.parametrize(
     "fixtures,arch",
     [
