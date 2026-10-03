@@ -195,6 +195,72 @@ def make_lib_dtdebug() -> dict[str, Any]:
     raise RuntimeError("lib_dtdebug.so: DT_NULL sobressalente ausente em .dynamic")
 
 
+def remove_dynamic_tables(data: bytearray) -> bytearray:
+    """Troca DT_SYMTAB, DT_HASH e DT_GNU_HASH por DT_SYMBOLIC em .dynamic.
+
+    Levanta RuntimeError se .dynamic não for ELF64 válido ou não tiver DT_SYMTAB.
+    """
+    with BytesIO(data) as handle:
+        elf = ELFFile(handle)
+        section = elf.get_section_by_name(".dynamic")
+        if elf.elfclass != 64 or section is None:
+            raise RuntimeError("lib_nodtsymtab.so: seção .dynamic ELF64 ausente")
+        offset = section["sh_offset"]
+        end = offset + section["sh_size"]
+        if section["sh_entsize"] != 16 or end > len(data):
+            raise RuntimeError("lib_nodtsymtab.so: entradas .dynamic inválidas")
+        tag_format = "<QQ" if elf.little_endian else ">QQ"
+    found_symtab = False
+    for position in range(offset, end, 16):
+        tag, _ = struct.unpack_from(tag_format, data, position)
+        if tag in (6, 4, 0x6FFFFEF5):
+            found_symtab = found_symtab or tag == 6
+            struct.pack_into(tag_format, data, position, 16, 0)
+    if not found_symtab:
+        raise RuntimeError("lib_nodtsymtab.so: DT_SYMTAB ausente em .dynamic")
+    return data
+
+
+def make_lib_nodtsymtab() -> list[dict[str, Any]]:
+    """Gera bibliotecas sem DT_SYMTAB, com e sem section headers.
+
+    Com section headers, o canary continua legível em .dynsym; sem eles, não
+    há tabela de símbolos legível e o esperado é sem canary.
+    """
+    data = remove_dynamic_tables(bytearray((ROOT / "lib_hardened.so").read_bytes()))
+    (ROOT / "lib_nodtsymtab.so").write_bytes(data)
+    struct.pack_into("<Q", data, 0x28, 0)
+    struct.pack_into("<HH", data, 0x3C, 0, 0)
+    (ROOT / "lib_nodtsymtab_noshdr.so").write_bytes(data)
+    command = [
+        "patch-dynamic",
+        "lib_hardened.so",
+        "DT_SYMTAB/DT_HASH/DT_GNU_HASH",
+        "DT_SYMBOLIC",
+    ]
+    expected = {
+        "malformed": False,
+        "kind": "lib",
+        "machine": "EM_X86_64",
+        "static": False,
+        "nx": True,
+        "pie": False,
+        "relro": "full",
+    }
+    return [
+        {
+            "file": "lib_nodtsymtab.so",
+            "command": command,
+            "expected": {**expected, "canary": True},
+        },
+        {
+            "file": "lib_nodtsymtab_noshdr.so",
+            "command": [*command, "strip-section-headers"],
+            "expected": {**expected, "canary": False},
+        },
+    ]
+
+
 def make_mips() -> dict[str, Any]:
     """Monta um ELF32 MIPS big-endian executável sem dependência de compilador."""
     ident = b"\x7fELF" + bytes((1, 2, 1, 0)) + bytes(8)
@@ -313,7 +379,9 @@ def build(checksec: str | None) -> None:
         ["gcc", "--version"], check=True, capture_output=True, text=True
     ).stdout.splitlines()[0]
     fixtures, static_omitted = compile_fixtures()
-    fixtures.extend((make_lib_dtdebug(), make_mips(), make_truncated()))
+    fixtures.extend(
+        (make_lib_dtdebug(), *make_lib_nodtsymtab(), make_mips(), make_truncated())
+    )
     for fixture in fixtures:
         if fixture["expected"]["malformed"]:
             continue

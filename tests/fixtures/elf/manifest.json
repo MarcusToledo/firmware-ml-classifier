@@ -214,6 +214,57 @@
     },
     {
       "checksec": {
+        "canary": "yes",
+        "nx": "yes",
+        "pie": "dso",
+        "relro": "full"
+      },
+      "command": [
+        "patch-dynamic",
+        "lib_hardened.so",
+        "DT_SYMTAB/DT_HASH/DT_GNU_HASH",
+        "DT_SYMBOLIC"
+      ],
+      "expected": {
+        "canary": true,
+        "kind": "lib",
+        "machine": "EM_X86_64",
+        "malformed": false,
+        "nx": true,
+        "pie": false,
+        "relro": "full",
+        "static": false
+      },
+      "file": "lib_nodtsymtab.so"
+    },
+    {
+      "checksec": {
+        "canary": "no",
+        "nx": "yes",
+        "pie": "dso",
+        "relro": "full"
+      },
+      "command": [
+        "patch-dynamic",
+        "lib_hardened.so",
+        "DT_SYMTAB/DT_HASH/DT_GNU_HASH",
+        "DT_SYMBOLIC",
+        "strip-section-headers"
+      ],
+      "expected": {
+        "canary": false,
+        "kind": "lib",
+        "machine": "EM_X86_64",
+        "malformed": false,
+        "nx": true,
+        "pie": false,
+        "relro": "full",
+        "static": false
+      },
+      "file": "lib_nodtsymtab_noshdr.so"
+    },
+    {
+      "checksec": {
         "canary": "no",
         "nx": "yes",
         "pie": "no",
