@@ -14,6 +14,7 @@ from typing import Any
 from elftools.elf.constants import P_FLAGS
 from elftools.elf.dynamic import DynamicSegment
 from elftools.elf.elffile import ELFFile
+from elftools.elf.sections import SymbolTableSection
 
 from src.features.unpack import (
     STATUS_NOT_RUN,
@@ -90,6 +91,30 @@ def _classify_kind(elf_type: str, has_interp: bool, has_soname: bool) -> str:
     return KIND_EXEC if has_interp and not has_soname else KIND_LIB
 
 
+def _has_canary(elf: ELFFile, dynamic: DynamicSegment) -> bool:
+    """Procura símbolo de canary importado como o checksec 2.7.1 (readelf -s).
+
+    Com section headers, lê só as tabelas de símbolos das seções; sem eles,
+    lê o segmento dinâmico. Sem DT_SYMTAB mapeável não há símbolo legível,
+    e o resultado é sem canary, não ELF malformado.
+    """
+    if elf.num_sections() > 0:
+        symbols = (
+            symbol
+            for section in elf.iter_sections()
+            if isinstance(section, SymbolTableSection)
+            for symbol in section.iter_symbols()
+        )
+    elif dynamic.get_table_offset("DT_SYMTAB")[1] is not None:
+        symbols = dynamic.iter_symbols()
+    else:
+        return False
+    return any(
+        symbol["st_shndx"] == "SHN_UNDEF" and symbol.name in _CANARY_SYMBOLS
+        for symbol in symbols
+    )
+
+
 def _elf_info(elf: ELFFile) -> ElfInfo:
     """Calcula as proteções enquanto o descritor do ELF permanece aberto."""
     segments = list(elf.iter_segments())
@@ -118,10 +143,7 @@ def _elf_info(elf: ELFFile) -> ElfInfo:
             if bind_now(tags) or elf.get_section_by_name(".got.plt") is None
             else RELRO_PARTIAL
         )
-    canary = dynamic is not None and any(
-        symbol["st_shndx"] == "SHN_UNDEF" and symbol.name in _CANARY_SYMBOLS
-        for symbol in dynamic.iter_symbols()
-    )
+    canary = dynamic is not None and _has_canary(elf, dynamic)
     return ElfInfo(
         kind,
         elf["e_machine"],
