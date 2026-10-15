@@ -23,6 +23,7 @@ from pipeline.feature_extraction import (
     extract_features_from_path,
     load_pipeline_config,
 )
+from src.features.doc2vec import build_corpus, save_doc2vec, train_doc2vec
 from src.features.filesystem import UNPACKED_COLUMNS
 from src.features.unpack import (
     STATUS_ENCRYPTED,
@@ -35,6 +36,10 @@ from src.features.unpack import (
     STATUS_TIME,
     Toolchain,
     UnpackResult,
+)
+
+VERSIONED_CONFIG = (
+    Path(__file__).resolve().parents[1] / "configs" / "feature_extraction.yaml"
 )
 
 
@@ -493,3 +498,65 @@ def test_bounded_peak_for_many_unique_strings(
     tracemalloc.stop()
     assert result.metadata["truncated"] is True
     assert peak < 16 << 20
+
+
+@pytest.mark.parametrize("config_path", [None, VERSIONED_CONFIG])
+def test_doc2vec_disabled_by_default_skips_model_and_columns(
+    tmp_path: Path,
+    fake_toolchain: Toolchain,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    config_path: Path | None,
+) -> None:
+    """Desligado, não carrega modelo, não avisa e não emite ``doc2vec_*``."""
+    import pipeline.feature_extraction as pipeline
+
+    def _fail_load(path: str) -> None:
+        raise AssertionError(f"modelo carregado com Doc2Vec desligado: {path}")
+
+    monkeypatch.setattr(pipeline, "load_doc2vec", _fail_load)
+    path = tmp_path / "firmware.bin"
+    path.write_bytes(b"firmware-data\x00")
+    with caplog.at_level(logging.INFO, logger="pipeline.feature_extraction"):
+        (result,) = extract_features_batch(
+            [path], load_pipeline_config(config_path, {}), fake_toolchain, max_workers=1
+        )
+    assert not any(key.startswith("doc2vec_") for key in result.features)
+    assert result.metadata["doc2vec_used"] is False
+    assert "Doc2Vec model not found" not in caplog.text
+
+
+@pytest.mark.parametrize("model_present", [False, True])
+def test_doc2vec_enabled_restores_columns(
+    tmp_path: Path,
+    fake_toolchain: Toolchain,
+    caplog: pytest.LogCaptureFixture,
+    model_present: bool,
+) -> None:
+    """Ligado, volta a emitir ``vector_size`` colunas, com ou sem modelo salvo."""
+    model_file = tmp_path / "doc2vec.model"
+    config = load_pipeline_config(
+        None,
+        {
+            "doc2vec.enabled": "true",
+            "doc2vec.vector_size": "8",
+            "doc2vec.min_count": "1",
+            "doc2vec.epochs": "5",
+            "doc2vec.model_path": str(model_file),
+        },
+    )
+    if model_present:
+        corpus = build_corpus([("sha256:one", ["busybox", "telnetd"])])
+        save_doc2vec(train_doc2vec(corpus, config.doc2vec), str(model_file))
+    path = tmp_path / "firmware.bin"
+    path.write_bytes(b"firmware-data\x00")
+    with caplog.at_level(logging.INFO, logger="pipeline.feature_extraction"):
+        (result,) = extract_features_batch(
+            [path], config, fake_toolchain, max_workers=1
+        )
+    columns = {key for key in result.features if key.startswith("doc2vec_")}
+    assert columns == {f"doc2vec_{index}" for index in range(8)}
+    assert result.metadata["doc2vec_used"] is model_present
+    if not model_present:
+        assert all(result.features[column] == 0.0 for column in columns)
+        assert "Doc2Vec model not found" in caplog.text

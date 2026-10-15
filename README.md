@@ -39,8 +39,11 @@ Treinar Doc2Vec (treino separado):
 Treinar Doc2Vec via CLI instalada:
 - `uv run train-doc2vec --config configs/feature_extraction.yaml --input dataset/raw/`
 
-Extrair features com embeddings:
+Extrair features (Doc2Vec desligado por padrão, sem colunas `doc2vec_*`):
 - `uv run python scripts/extract_features.py --config configs/feature_extraction.yaml --input dataset/raw/ --output dataset/processed/features.parquet`
+
+Extrair features com embeddings (requer `models/doc2vec.model`):
+- `uv run python scripts/extract_features.py --config configs/feature_extraction.yaml --input dataset/raw/ --output dataset/processed/features.parquet --override doc2vec.enabled=true`
 
 Extrair features via CLI instalada:
 - `uv run extract-features --config configs/feature_extraction.yaml --input dataset/raw/ --output dataset/processed/features.parquet`

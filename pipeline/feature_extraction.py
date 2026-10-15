@@ -231,8 +231,26 @@ def _load_unpack(raw: Any, path: Path | None) -> UnpackLimits:
     )
 
 
-def _load_feature(raw: dict[str, Any], doc: dict[str, Any]) -> FeatureConfig:
-    """Carrega os limites existentes de documento e Doc2Vec."""
+def _load_enabled(doc: dict[str, Any], path: Path | None) -> bool:
+    """Valida ``doc2vec.enabled`` e retorna falso quando a chave está ausente.
+
+    Aceita bool ou as strings ``true``/``false`` (vindas de ``--override``);
+    qualquer outro valor levanta ValueError com o caminho da configuração.
+    """
+    value = doc.get("enabled", False)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str) and value.strip().lower() in ("true", "false"):
+        return value.strip().lower() == "true"
+    raise ValueError(
+        f"doc2vec.enabled inválido ({value!r}) em {path}: DEVE ser true ou false"
+    )
+
+
+def _load_feature(
+    raw: dict[str, Any], doc: dict[str, Any], path: Path | None
+) -> FeatureConfig:
+    """Carrega os limites de documento, a chave e os parâmetros do Doc2Vec."""
     defaults = FeatureConfig()
     doc_defaults = defaults.doc2vec
     return FeatureConfig(
@@ -240,6 +258,7 @@ def _load_feature(raw: dict[str, Any], doc: dict[str, Any]) -> FeatureConfig:
         max_string_len=int(raw.get("max_single_string_len", defaults.max_string_len)),
         max_strings=int(raw.get("max_strings", defaults.max_strings)),
         max_doc_chars=int(raw.get("max_doc_chars", defaults.max_doc_chars)),
+        doc2vec_enabled=_load_enabled(doc, path),
         doc2vec=Doc2VecConfig(
             vector_size=int(doc.get("vector_size", doc_defaults.vector_size)),
             window=int(doc.get("window", doc_defaults.window)),
@@ -265,7 +284,7 @@ def load_pipeline_config(
         raw = yaml.safe_load(path.read_text()) or {}
     merged = apply_overrides(raw, overrides)
     doc_raw = merged.get("doc2vec", {})
-    feature = _load_feature(merged.get("feature", {}), doc_raw)
+    feature = _load_feature(merged.get("feature", {}), doc_raw, path)
     model_path = doc_raw.get("model_path")
     return PipelineConfig(
         max_bytes=cast(
@@ -279,8 +298,18 @@ def load_pipeline_config(
     )
 
 
-def load_doc2vec_model(path: Path | None) -> Doc2Vec | None:
-    """Carrega modelo opcional e avisa se não estiver disponível."""
+def load_doc2vec_model(config: PipelineConfig) -> Doc2Vec | None:
+    """Carrega o modelo só com o Doc2Vec ligado.
+
+    Ligado e sem arquivo, avisa e segue com embeddings de zeros.
+    """
+    if not config.feature.doc2vec_enabled:
+        LOGGER.info(
+            "Doc2Vec desligado (doc2vec.enabled=false): "
+            "sem modelo e sem colunas doc2vec_*"
+        )
+        return None
+    path = config.doc2vec_model_path
     if path is None or not path.exists():
         LOGGER.warning("Doc2Vec model not found at %s; embeddings will be zero", path)
         return None
@@ -667,7 +696,7 @@ def _init_worker(
     global _WORKER_CONFIG, _WORKER_MODEL, _WORKER_TOOLCHAIN, _WORKER_ROOT
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     _WORKER_CONFIG, _WORKER_TOOLCHAIN, _WORKER_ROOT = config, toolchain, dataset_root
-    _WORKER_MODEL = load_doc2vec_model(config.doc2vec_model_path)
+    _WORKER_MODEL = load_doc2vec_model(config)
 
 
 def _process_path_in_worker(path: Path) -> PipelineResult:
@@ -714,7 +743,7 @@ def extract_features_batch(
         ),
     )
     if workers == 1:
-        model = load_doc2vec_model(config.doc2vec_model_path)
+        model = load_doc2vec_model(config)
         results = [
             _process_path(path, config, model, toolchain, dataset_root)
             for path in path_list
