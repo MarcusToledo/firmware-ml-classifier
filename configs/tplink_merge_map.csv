@@ -1,0 +1,27 @@
+old_path,new_path,sha256
+tplink/archer_c20i/ArcherC20iv1_0.9.1_1.4_up_boot(140709)_2014-07-09_10.08.55.bin,tp_link/archer-c20i/ArcherC20iv1_0.9.1_1.4_up_boot(140709)_2014-07-09_10.08.55.bin,851834d9c8f9923b45f523e151d256e2d64ba9243d4b51d672ff3697a702adda
+tplink/re200/re200v1_eu_3_14_2_up_boot(140819).bin,tp_link/re200/re200v1_eu_3_14_2_up_boot(140819).bin,92cbadaac4e561a592328d840b2e4ff96f207d64ff002773ca59227d05aa087b
+tplink/td_8811/TD-8811A 5.0 6.0-100809-Rel.53907n--up,tp_link/td-8811/TD-8811A 5.0 6.0-100809-Rel.53907n--up,dfe1df4a045c045313b2ad6e1a1976ecaaf2aea3510fe5df875a6e0eec384f17
+tplink/td_8816/ras,tp_link/td-8816/ras,df57f51a4b83c6f2c03a4bb2373b9578376b3c7b0b8f30e3804ba8998614e42f
+tplink/td_w150kit/ras,tp_link/td-w150kit/ras,756b2fcdbc8e87e7f45fa9a9772f4e4db1f42cda514a8a45ffad29c5ee910bac
+tplink/td_w8901g/TD-8901G_en_3_0_1_up(100901)_ras,tp_link/td-w8901g/TD-8901G_en_3_0_1_up(100901)_ras,80aa812465585c538d3a8b7edee3e411a0123962dd18af4b0a4d39e813fb4cab
+tplink/td_w8950n/TD-W8950Nv1_un_1_0_2_140106R38442.bin,tp_link/td-w8950n/TD-W8950Nv1_un_1_0_2_140106R38442.bin,7f029d19d61fa61b33b5721127e4777cb388ffbd7be1330e8f58f233cf773ab1
+tplink/td_w8970b/TD-W8970Bv1_0.6.0_2.7_up_boot(140624)_2014-06-24_17.37.09.bin,tp_link/td-w8970b/TD-W8970Bv1_0.6.0_2.7_up_boot(140624)_2014-06-24_17.37.09.bin,07042ac2097607600d72484c1e66d9a773836f4d2def18d386750e32e8082d73
+tplink/tl_er6020/TL-ER6020v1_en_1.0.3_[20140604-rel64661]_up.bin,tp_link/tl-er6020/TL-ER6020v1_en_1.0.3_[20140604-rel64661]_up.bin,7512be2ef023718c5d8aeec5d39a00d2c694281b9998b8f5bbd9e0cfa47cfb24
+tplink/tl_sg108e/TL-SG108Ev1_en_1.1.1_[20140922-rel36060]_up.bin,tp_link/tl-sg108e/TL-SG108Ev1_en_1.1.1_[20140922-rel36060]_up.bin,f23dac833c992c0e2be2a47c213723ed947deeec19401f2d435be05784133fe9
+tplink/tl_sg2008/TL-SG2008v1_en_1.0.0_[20140626-rel38150]_up.bin,tp_link/tl-sg2008/TL-SG2008v1_en_1.0.0_[20140626-rel38150]_up.bin,1e62cdcd5ac7acd0d276861a92a16ebd440c584c3dfd5b63731a3817d6682b13
+tplink/tl_sg2109web/sysSG2109WEB.bin,tp_link/tl-sg2109web/sysSG2109WEB.bin,0b7a441e3f97c3814ef2cda9f770a69fd13e0e142b0cb0bb459baf8a0826eccd
+tplink/tl_sg2210p/TL-SG2210Pv1_en_1.0.0_[20140702-rel61825]_up.bin,tp_link/tl-sg2210p/TL-SG2210Pv1_en_1.0.0_[20140702-rel61825]_up.bin,b669ec51875b52fac40e4ced1949c2e7965a4990e9be0cf52e78cdbf4c681598
+tplink/tl_sg2424p/TL-SG2424Pv1_en_1.0.6_[20140702-rel38472]_up.bin,tp_link/tl-sg2424p/TL-SG2424Pv1_en_1.0.6_[20140702-rel38472]_up.bin,c600f52712a00c26a4d26bf5cb4c5fda9bb4a254f236f4243b8435cbbe668d0c
+tplink/tl_sg3210/TL-SG3210v2_en_1.9.8_[20140818-rel66877]_up.bin,tp_link/tl-sg3210/TL-SG3210v2_en_1.9.8_[20140818-rel66877]_up.bin,cfbab604538b6d0da39e77a6f98d84e48c310570b89924a892e9d115771e876e
+tplink/tl_sg5412f/TL-SG5412Fv1_en_1.0.4_[20140430-rel40858]_up.bin,tp_link/tl-sg5412f/TL-SG5412Fv1_en_1.0.4_[20140430-rel40858]_up.bin,247db3f58c2e99c048c83b99175ce50aa1a001eaf24fb041189d1b812b89235a
+tplink/tl_sl2218/TL-SL2218v1_en_1.0.1_[20131216-rel54383]_up.bin,tp_link/tl-sl2218/TL-SL2218v1_en_1.0.1_[20131216-rel54383]_up.bin,5000ca8d849c67ef98fe54b52cb50e377479bd76e2d26fcdb235f6e45ccbaf4f
+tplink/tl_sl2218web/sysSL2218WEB.bin,tp_link/tl-sl2218web/sysSL2218WEB.bin,e178579aa171652c4d92fb249557fb6d9c418247bd488b6216e779bd8767a823
+tplink/tl_sl2428web/sysSL2428WEB.bin,tp_link/tl-sl2428web/sysSL2428WEB.bin,2d9afbdd360b8356b5614a7138e2a26e59d48835227bff3bdd08a242585e9c56
+tplink/tl_wa5110g/wa5110gv1-en-up.bin,tp_link/tl-wa5110g/wa5110gv1-en-up.bin,78752f5914471504f7ef1c9a632f4c051c5ed2e4d9c7f5cf188f34da81143de1
+tplink/tl_wa890ea/wa890eav1_en_3_15_1_up_boot(130415).bin,tp_link/tl-wa890ea/wa890eav1_en_3_15_1_up_boot(130415).bin,89c2fa8981e434d876883c637d255272db0cd67ba79d686758c3cf997b043d1d
+tplink/tl_wa890ea/wa890eav1_en_3_15_1_up_boot(130819).bin,tp_link/tl-wa890ea/wa890eav1_en_3_15_1_up_boot(130819).bin,c6dfd4fac954b0033ba16aea721962a6f5eee21cdf74b468dd0b4441ea977fce
+tplink/tl_wpa2220/wpa4220_13channel_v1.2.3_20130402_update.bin,tp_link/tl-wpa2220/wpa4220_13channel_v1.2.3_20130402_update.bin,18221906d429f7104edd4dd78553027d2175ad68fa2133ecd6d3066c7d8b316c
+tplink/tl_wpa4220/wpa4220_update_13channel_1.2.4_20130530.bin,tp_link/tl-wpa4220/wpa4220_update_13channel_1.2.4_20130530.bin,2b2cf167c63f8bd476d649978c4725de0a15ce9736e12b8491925c402274213c
+tplink/tl_wpa4220kit/WPA4220(EU)_update_1.2.7_20131211.bin,tp_link/tl-wpa4220kit/WPA4220(EU)_update_1.2.7_20131211.bin,246160f866208e9fe241fdd274cec17f9c0f14d39d9c8d809bcd71a152d4370d
+tplink/tl_wr702n/wr702nv1-en-up.bin,tp_link/tl-wr702n/wr702nv1-en-up.bin,d14f05dff8762236ad0a84816d7ffd128f9c12786c609add924772ba7127ada1
