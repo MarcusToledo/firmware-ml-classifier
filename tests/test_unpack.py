@@ -236,6 +236,31 @@ def test_files_vanishing_during_extraction_do_not_fail(tmp_path: Path) -> None:
             assert result.status == STATUS_OK
 
 
+
+def test_directory_replaced_by_file_during_inventory_is_tolerated(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Conta filesystem válido apesar de diretório trocado durante a varredura."""
+    out = tmp_path / "out"
+    volatile = out / "_firmware.bin.extracted" / "wifi"
+    volatile.mkdir(parents=True)
+    root = volatile.parent / "squashfs-root"
+    root.mkdir()
+    (root / "config").write_text("valid")
+    original_scan = unpack_module._scan_entries
+
+    def replace_before_scan(directory: Path, strict: bool) -> list[os.DirEntry[str]]:
+        """Troca a entrada enfileirada pelo monitor antes do scandir."""
+        if directory == volatile and not strict:
+            directory.rmdir()
+            directory.write_text("regular")
+        return original_scan(directory, strict)
+
+    monkeypatch.setattr(unpack_module, "_scan_entries", replace_before_scan)
+    assert unpack_module._inventory(out, strict=False) == (5, 1, True, True)
+    assert unpack_module._inventory(out, strict=True) == (12, 2, True, True)
+
+
 def test_orphans_are_killed_and_body_exception_still_cleans(
     tmp_path: Path, sandboxes: list[Path]
 ) -> None:

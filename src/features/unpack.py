@@ -171,16 +171,16 @@ def resolve_toolchain() -> Toolchain:
 
 
 def _scan_entries(directory: Path, strict: bool) -> list[os.DirEntry[str]]:
-    """Lista um diretório; fora do modo estrito tolera entrada sumida ou fechada.
+    """Lista um diretório; tolera caminhos alterados só durante a extração.
 
-    Durante a extração o binwalk cria, apaga e renomeia arquivos, então
-    ``FileNotFoundError`` e ``PermissionError`` só são erro depois que o
-    processo terminou e as permissões foram normalizadas.
+    Enquanto o binwalk opera, uma entrada enfileirada pode sumir, perder
+    permissão ou ser substituída por arquivo antes de ser percorrida.
+    Depois que o processo termina, essas falhas são propagadas.
     """
     try:
         with os.scandir(directory) as entries:
             return list(entries)
-    except (FileNotFoundError, PermissionError):
+    except (FileNotFoundError, NotADirectoryError, PermissionError):
         if strict:
             raise
         return []
@@ -208,7 +208,7 @@ def _inventory(root: Path, strict: bool) -> tuple[int, int, bool, bool]:
         for entry in _scan_entries(directory, strict):
             try:
                 info = entry.stat(follow_symlinks=False)
-            except (FileNotFoundError, PermissionError):
+            except (FileNotFoundError, NotADirectoryError, PermissionError):
                 if strict:
                     raise
                 continue
