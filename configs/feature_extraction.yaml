@@ -9,6 +9,8 @@ feature:
   max_strings: 2000
   max_doc_chars: 200000
 doc2vec:
+  # Fora da entrega mínima (T06 Proposto); ligar só com --override doc2vec.enabled=true
+  enabled: false
   model_path: "models/doc2vec.model"
   vector_size: 100
   window: 5

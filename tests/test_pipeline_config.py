@@ -1,10 +1,16 @@
 """Confere limites explícitos da configuração de extração."""
 
+from __future__ import annotations
+
 from pathlib import Path
 
 import pytest
 
 from pipeline.feature_extraction import DEFAULT_MAX_BYTES, load_pipeline_config
+
+VERSIONED_CONFIG = (
+    Path(__file__).resolve().parents[1] / "configs" / "feature_extraction.yaml"
+)
 
 
 def test_config_without_yaml_uses_bounded_defaults() -> None:
@@ -73,3 +79,24 @@ def test_null_unpack_section_is_rejected(tmp_path: Path) -> None:
     path.write_text("unpack: null\n")
     with pytest.raises(ValueError, match="unpack inválido"):
         load_pipeline_config(path, {})
+
+
+@pytest.mark.parametrize("path", [None, VERSIONED_CONFIG])
+def test_doc2vec_disabled_by_default(path: Path | None) -> None:
+    """Sem a chave explícita, o Doc2Vec fica desligado (001/FR-018)."""
+    config = load_pipeline_config(path, {})
+    assert config.feature.doc2vec_enabled is False
+
+
+@pytest.mark.parametrize("value", ["true", "True", True])
+def test_doc2vec_enabled_override(value: object) -> None:
+    """Liga o Doc2Vec com bool ou string vinda de ``--override``."""
+    config = load_pipeline_config(None, {"doc2vec.enabled": value})
+    assert config.feature.doc2vec_enabled is True
+
+
+@pytest.mark.parametrize("value", ["sim", "1", 1, None])
+def test_invalid_doc2vec_enabled_rejected(value: object) -> None:
+    """Recusa valores ambíguos em vez de decidir silenciosamente."""
+    with pytest.raises(ValueError, match="doc2vec.enabled inválido"):
+        load_pipeline_config(None, {"doc2vec.enabled": value})

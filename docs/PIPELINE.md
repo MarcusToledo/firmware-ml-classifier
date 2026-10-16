@@ -357,8 +357,10 @@ sem versão (`version_source` nulo).
 
 ### Pendências conhecidas
 
-- `models/doc2vec.model` não existe ainda. As 100 colunas `doc2vec_*`
-  estão zeradas até rodar `train-doc2vec`.
+- Doc2Vec desligado por padrão (`doc2vec.enabled: false`): a tabela não
+  tem colunas `doc2vec_*`. Com `--override doc2vec.enabled=true` voltam
+  as `vector_size` colunas, zeradas enquanto `models/doc2vec.model` não
+  existir (rodar `train-doc2vec`).
 - 43 pares `tp_link/*` no cache foram buscados antes da correção do
   alias de vendor, precisam de `fetch_cves.py --force`.
 - Detector `hardcoded_passwords`: 98,6% dos achados são token avulso
