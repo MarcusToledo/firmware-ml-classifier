@@ -1,21 +1,15 @@
-"""Move flat firmware files into vendor/model/ subdirectories.
+"""Organiza firmwares soltos e unifica modelos TP-Link quando solicitado.
 
-The pipeline expects dataset/raw/{vendor}/{model}/{firmware_file}.
-Files placed directly at dataset/raw/{vendor}/{file} break automatic
-metadata inference (infer_brand_model_label_from_path).
-
-By default runs in --dry-run mode and only prints what it would do.
-Pass --execute to actually move files.
-
-Usage:
-    python3 scripts/reorganize_dataset.py --dry-run      (default, safe)
-    python3 scripts/reorganize_dataset.py --execute
-    python3 scripts/reorganize_dataset.py --execute --vendor asus
+O modo de mesclagem planeja e verifica todos os conflitos antes de mover.
+Sem --execute, nenhum arquivo ou diretório é alterado.
 """
 
 from __future__ import annotations
 
 import argparse
+import csv
+import hashlib
+import logging
 import re
 import sys
 from collections.abc import Callable
@@ -23,6 +17,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RAW = ROOT / "dataset" / "raw"
+LOGGER = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # ASUS model extraction
@@ -196,57 +191,148 @@ def execute_moves(moves: list[tuple[Path, Path]], dry_run: bool) -> None:
             src.rename(dest)
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Reorganise flat firmware files into vendor/model/ dirs."
-    )
-    parser.add_argument(
-        "--execute", action="store_true", help="Actually move files (default: dry-run)"
-    )
-    parser.add_argument(
-        "--vendor", nargs="+", help="Limit to specific vendors (default: all)"
-    )
-    args = parser.parse_args()
+def plan_vendor_merge(raw: Path) -> tuple[list[tuple[Path, Path]], list[Path]]:
+    """Lista firmwares e diretórios vazios sem alterar a árvore de origem."""
+    origin = raw / "tplink"
+    if not origin.is_dir():
+        raise FileNotFoundError(f"Fabricante de origem ausente: {origin}")
+    moves: list[tuple[Path, Path]] = []
+    empty_dirs: list[Path] = []
+    for model_dir in sorted(origin.iterdir()):
+        if not model_dir.is_dir() or model_dir.is_symlink():
+            raise ValueError(f"Modelo inválido em {origin}: {model_dir}")
+        files = sorted(model_dir.iterdir())
+        if any(not path.is_file() or path.is_symlink() for path in files):
+            raise ValueError(
+                f"Conteúdo inesperado no modelo {model_dir.name}: {model_dir}"
+            )
+        if not files:
+            empty_dirs.append(model_dir)
+        for source in files:
+            target = raw / "tp_link" / model_dir.name.replace("_", "-") / source.name
+            moves.append((source, target))
+    return moves, empty_dirs
 
-    dry_run = not args.execute
-    vendors = args.vendor or list(_EXTRACTORS.keys())
 
-    if dry_run:
-        print("=== reorganize_dataset.py [DRY RUN — pass --execute to apply] ===")
-    else:
-        print("=== reorganize_dataset.py [EXECUTE] ===")
-    print()
+def validate_vendor_merge(moves: list[tuple[Path, Path]]) -> None:
+    """Recusa modelos ocupados ou duas origens para o mesmo destino."""
+    targets: dict[Path, str] = {}
+    for source, target in moves:
+        previous = targets.setdefault(target.parent, source.parent.name)
+        if previous != source.parent.name:
+            raise ValueError(
+                f"Modelo {source.parent.name}: {previous} também aponta "
+                f"para {target.parent}"
+            )
+        if target.parent.is_dir():
+            if any(path.is_file() for path in target.parent.rglob("*")):
+                raise ValueError(
+                    f"Modelo {source.parent.name}: destino {target.parent} "
+                    "já tem arquivo"
+                )
+        elif target.parent.exists():
+            raise ValueError(
+                f"Modelo {source.parent.name}: destino inválido {target.parent}"
+            )
 
+
+def sha256_file(path: Path) -> str:
+    """Calcula SHA256 em blocos sem carregar o firmware inteiro na memória."""
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def run_vendor_merge(raw: Path, root: Path, execute: bool) -> int:
+    """Valida o plano completo e só então move e registra os firmwares."""
+    moves, empty_dirs = plan_vendor_merge(raw)
+    print(f"Summary: {len(moves)} files planned, {len(empty_dirs)} empty directories")
+    try:
+        validate_vendor_merge(moves)
+    except ValueError as exc:
+        LOGGER.error("%s", exc)
+        return 1
+    for source, target in moves:
+        print(f"  {'MOVE' if execute else 'WOULD MOVE'}  "
+              f"{source.relative_to(raw)}  →  {target.relative_to(raw)}")
+    if not execute:
+        print("Re-run with --execute to apply.")
+        return 0
+    rows = [
+        (source.relative_to(raw).as_posix(), target.relative_to(raw).as_posix(),
+         sha256_file(source)) for source, target in moves
+    ]
+    for source, target in moves:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        source.rename(target)
+    for model_dir in sorted((raw / "tplink").iterdir()):
+        model_dir.rmdir()
+    (raw / "tplink").rmdir()
+    map_path = root / "configs" / "tplink_merge_map.csv"
+    map_path.parent.mkdir(parents=True, exist_ok=True)
+    with map_path.open("w", newline="", encoding="utf-8") as stream:
+        writer = csv.writer(stream)
+        writer.writerow(("old_path", "new_path", "sha256"))
+        writer.writerows(rows)
+    LOGGER.info("Mesclados %d arquivos, removidos %d modelos vazios; mapa %s",
+                len(moves), len(empty_dirs), map_path)
+    return 0
+
+
+def run_flat_reorganization(vendors: list[str], dry_run: bool) -> int:
+    """Executa o modo legado de organização dos firmwares soltos."""
+    print("=== reorganize_dataset.py "
+          f"[{'DRY RUN — pass --execute to apply' if dry_run else 'EXECUTE'}] ===\n")
     total_moves = 0
     total_skips = 0
-
     for vendor in vendors:
         flat = collect_flat_files(vendor)
         if not flat:
             print(f"[{vendor}] No flat files found, skipping.")
             continue
-
         moves, skips = plan_moves(vendor)
         total_moves += len(moves)
         total_skips += len(skips)
-
-        print(
-            f"[{vendor}] {len(flat)} flat files → "
-            f"{len(moves) - len(skips)} with model, {len(skips)} → _non_router"
-        )
+        print(f"[{vendor}] {len(flat)} flat files → "
+              f"{len(moves) - len(skips)} with model, {len(skips)} → _non_router")
         execute_moves(moves, dry_run)
         print()
-
-    print(
-        f"Summary: {total_moves} files planned "
-        f"({total_moves - total_skips} to model dirs, {total_skips} to _non_router)"
-    )
+    print(f"Summary: {total_moves} files planned "
+          f"({total_moves - total_skips} to model dirs, {total_skips} to _non_router)")
     if dry_run:
         print("Re-run with --execute to apply.")
     else:
         print("Done. Run validate_dataset.py to confirm dataset is clean.")
-
     return 0
+
+
+def main() -> int:
+    """Interpreta os argumentos e executa o modo de organização selecionado."""
+    parser = argparse.ArgumentParser(
+        description="Reorganise flat firmware files or merge TP-Link vendors."
+    )
+    parser.add_argument("--execute", action="store_true",
+                        help="Actually move files (default: dry-run)")
+    parser.add_argument("--vendor", nargs="+",
+                        help="Limit flat-file reorganisation to specific vendors")
+    parser.add_argument("--merge-vendor", metavar="SOURCE:DESTINATION",
+                        help="Merge tplink:tp_link models and write a SHA256 map")
+    parser.add_argument(
+        "--raw", type=Path, default=RAW,
+        help="Dataset raw a mesclar (padrão: dataset/raw do projeto)",
+    )
+    args = parser.parse_args()
+    if args.merge_vendor:
+        if args.merge_vendor != "tplink:tp_link" or args.vendor:
+            parser.error("--merge-vendor aceita apenas tplink:tp_link, sem --vendor")
+        try:
+            return run_vendor_merge(args.raw, ROOT, args.execute)
+        except (OSError, ValueError) as exc:
+            LOGGER.error("Falha na mesclagem tplink:tp_link: %s", exc)
+            return 1
+    return run_flat_reorganization(args.vendor or list(_EXTRACTORS), not args.execute)
 
 
 if __name__ == "__main__":
