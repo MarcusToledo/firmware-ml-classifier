@@ -32,49 +32,12 @@ from src.features.unpack import (  # noqa: E402
     ToolchainError,
     resolve_toolchain,
 )
+from src.io_utils import gather_firmware_paths  # noqa: E402
 
-EXCLUDED_EXTENSIONS = {
-    ".html",
-    ".pdf",
-    ".conf",
-    ".txt",
-    ".md",
-    ".csv",
-    ".json",
-    ".zip",
-    ".exe",
-    ".msi",
-    ".mib",
-    ".xml",
-}
 OUTPUT_FORMATS = {"parquet", "csv"}
 LOGGER = logging.getLogger(__name__)
 _EXIT_INCOMPLETE = 1
 _EXIT_USAGE = 2
-
-
-def gather_paths(input_path: Path) -> list[Path]:
-    """Coleta firmwares, ignorando extensões não binárias e arquivos ocultos."""
-    if input_path.is_dir():
-        paths = [path for path in input_path.rglob("*") if path.is_file()]
-    elif input_path.is_file() and input_path.suffix == ".txt":
-        paths = [
-            Path(line.strip())
-            for line in input_path.read_text().splitlines()
-            if line.strip()
-        ]
-    elif input_path.is_file():
-        paths = [input_path]
-    else:
-        return []
-    allowed = [
-        path
-        for path in paths
-        if path.suffix.lower() not in EXCLUDED_EXTENSIONS
-        and not path.name.startswith(".")
-    ]
-    LOGGER.info("Filtered %d files to %d firmware candidates", len(paths), len(allowed))
-    return allowed
 
 
 def _parse_args() -> argparse.Namespace:
@@ -256,7 +219,7 @@ def main() -> None:
     args = _parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     config = _load_config(args)
-    paths = gather_paths(Path(args.input))
+    paths = gather_firmware_paths(Path(args.input))
     dataset_root = _resolve_dataset_root(args)
     _check_layout(paths, dataset_root, args.label_from_path)
     toolchain = _resolve_toolchain()

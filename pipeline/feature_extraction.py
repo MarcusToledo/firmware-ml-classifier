@@ -19,6 +19,7 @@ import yaml
 from gensim.models import Doc2Vec
 
 from pipeline.firmware_version import infer_version_from_filename
+from src.cli_utils import apply_overrides
 from src.evidence.binwalk_findings import (
     count_crypto_signatures,
     find_crypto_signatures,
@@ -158,20 +159,6 @@ class PipelineResult:
     features: dict[str, FeatureValue]
     metadata: dict[str, Any]
     findings: list[SecurityFinding]
-
-
-def apply_overrides(
-    config: dict[str, Any], overrides: dict[str, Any]
-) -> dict[str, Any]:
-    """Aplica overrides em caminhos pontuados da configuração."""
-    updated = dict(config)
-    for key, value in overrides.items():
-        cursor = updated
-        parts = key.split(".")
-        for part in parts[:-1]:
-            cursor = cursor.setdefault(part, {})
-        cursor[parts[-1]] = value
-    return updated
 
 
 def _positive(

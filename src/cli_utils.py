@@ -7,6 +7,20 @@ from typing import Any
 LOGGER = logging.getLogger(__name__)
 
 
+def apply_overrides(
+    config: dict[str, Any], overrides: dict[str, Any]
+) -> dict[str, Any]:
+    """Aplica overrides em caminhos pontuados da configuração."""
+    updated = dict(config)
+    for key, value in overrides.items():
+        cursor = updated
+        parts = key.split(".")
+        for part in parts[:-1]:
+            cursor = cursor.setdefault(part, {})
+        cursor[parts[-1]] = value
+    return updated
+
+
 def parse_overrides(values: list[str]) -> dict[str, Any]:
     """Converte lista de strings key=value em dicionario.
 
