@@ -1,0 +1,9 @@
+# 008/FR-001, FR-010. Caminhos relativos ao diretório de execução.
+features: dataset/processed/features_v2.parquet
+labels: dataset/processed/labels_v2.csv
+output_dir: dataset/processed
+# Lista fixa por domínio: filesystems e compressões de firmware embarcado
+# que o Binwalk reconhece; não vem da contagem do dataset (008/FR-010).
+one_hot:
+  fs_type: [squashfs, jffs2, cramfs, ubifs]
+  compression_type: [lzma, gzip, xz, lzo]
