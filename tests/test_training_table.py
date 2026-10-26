@@ -267,6 +267,26 @@ def test_coluna_obrigatoria_ausente_rejeitada(tmp_path: Path, field: str) -> Non
         build_training_table(config)
 
 
+@pytest.mark.parametrize(
+    "missing", ["features_v2.parquet", "labels_v2.csv", "labels_v2.meta.json"]
+)
+def test_entrada_ausente_cita_o_caminho(tmp_path: Path, missing: str) -> None:
+    rows = [feature_row(id_, f"brand/router/{id_}") for id_ in "abc"]
+    features, labels = write_inputs(tmp_path, rows, dict(zip("abc", TARGET_CLASSES)))
+    config = load_dataset_config(
+        write_config(tmp_path, features, labels, tmp_path / "out"), {}
+    )
+    (tmp_path / missing).unlink()
+    with pytest.raises(FileNotFoundError, match=missing):
+        build_training_table(config)
+    assert not (tmp_path / "out").exists()
+
+
+def test_config_ausente_falha(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError, match="dataset.yaml"):
+        load_dataset_config(tmp_path / "dataset.yaml", {})
+
+
 @pytest.mark.parametrize("field", ["cve_total", "cve_count_critical", "vendor"])
 def test_vazamento_na_tabela_de_features_e_erro(tmp_path: Path, field: str) -> None:
     with pytest.raises(ValueError, match=field):
