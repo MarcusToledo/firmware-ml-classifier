@@ -145,6 +145,10 @@ todas as colunas `meta_*` do parquet. Essa separação evita vazamento:
 `version_source` nulo tende a coincidir com `indeterminado` e antecipa o
 rótulo.
 
+`scripts/build_dataset.py` (`src/dataset/training_table.py`) faz essa junção e
+grava `training_table.parquet` só com features de conteúdo; as regras de
+exclusão, o one-hot e os metadados estão no `README.md`.
+
 - `pipeline/feature_extraction.py` preserva a versão inferida do path em
   `meta_version`, junto ao fabricante e modelo. `meta_version_source`
   registra `directory` quando a versão vem do sufixo do diretório do

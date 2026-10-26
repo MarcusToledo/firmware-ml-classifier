@@ -37,6 +37,8 @@ extract-features = "scripts.extract_features:main"
 train-doc2vec = "scripts.train_doc2vec:main"
 inspect-tokens = "scripts.inspect_tokens:main"
 generate-labels = "scripts.generate_labels:main"
+build-dataset = "scripts.build_dataset:main"
+validate-dataset = "scripts.validate_dataset:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

@@ -81,6 +81,23 @@ Gerar rótulos a partir do cache de CVEs:
 - O cache é consultado por fabricante/modelo; a versão do firmware é filtrada na
   rotulagem, e CVEs cuja aplicabilidade não se decide ficam indeterminadas.
 
+Montar a tabela de treino:
+- `uv run python scripts/build_dataset.py` (ou `uv run build-dataset`); lê
+  `configs/dataset.yaml` e aceita `--features`, `--labels`, `--output-dir` e
+  `--override chave=valor`.
+- Junta `features_v2.parquet` e só `security_level` de `labels_v2.csv` por
+  `firmware_id`; exclui IDs com falha de extração, firmware de terceiros ou rótulo
+  `indeterminado`; troca `fs_type`/`compression_type` por one-hot de lista fixa.
+  Interrompe sem gravar em estado transitório ou desconhecido, IDs sem par ou
+  `features_sha256` divergente do `labels_v2.meta.json`.
+- Grava em `dataset/processed/`: `training_table.parquet`,
+  `training_table_exclusions.csv` (motivos e fabricantes),
+  `training_table_provenance.jsonl` (aliases por ID) e `training_table.meta.json`
+  (SHA256 de entradas e saídas, colunas do vetor, contagens, commit).
+- `uv run python scripts/validate_dataset.py` (ou `uv run validate-dataset`) confere
+  esses artefatos (IDs únicos, vetor sem colunas proibidas ou de texto, classes,
+  hashes, colunas) e lista firmwares de `dataset/raw/` ausentes das features.
+
 Inspecionar tokens usados no Doc2Vec:
 - `uv run python scripts/inspect_tokens.py --config configs/feature_extraction.yaml --input dataset/raw/ --limit 50 --max-docs 20`
 
