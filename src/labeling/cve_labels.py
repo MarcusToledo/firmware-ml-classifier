@@ -26,6 +26,9 @@ LABEL_INDETERMINATE = "indeterminado"
 
 _NUMERIC_VERSION_RE = re.compile(r"^\d+(?:\.\d+)*$")
 _NETGEAR_PACKAGE_RE = re.compile(r"^(\d+(?:\.\d+){2,3})_\d+(?:\.\d+)*$")
+_BUILD_BOUND_RE = re.compile(
+    r"^(\d+(?:\.\d+)*)(?:[._-]?([A-Za-z]+)(\d+)?([A-Za-z]*))?$"
+)
 _BOUND_KEYS = (
     "versionStartIncluding",
     "versionStartExcluding",
@@ -346,12 +349,13 @@ def _match_bounds(
     match: dict[str, Any],
     target: tuple[str, str] | None,
 ) -> bool | None:
-    """Avalia os limites versionStart*/versionEnd* da CPE contra a versão do firmware.
+    """Avalia os limites CPE, sem decidir empate numérico com build no limite.
 
-    None quando um limite é ilegível ou não numérico, ou quando há limite e o
-    firmware não é numérico.
+    Um limite falso exclui a versão mesmo se outro empatar com build.
+    Firmware não numérico e limite ilegível permanecem indeterminados.
     """
     bounds: dict[str, tuple[int, ...]] = {}
+    uncertain_build = False
     vendor = target[0] if target is not None else None
     for key in _BOUND_KEYS:
         if key not in match:
@@ -359,10 +363,14 @@ def _match_bounds(
         parsed = _parse_bound(match[key], vendor, version)
         if parsed is None:
             return None
-        bounds[key] = parsed
-    if bounds and not _is_numeric_version(version_raw):
+        numeric, has_build = parsed
+        if has_build and versions_equal(version, numeric):
+            uncertain_build = True
+        else:
+            bounds[key] = numeric
+    if (bounds or uncertain_build) and not _is_numeric_version(version_raw):
         return None
-    return version_in_range(
+    if not version_in_range(
         version,
         VersionRange(
             start_including=bounds.get("versionStartIncluding"),
@@ -370,26 +378,28 @@ def _match_bounds(
             end_including=bounds.get("versionEndIncluding"),
             end_excluding=bounds.get("versionEndExcluding"),
         ),
-    )
+    ):
+        return False
+    return None if uncertain_build else True
 
 
 def _parse_bound(
     value: object, vendor: str | None, version: tuple[int, ...]
-) -> tuple[int, ...] | None:
-    """Converte um limite de versão da CPE em tupla numérica.
+) -> tuple[tuple[int, ...], bool] | None:
+    """Extrai a parte numérica e indica se há build no limite da CPE.
 
-    Retorna None quando o limite não é string numérica ou é pacote Netgear
-    que coincide com o firmware.
+    Retorna None para limite ilegível ou pacote Netgear na mesma versão.
     """
     if not isinstance(value, str):
         return None
     normalized, package_removed = _normalize_cpe_version(value, vendor)
-    parsed = parse_version(normalized)
-    if parsed is None or not _is_numeric_version(normalized.strip()):
+    matched = _BUILD_BOUND_RE.fullmatch(normalized.strip())
+    if matched is None:
         return None
+    parsed = tuple(int(segment) for segment in matched.group(1).split("."))
     if package_removed and versions_equal(version, parsed):
         return None
-    return parsed
+    return parsed, matched.group(2) is not None
 
 
 def _combine(results: list[bool | None], operator: str) -> bool | None:

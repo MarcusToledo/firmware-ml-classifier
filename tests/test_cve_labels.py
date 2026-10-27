@@ -362,6 +362,61 @@ def test_build_suffix_in_bound_stays_indeterminate() -> None:
     assert applicable_cves_for_version("1.04", entry) == ([], [cve])
 
 
+@pytest.mark.parametrize(
+    ("firmware", "key", "bound", "expected"),
+    [
+        ("1.07", "versionEndIncluding", "1.08b51", True),
+        ("2.11", "versionEndIncluding", "1.08b51", False),
+        ("1.07", "versionEndExcluding", "1.08b51", True),
+        ("2.11", "versionEndExcluding", "1.08b51", False),
+        ("3.18", "versionStartIncluding", "3.17B901C", True),
+        ("3.16", "versionStartIncluding", "3.17B901C", False),
+        ("3.18", "versionStartExcluding", "3.17B901C", True),
+        ("3.16", "versionStartExcluding", "3.17B901C", False),
+        ("1.08", "versionEndIncluding", "1.08b51", None),
+        ("1.08.0", "versionEndExcluding", "1.08b51", None),
+        ("3.17", "versionStartIncluding", "3.17B901C", None),
+        ("3.17.0", "versionStartExcluding", "3.17B901C", None),
+    ],
+)
+def test_build_bound_decides_only_when_numeric_parts_differ(
+    firmware: str, key: str, bound: str, expected: bool | None
+) -> None:
+    cve = _cve([{key: bound}])
+    entry = {"vendor": "d-link", "model": "dir-300", "cves": [cve]}
+    applicable, indeterminate = applicable_cves_for_version(firmware, entry)
+    assert (applicable, indeterminate) == (
+        [cve] if expected is True else [],
+        [cve] if expected is None else [],
+    )
+
+
+def test_build_bound_keeps_nonnumeric_firmware_indeterminate() -> None:
+    cve = _cve([{"versionEndIncluding": "1.08b51"}])
+    assert applicable_cves_for_version("2.11b02", {"cves": [cve]}) == (
+        [],
+        [cve],
+    )
+
+
+def test_false_bound_overrides_build_tie_in_same_range() -> None:
+    cve = _cve([{"versionStartIncluding": "1.08b51", "versionEndIncluding": "1.00B01"}])
+    assert applicable_cves_for_version("1.08", {"cves": [cve]}) == ([], [])
+
+
+def test_nvd_build_bound_can_exclude_cve_from_indeterminate() -> None:
+    cve = _cve(
+        [
+            {
+                "criteria": "cpe:2.3:o:dlink:dir-300_firmware:*:*:*:*:*:*:*:*",
+                "versionEndIncluding": "1.08b51",
+            }
+        ]
+    )
+    entry = {"vendor": "dlink", "model": "dir-300", "cves": [cve]}
+    assert applicable_cves_for_version("2.11", entry) == ([], [])
+
+
 def _and_config(*matches: dict) -> dict:
     return {"nodes": [{"operator": "AND", "cpeMatch": list(matches)}]}
 
