@@ -247,7 +247,7 @@ def test_load_folds_rejects_metadata_of_other_scheme_or_incomplete(
 def test_config_accepts_single_seed_override_and_rejects_multiple(
     tmp_path: Path,
 ) -> None:
-    """Converte override YAML e recusa várias sementes, folds ≠ 5 e YAML ilegível."""
+    """Converte overrides YAML; recusa várias sementes, folds < 2 e YAML ilegível."""
     config = tmp_path / "config.yaml"
     config.write_text(
         yaml.safe_dump(
@@ -259,8 +259,11 @@ def test_config_accepts_single_seed_override_and_rejects_multiple(
     )
     with pytest.raises(ValueError, match="partition.seeds"):
         load_partition_config(config, {}, None)
-    assert load_partition_config(config, {"partition.seeds": "[3]"}, None).seeds == (3,)
-    for override in ({"partition.n_splits": "2"}, {"partition.seeds": "[3"}):
+    accepted = load_partition_config(
+        config, {"partition.seeds": "[3]", "partition.n_splits": "3"}, None
+    )
+    assert (accepted.seeds, accepted.n_splits) == ((3,), 3)
+    for override in ({"partition.n_splits": "1"}, {"partition.seeds": "[3"}):
         with pytest.raises(ValueError, match="Configuração inválida"):
             load_partition_config(config, {"partition.seeds": "[0]", **override}, None)
 

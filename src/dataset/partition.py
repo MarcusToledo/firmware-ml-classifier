@@ -28,7 +28,6 @@ GROUP_PREFIX = "g:"
 ROLE_TRAIN = "train"
 ROLE_TEST = "test"
 FOLD_COLUMNS = ("repeat", "seed", "fold", "firmware_id", "role", "group")
-N_SPLITS_PRINCIPAL = 5
 
 
 @dataclass(frozen=True)
@@ -58,16 +57,13 @@ def _yaml_value(value: Any, path: Path, key: str) -> Any:
 
 
 def _validate_partition(partition: Any, path: Path) -> tuple[int, tuple[int, ...]]:
-    """Valida cinco folds e uma única semente; retorna (n_splits, seeds)."""
+    """Valida folds (inteiro ≥ 2) e uma única semente; retorna (n_splits, seeds)."""
     if not isinstance(partition, dict):
         raise ValueError(f"Configuração inválida em {path}: partition")
     splits = _yaml_value(partition.get("n_splits"), path, "partition.n_splits")
     seeds = _yaml_value(partition.get("seeds"), path, "partition.seeds")
-    if type(splits) is not int or splits != N_SPLITS_PRINCIPAL:
-        raise ValueError(
-            f"Configuração inválida em {path}: partition.n_splits: a divisão "
-            f"principal usa {N_SPLITS_PRINCIPAL} folds (009/FR-004)"
-        )
+    if type(splits) is not int or splits < 2:
+        raise ValueError(f"Configuração inválida em {path}: partition.n_splits")
     if (
         not isinstance(seeds, list)
         or len(seeds) != 1
@@ -84,7 +80,7 @@ def _validate_partition(partition: Any, path: Path) -> tuple[int, tuple[int, ...
 def load_partition_config(
     path: Path, overrides: dict[str, Any], processed_dir: Path | None
 ) -> PartitionConfig:
-    """Lê e valida a partição principal: cinco folds e uma semente.
+    """Lê e valida a partição: n_splits da configuração e uma semente.
 
     Levanta FileNotFoundError sem o arquivo e ValueError para YAML ilegível
     ou valores fora do contrato da 009.
