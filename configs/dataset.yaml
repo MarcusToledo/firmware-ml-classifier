@@ -7,3 +7,8 @@ output_dir: dataset/processed
 one_hot:
   fs_type: [squashfs, jffs2, cramfs, ubifs]
   compression_type: [lzma, gzip, xz, lzo]
+
+# 009/FR-004: cinco folds agrupados, uma semente fixa (proposta TCC2 v2).
+partition:
+  n_splits: 5
+  seeds: [0]
