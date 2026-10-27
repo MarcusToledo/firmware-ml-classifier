@@ -28,6 +28,7 @@ GROUP_PREFIX = "g:"
 ROLE_TRAIN = "train"
 ROLE_TEST = "test"
 FOLD_COLUMNS = ("repeat", "seed", "fold", "firmware_id", "role", "group")
+N_SPLITS_PRINCIPAL = 5
 
 
 @dataclass(frozen=True)
@@ -46,27 +47,27 @@ class PartitionConfig:
         }
 
 
-def load_partition_config(
-    path: Path, overrides: dict[str, Any], processed_dir: Path | None
-) -> PartitionConfig:
-    """Lê e valida cinco ou mais grupos com uma única semente configurada."""
-    if not path.is_file():
-        raise FileNotFoundError(f"--config não encontrado: {path}")
-    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-    if not isinstance(raw, dict):
-        raise ValueError(f"Configuração inválida em {path}: partition")
-    config = apply_overrides(raw, overrides)
-    partition = config.get("partition")
+def _yaml_value(value: Any, path: Path, key: str) -> Any:
+    """Converte valor textual de override em YAML ou falha citando a chave."""
+    if not isinstance(value, str):
+        return value
+    try:
+        return yaml.safe_load(value)
+    except yaml.YAMLError as exc:
+        raise ValueError(f"Configuração inválida em {path}: {key}") from exc
+
+
+def _validate_partition(partition: Any, path: Path) -> tuple[int, tuple[int, ...]]:
+    """Valida cinco folds e uma única semente; retorna (n_splits, seeds)."""
     if not isinstance(partition, dict):
         raise ValueError(f"Configuração inválida em {path}: partition")
-    splits = partition.get("n_splits")
-    seeds = partition.get("seeds")
-    if isinstance(splits, str):
-        splits = yaml.safe_load(splits)
-    if isinstance(seeds, str):
-        seeds = yaml.safe_load(seeds)
-    if type(splits) is not int or splits < 2:
-        raise ValueError(f"Configuração inválida em {path}: partition.n_splits")
+    splits = _yaml_value(partition.get("n_splits"), path, "partition.n_splits")
+    seeds = _yaml_value(partition.get("seeds"), path, "partition.seeds")
+    if type(splits) is not int or splits != N_SPLITS_PRINCIPAL:
+        raise ValueError(
+            f"Configuração inválida em {path}: partition.n_splits: a divisão "
+            f"principal usa {N_SPLITS_PRINCIPAL} folds (009/FR-004)"
+        )
     if (
         not isinstance(seeds, list)
         or len(seeds) != 1
@@ -77,10 +78,28 @@ def load_partition_config(
             f"Configuração inválida em {path}: partition.seeds: "
             "o núcleo usa uma semente (009/FR-011 é Proposto)"
         )
+    return splits, tuple(seeds)
+
+
+def load_partition_config(
+    path: Path, overrides: dict[str, Any], processed_dir: Path | None
+) -> PartitionConfig:
+    """Lê e valida a partição principal: cinco folds e uma semente.
+
+    Levanta FileNotFoundError sem o arquivo e ValueError para YAML ilegível
+    ou valores fora do contrato da 009.
+    """
+    if not path.is_file():
+        raise FileNotFoundError(f"--config não encontrado: {path}")
+    raw = _yaml_value(path.read_text(encoding="utf-8"), path, "YAML ilegível")
+    if not isinstance(raw, dict):
+        raise ValueError(f"Configuração inválida em {path}: partition")
+    config = apply_overrides(raw, overrides)
+    splits, seeds = _validate_partition(config.get("partition"), path)
     directory = processed_dir if processed_dir is not None else config.get("output_dir")
     if not isinstance(directory, (str, Path)) or not str(directory).strip():
         raise ValueError(f"Configuração inválida em {path}: output_dir")
-    return PartitionConfig(splits, tuple(seeds), Path(directory))
+    return PartitionConfig(splits, seeds, Path(directory))
 
 
 @dataclass(frozen=True)
@@ -93,6 +112,18 @@ class TrainingInputs:
     provenance_sha256: str
     table_path: Path
     provenance_path: Path
+
+
+def _registered(meta: Any, keys: tuple[str, ...], meta_path: Path) -> str:
+    """Retorna o SHA256 registrado no caminho de chaves ou falha citando o arquivo."""
+    value = meta
+    for key in keys:
+        if not isinstance(value, dict) or key not in value:
+            raise ValueError(f"metadado sem {'.'.join(keys)} em {meta_path}")
+        value = value[key]
+    if not isinstance(value, str):
+        raise ValueError(f"metadado sem {'.'.join(keys)} em {meta_path}")
+    return value
 
 
 def _checked_hash(path: Path, expected: str) -> str:
@@ -139,9 +170,12 @@ def load_training_inputs(processed_dir: Path) -> TrainingInputs:
         if not path.is_file():
             raise FileNotFoundError(f"artefato da 008 ausente: {path}")
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
-    table_hash = _checked_hash(table_path, meta["outputs"]["table"]["sha256"])
+    table_hash = _checked_hash(
+        table_path, _registered(meta, ("outputs", "table", "sha256"), meta_path)
+    )
     provenance_hash = _checked_hash(
-        provenance_path, meta["outputs"]["provenance"]["sha256"]
+        provenance_path,
+        _registered(meta, ("outputs", "provenance", "sha256"), meta_path),
     )
     table = pd.read_parquet(table_path).sort_values(c.KEY_COLUMN).reset_index(drop=True)
     provenance = _provenance_rows(provenance_path)
@@ -414,9 +448,17 @@ def load_folds(processed_dir: Path, scheme: str = SCHEME_GROUPED) -> FoldSet:
     if not meta_path.is_file():
         raise FileNotFoundError(f"artefato da 009 ausente: {meta_path}")
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    if meta.get("scheme") != SCHEME_GROUPED:
+        raise ValueError(
+            f"esquema registrado em {meta_path} é {meta.get('scheme')!r}, "
+            f"esperado {SCHEME_GROUPED!r}"
+        )
     inputs = load_training_inputs(processed_dir)
-    _checked_hash(inputs.table_path, meta["inputs"]["table"]["sha256"])
-    _checked_hash(inputs.provenance_path, meta["inputs"]["provenance"]["sha256"])
+    for key, path in (
+        ("table", inputs.table_path),
+        ("provenance", inputs.provenance_path),
+    ):
+        _checked_hash(path, _registered(meta, ("inputs", key, "sha256"), meta_path))
     folds_path = processed_dir / FOLDS_FILENAME
-    _checked_hash(folds_path, meta["folds_sha256"])
+    _checked_hash(folds_path, _registered(meta, ("folds_sha256",), meta_path))
     return FoldSet(inputs.table, inputs.provenance, pd.read_parquet(folds_path), meta)

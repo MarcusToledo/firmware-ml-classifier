@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import pytest
@@ -223,10 +224,30 @@ def test_load_folds_returns_original_table_and_rejects_random(tmp_path: Path) ->
         load_folds(tmp_path, "random")
 
 
+@pytest.mark.parametrize(
+    "change,message",
+    [
+        (lambda meta: meta.update(scheme="random"), "esquema registrado"),
+        (lambda meta: meta.pop("folds_sha256"), "metadado sem folds_sha256"),
+    ],
+)
+def test_load_folds_rejects_metadata_of_other_scheme_or_incomplete(
+    tmp_path: Path, change: Any, message: str
+) -> None:
+    """Recusa metadado de outro esquema ou sem hash, mesmo com arquivos íntegros."""
+    make_inputs(tmp_path)
+    paths = write_folds(build_partition(PartitionConfig(5, (0,), tmp_path)), tmp_path)
+    meta = json.loads(paths["meta"].read_text())
+    change(meta)
+    paths["meta"].write_text(json.dumps(meta))
+    with pytest.raises(ValueError, match=message):
+        load_folds(tmp_path)
+
+
 def test_config_accepts_single_seed_override_and_rejects_multiple(
     tmp_path: Path,
 ) -> None:
-    """Converte override YAML e recusa múltiplas sementes na 009 atual."""
+    """Converte override YAML e recusa várias sementes, folds ≠ 5 e YAML ilegível."""
     config = tmp_path / "config.yaml"
     config.write_text(
         yaml.safe_dump(
@@ -239,6 +260,9 @@ def test_config_accepts_single_seed_override_and_rejects_multiple(
     with pytest.raises(ValueError, match="partition.seeds"):
         load_partition_config(config, {}, None)
     assert load_partition_config(config, {"partition.seeds": "[3]"}, None).seeds == (3,)
+    for override in ({"partition.n_splits": "2"}, {"partition.seeds": "[3"}):
+        with pytest.raises(ValueError, match="Configuração inválida"):
+            load_partition_config(config, {"partition.seeds": "[0]", **override}, None)
 
 
 def test_training_inputs_reconcile_ids_and_validate_alias_identity(
