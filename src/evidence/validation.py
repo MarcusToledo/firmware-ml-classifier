@@ -197,6 +197,11 @@ def _decision_rule(raw: Any, path: Path) -> DecisionRule:
     )
     if not 0 < rule.confidence < 1 or not 0 < rule.cut < 1:
         raise ValueError(f"Configuração inválida em {path}: decision")
+    if rule.min_determined < 1 or not 0 <= rule.max_indeterminate_fraction <= 1:
+        raise ValueError(
+            f"Configuração inválida em {path}: decision.min_determined ≥ 1 e "
+            "decision.max_indeterminate_fraction em [0, 1]"
+        )
     return rule
 
 
@@ -610,15 +615,22 @@ def _date_errors(value: str, frozen_at: date) -> list[str]:
 def _check_against_manifest(
     rows: list[dict[str, str]], manifest: dict[str, Any]
 ) -> None:
-    """Exige os mesmos itens, linhas e textos registrados no sorteio."""
+    """Exige os mesmos itens e campos imutáveis registrados no sorteio.
+
+    Compara todas as colunas de ``ITEM_COLUMNS`` com o manifesto; o texto
+    ``source``, ausente do manifesto, é conferido pelo SHA256 recalculado.
+    """
+    fields = [c for c in ITEM_COLUMNS if c != "source"]
     expected = {
-        item["item_id"]: (str(item["linha"]), item["source_sha256"])
+        item["item_id"]: tuple(str(item[c]) for c in fields)
         for item in manifest["items"]
     }
     actual = {
-        row["item_id"]: (
-            row["linha"],
-            hashlib.sha256(row["source"].encode()).hexdigest(),
+        row["item_id"]: tuple(
+            hashlib.sha256(row["source"].encode()).hexdigest()
+            if c == "source_sha256"
+            else row[c]
+            for c in fields
         )
         for row in rows
     }

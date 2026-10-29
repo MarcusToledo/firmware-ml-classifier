@@ -288,8 +288,12 @@ def _annotate(config_path: Path, edit) -> None:
         ({"classe": CLASS_INDETERMINATE, "criterio": "IND"}, "motivo_ind"),
         ({"data": "2026-10-26"}, "anterior ao congelamento"),
         ({"justificativa": " "}, "justificativa vazia"),
-        ({"rubrica_versao": "0"}, "rubrica_versao"),
+        ({"rubrica_versao": "0"}, "diverge do manifesto"),
         ({"source": "editado"}, "diverge do manifesto"),
+        ({"detector": "crypto_signatures"}, "diverge do manifesto"),
+        ({"fabricante": "outro"}, "diverge do manifesto"),
+        ({"firmware_id": "outro"}, "diverge do manifesto"),
+        ({"context": "editado"}, "diverge do manifesto"),
     ],
 )
 def test_report_rejects_annotation_outside_frozen_rubric(
@@ -359,6 +363,24 @@ def test_unknown_detector_in_rubric_is_rejected(tmp_path: Path):
     raw["rubric"]["detectors"]["inventado"] = raw["rubric"]["detectors"]["api_tokens"]
     path.write_text(yaml.safe_dump(raw), encoding="utf-8")
     with pytest.raises(ValueError, match="inventado"):
+        load_validation_config(path)
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("min_determined", 0),
+        ("min_determined", -1),
+        ("max_indeterminate_fraction", -0.1),
+        ("max_indeterminate_fraction", 1.5),
+    ],
+)
+def test_decision_rule_out_of_bounds_is_rejected(tmp_path: Path, key, value):
+    path = _config(tmp_path, _population(), [])
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    raw["decision"][key] = value
+    path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    with pytest.raises(ValueError, match=key):
         load_validation_config(path)
 
 
