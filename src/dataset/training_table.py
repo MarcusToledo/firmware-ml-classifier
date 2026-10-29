@@ -307,7 +307,10 @@ def input_feature_columns(features: pd.DataFrame) -> list[str]:
 
 
 def select_feature_columns(columns: list[str]) -> tuple[list[str], dict[str, str]]:
-    """Filtra Doc2Vec e textos categóricos, mas rejeita vazamento de CVE."""
+    """Filtra Doc2Vec, textos categóricos e detectores excluídos pela T13-A.
+
+    Levanta ValueError para coluna de vazamento de CVE ou identidade.
+    """
     selected: list[str] = []
     changes: dict[str, str] = {}
     for column in columns:
@@ -317,6 +320,8 @@ def select_feature_columns(columns: list[str]) -> tuple[list[str], dict[str, str
             changes[column] = c.CHANGE_DOC2VEC
         elif column in c.ONE_HOT_SOURCES:
             changes[column] = c.CHANGE_ONE_HOT
+        elif column in c.T13A_EXCLUDED_COLUMNS:
+            changes[column] = c.T13A_EXCLUDED_COLUMNS[column]
         else:
             selected.append(column)
     return selected, changes
@@ -415,14 +420,20 @@ def build_provenance(
 
 
 def _make_table(
-    joined: pd.DataFrame, columns: list[str], config: DatasetConfig
+    joined: pd.DataFrame,
+    columns: list[str],
+    changes: dict[str, str],
+    config: DatasetConfig,
 ) -> pd.DataFrame:
-    """Substitui textos pelos blocos one-hot preservando ordem e valores."""
+    """Monta o vetor na ordem da entrada, sem as colunas listadas em ``changes``.
+
+    Textos categóricos viram blocos one-hot na posição original.
+    """
     parts = [joined[[c.KEY_COLUMN]]]
     for column in columns:
         if column in c.ONE_HOT_SOURCES:
             parts.append(one_hot_fixed(joined, column, config.one_hot[column]))
-        elif not column.startswith("doc2vec_"):
+        elif column not in changes:
             parts.append(joined[[column]])
     parts.append(joined[[c.TARGET_COLUMN]])
     return (
@@ -481,7 +492,7 @@ def build_training_table(config: DatasetConfig) -> PreparedDataset:
     sources = [column for column in columns if column in c.ONE_HOT_SOURCES]
     collapsed = collapse_aliases(inputs.features, keep_ids, selected + sources)
     joined = join_labels(collapsed, inputs.labels)
-    table = _make_table(joined, columns, config)
+    table = _make_table(joined, columns, changes, config)
     counts = _counts(inputs, table, report)
     if not len(table) or any(not count for count in counts["by_class"].values()):
         raise ValueError(f"Tabela vazia ou classe sem exemplo: {counts['by_class']}")

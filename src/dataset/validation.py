@@ -14,6 +14,7 @@ from src.dataset.contract import (
     KEY_COLUMN,
     META_FILENAME,
     PROVENANCE_FILENAME,
+    T13A_EXCLUDED_COLUMNS,
     TABLE_FILENAME,
     TARGET_CLASSES,
     TARGET_COLUMN,
@@ -35,6 +36,9 @@ def _table_issues(table: pd.DataFrame) -> list[str]:
     forbidden = [col for col in vector if is_forbidden_column(col)]
     if forbidden:
         issues.append(f"coluna proibida no vetor: {', '.join(forbidden)}")
+    excluded = [col for col in vector if col in T13A_EXCLUDED_COLUMNS]
+    if excluded:
+        issues.append(f"coluna excluída pela T13-A no vetor: {', '.join(excluded)}")
     text = [
         col
         for col in vector

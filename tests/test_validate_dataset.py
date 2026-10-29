@@ -147,6 +147,29 @@ def test_forbidden_vector_columns(tmp_path: Path, column: str) -> None:
     )
 
 
+@pytest.mark.parametrize("column", ["count_api_tokens", "has_debug_account"])
+def test_vector_rejects_columns_excluded_by_t13a(tmp_path: Path, column: str) -> None:
+    """Recusa no vetor gravado colunas de detectores retirados ou a reformular."""
+    processed, raw, meta = _artifacts(tmp_path)
+    meta["columns_vector"].append(column)
+    _save_table(
+        processed,
+        meta,
+        pd.DataFrame(
+            {
+                "firmware_id": ["fw1"],
+                "entropy": [7.0],
+                column: [1],
+                "security_level": ["sem_cve_conhecida"],
+            }
+        ),
+    )
+    assert any(
+        issue.startswith("coluna excluída pela T13-A no vetor:")
+        for issue in validate_artifacts(processed, raw)
+    )
+
+
 @pytest.mark.parametrize(
     "change,prefix",
     [

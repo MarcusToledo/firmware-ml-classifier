@@ -78,6 +78,39 @@ def test_aliases_conservam_valores_sem_vazar_identidade(tmp_path: Path) -> None:
     assert prepared.metadata["counts"]["input_rows"] == 4
 
 
+def test_detectores_excluidos_pela_t13a_saem_do_vetor(tmp_path: Path) -> None:
+    extras = {
+        "count_urls": 3,
+        "count_api_tokens": 9,
+        "count_public_ips": 2,
+        "has_debug_account": True,
+        "n_crypto_signatures": 1,
+    }
+    features, labels = write_inputs(
+        tmp_path,
+        [
+            feature_row(fid, f"{vendor}/router/{fid}.bin", **extras)
+            for fid, vendor in zip("abc", ("alpha", "beta", "gamma"))
+        ],
+        dict(zip("abc", TARGET_CLASSES)),
+    )
+    config = load_dataset_config(
+        write_config(tmp_path, features, labels, tmp_path / "out"), {}
+    )
+
+    prepared = build_training_table(config)
+
+    vector = prepared.metadata["columns_vector"]
+    changes = prepared.metadata["column_changes"]
+    assert "count_urls" in vector and "has_telnetd" in vector
+    for column in ("count_api_tokens", "count_public_ips", "has_debug_account"):
+        assert column not in prepared.table
+        assert column not in vector
+    assert changes["count_api_tokens"] == "t13a_retirar"
+    assert changes["has_debug_account"] == "t13a_reformular"
+    assert changes["n_crypto_signatures"] == "t13a_reformular"
+
+
 @pytest.mark.parametrize(
     "field,value,fragment",
     [

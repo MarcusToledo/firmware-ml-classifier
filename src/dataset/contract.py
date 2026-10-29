@@ -68,6 +68,23 @@ REASON_ORDER = (REASON_EXTRACTION_FAILURE, REASON_THIRD_PARTY, REASON_INDETERMIN
 
 CHANGE_DOC2VEC = "doc2vec_t06_proposto"
 CHANGE_ONE_HOT = "texto_one_hot"
+CHANGE_T13A_REMOVE = "t13a_retirar"
+CHANGE_T13A_REFORMULATE = "t13a_reformular"
+
+# Decisões da T13-A (013/FR-006; relatório reports/t13a_20261028T223405Z):
+# colunas de detectores retirados ou a reformular saem do vetor reportado
+# (002/FR-035, FR-036). A extração continua a produzi-las; reformular exige
+# regra pré-registrada e nova validação antes de voltar ao vetor.
+T13A_EXCLUDED_COLUMNS: dict[str, str] = {
+    "count_hardcoded_passwords": CHANGE_T13A_REMOVE,
+    "count_credential_pairs": CHANGE_T13A_REMOVE,
+    "count_api_tokens": CHANGE_T13A_REMOVE,
+    "count_non_public_ips": CHANGE_T13A_REFORMULATE,
+    "count_public_ips": CHANGE_T13A_REFORMULATE,
+    "has_debug_account": CHANGE_T13A_REFORMULATE,
+    "n_crypto_signatures": CHANGE_T13A_REFORMULATE,
+    "has_encrypted_sections": CHANGE_T13A_REFORMULATE,
+}
 
 # Estados do Binwalk vêm de `pipeline/feature_extraction.py`; `src/` não importa
 # `pipeline/`, então os literais ficam aqui.
