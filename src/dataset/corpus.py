@@ -215,12 +215,13 @@ def write_freeze(manifest: dict[str, Any], processed_dir: Path) -> Path:
     Levanta FileExistsError quando ``corpus.freeze.json`` já existe.
     """
     path = processed_dir / FREEZE_FILENAME
-    if path.exists():
+    content = json.dumps(manifest, indent=2, ensure_ascii=False) + "\n"
+    try:
+        with path.open("x", encoding="utf-8") as destination:
+            destination.write(content)
+    except FileExistsError as exc:
         raise FileExistsError(
             f"{path} já existe; congelamento não é sobrescrito. Remova-o "
             "explicitamente e registre o motivo antes de congelar de novo"
-        )
-    path.write_text(
-        json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-    )
+        ) from exc
     return path
