@@ -12,3 +12,13 @@ one_hot:
 partition:
   n_splits: 5
   seeds: [0]
+
+# 008/FR-018: marco de congelamento da proposta TCC2 v2 e motivo do desvio,
+# registrados pelo pesquisador. A data efetiva vem da execução, nunca daqui.
+freeze:
+  milestone: 2026-10-11
+  deviation_reason: >-
+    O marco de 11/10/2026 da proposta v2 foi deslocado para incorporar a
+    aprovação da proposta (15/10), a rodada de dados (16/10), a partição
+    agrupada (T03), a correção R1 e a seleção T13-A, todas anteriores a
+    qualquer treino de modelo.
