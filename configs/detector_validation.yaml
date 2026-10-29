@@ -1,0 +1,124 @@
+# 013 (T13-A): protocolo da validação semântica dos detectores.
+# Congelado em 2026-10-27, antes do sorteio da amostra principal. Mudar
+# qualquer valor depois do sorteio exige nova versão da rubrica e nova
+# anotação; o manifesto registra o SHA256 deste arquivo.
+
+findings: dataset/processed/findings_v2.jsonl
+sample_dir: dataset/interim/t13a
+reports_dir: reports
+
+sampling:
+  seed: 20261027
+  target_per_detector: 20
+
+# Decisão por detector (013/FR-006): Wilson bilateral sobre
+# n_verdadeiro / (n_verdadeiro + n_falso).
+decision:
+  confidence: 0.95
+  cut: 0.5
+  min_determined: 10
+  max_indeterminate_fraction: 0.5
+
+# Piloto da rubrica (2026-10-27, semente 1): itens e cópias excluídos da
+# população. key = sha256("\0".join([detector, firmware_id, source, context])).
+pilot_exclusions:
+  - {line: 485182, key: 44e2849476cd6935ce072eff048e9174ab46ce5bb0401e916b201b8b871e96ed}
+  - {line: 2805581, key: 6f6ea379c71f22902d6f8b66f1a4c029aa40317c938b3220740437e035b9a7cb}
+  - {line: 2094235, key: 5b30fc762bc1ad20b21c790ef86bdc7c5baee963bf3a985dc782fd6495245e70}
+  - {line: 2703048, key: 00c157892d4680b5cee61110779a4b171aeffd94687b57de74dcad47ddf853e2}
+  - {line: 2349923, key: afbf63296ba76593302ec1a90d86bdcc447583f04437a6e03bbba1127a3231a1}
+  - {line: 2401437, key: 5de384150152c56c403e339819ca5dfb7e19c8d59acdbc2a9f05baee93e7eb6f}
+  - {line: 1287558, key: c73867a7f7d74b586b019f9e904bf1cd80f45857e35863355b545154f26d8355}
+  - {line: 3043155, key: 3a9c1898e571dfeeff22ef80d6195a52d43361a921ceb51fe9e2efdcbdcd60d1}
+  - {line: 6377, key: 8586e92850c0c9fb9c4fcfe39d9875b3403da4db583a095b289f97a114675b4d}
+  - {line: 330907, key: 0fad3278a66d2751af47bf269d82f073e6856a6fbabfe74971a6a54062794814}
+  - {line: 953882, key: 624b61a92d1a95d44c790e77af54deb9510e4cc35be5ee413102830c6f340edc}
+  - {line: 2683137, key: 073c80b1f2ff1acd44ec4a09f0b2feacde5c848e14d5d158ff63916e2604a5e9}
+  - {line: 79401, key: ab064560ce5c66784e7af662942fc47d99cd7402e695ef6ff210060f38930be4}
+  - {line: 3123958, key: 05583635ec1eafb2156dc288aee5c175c2be82f780dc23e1a88d5df0b83c63f6}
+  - {line: 1409083, key: 93d8321bda281a14d5ab8df4539a7538fa8832d25886158704dbd85edac4f4fd}
+  - {line: 1978103, key: 4116fdb1c6883f83e55377873913fa33f71422654e41100e0bc1a0fd9204f081}
+  - {line: 2856348, key: 9c4763f18b54b062967826427b8bf89c15215f8ef09849b6acf56bcd0c38e496}
+  - {line: 4126498, key: ad87b560cc1da840fb71249adbdd46974a24afc2fb4012dd51b164d4963934a0}
+  - {line: 1636843, key: 58405a6d44685ad1695720c4d9d7bbec1386b692d33af9bcd527f89384ec4b1e}
+  - {line: 3305223, key: a02054fbbe07335494a93fb7a485503e64f3f09bc14a95fa65d4ae482f16b94b}
+  - {line: 169010, key: e683ba8e80d74b86c08c7a81e8d9d5d5cf50b628764975d1bb809e27ad968b04}
+  - {line: 2665479, key: 46abe40b5936c71124d490425ace3591fc4020adc7c55770754a5525cf083118}
+  - {line: 1176601, key: bc09b748813323505f0db43f088823eaac14749081b7f4ed11895d040c37891b}
+  - {line: 1990161, key: a959020dd791a6d82b8194c803a3f5e9ebc4272517dd8bfb4777cef7d170c272}
+
+# Rubrica v1 (013/FR-003). Classes: verdadeiro_candidato, falso_positivo,
+# indeterminado. "verdadeiro candidato" não é vulnerabilidade nem CVE: a
+# rubrica pergunta só se a string contém o alvo declarado do detector.
+rubric:
+  version: "1"
+  frozen_at: "2026-10-27"
+  indeterminate_reasons: [truncada, sem_contexto, ambigua, formato_desconhecido]
+  # R3 (FP-ruido), exceto api_tokens; R7 (FP-exemplo), exceto urls;
+  # R9 (FP-assinatura) só nos detectores do Binwalk.
+  general_false_positive:
+    FP-ruido: {exclude: [api_tokens]}
+    FP-exemplo: {exclude: [urls]}
+    FP-assinatura: {only: [crypto_signatures, encrypted_sections]}
+  detectors:
+    hardcoded_passwords:
+      target: valor literal de credencial ou senha padrão citada como senha
+      verdadeiro: [HP-1, HP-2]
+      falso: [FP-chave, FP-ref, FP-codigo]
+      refs: [002/FR-003]
+    credential_pairs:
+      target: par usuário:senha de autenticação
+      verdadeiro: [CP-1]
+      falso: [FP-sintaxe]
+      refs: [002/FR-004]
+    non_public_ips:
+      target: IPv4 não global usado como endereço de rede
+      verdadeiro: [NI-1]
+      falso: [FP-versao, FP-oid, FP-outro]
+      refs: [002/FR-005]
+    public_ips:
+      target: IPv4 global usado como endereço de rede
+      verdadeiro: [PI-1]
+      falso: [FP-versao, FP-oid, FP-outro]
+      refs: [002/FR-006, 002/FR-033]
+    telnetd:
+      target: referência ao daemon telnet
+      verdadeiro: [TD-1]
+      falso: [FP-sub]
+      refs: [002/FR-007]
+    debug_account:
+      target: acesso de depuração, teste ou convidado
+      verdadeiro: [DA-1, DA-2]
+      falso: [FP-log, FP-comando]
+      refs: [002/FR-008, 002/FR-030]
+    outdated_libssl:
+      target: versão do OpenSSL embarcada abaixo de 1.1.1
+      verdadeiro: [OS-1]
+      falso: [FP-mencao, FP-parse]
+      refs: [002/FR-009]
+    outdated_busybox:
+      target: versão do BusyBox embarcada abaixo de 1.33.0
+      verdadeiro: [BB-1]
+      falso: [FP-mencao, FP-parse]
+      refs: [002/FR-009]
+    urls:
+      target: URL HTTP(S) como referência a recurso, inclusive template
+      verdadeiro: [UR-1, UR-2]
+      falso: [FP-corte]
+      refs: [002/FR-010]
+    api_tokens:
+      target: segredo de autenticação em hex ou base64
+      verdadeiro: [AT-1]
+      falso: [FP-hash, FP-dado, FP-texto]
+      refs: [002/FR-011, 002/FR-031]
+    crypto_signatures:
+      target: descrição do Binwalk de construção ou material criptográfico
+      verdadeiro: [CS-1]
+      falso: [FP-palavra]
+      subtypes: [chave_privada, certificado, chave_publica, algoritmo_tabela]
+      refs: [002/FR-012, 002/FR-032, 006/FR-016]
+    encrypted_sections:
+      target: descrição do Binwalk de dado cifrado
+      verdadeiro: [ES-1]
+      falso: [FP-algoritmo]
+      refs: [002/FR-013, 006/FR-016]
