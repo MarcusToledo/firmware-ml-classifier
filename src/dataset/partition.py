@@ -132,7 +132,7 @@ def _checked_hash(path: Path, expected: str) -> str:
     return actual
 
 
-def _provenance_rows(path: Path) -> pd.DataFrame:
+def read_provenance(path: Path) -> pd.DataFrame:
     """Expande somente os aliases incluídos na tabela de treino."""
     rows: list[dict[str, Any]] = []
     with path.open(encoding="utf-8") as source:
@@ -174,7 +174,7 @@ def load_training_inputs(processed_dir: Path) -> TrainingInputs:
         _registered(meta, ("outputs", "provenance", "sha256"), meta_path),
     )
     table = pd.read_parquet(table_path).sort_values(c.KEY_COLUMN).reset_index(drop=True)
-    provenance = _provenance_rows(provenance_path)
+    provenance = read_provenance(provenance_path)
     table_ids = set(table[c.KEY_COLUMN])
     alias_ids = set(provenance[c.KEY_COLUMN])
     missing = sorted(table_ids - alias_ids)
