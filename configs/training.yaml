@@ -1,0 +1,16 @@
+# 010/FR-001, FR-003, FR-004, FR-011, FR-012. Caminhos relativos ao diretório de execução.
+# A semente NÃO fica aqui: vem dos folds da 009 (folds_grouped.meta.json).
+processed_dir: dataset/processed
+output_dir: models/runs
+scoring_config: configs/scoring.yaml
+hyperparameters:
+  n_estimators: 500
+  max_features: sqrt
+  min_samples_leaf: 1
+  max_depth: null
+  n_jobs: 1
+class_weight: balanced
+experiments:
+  principal:
+    target: security_level
+    classes: [sem_cve_conhecida, cve_conhecida, cve_critica]
