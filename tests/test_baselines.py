@@ -9,8 +9,13 @@ import pandas as pd
 import pytest
 
 from src.dataset import contract as c
-from src.models.baselines import identity_features, majority_class
+from src.models.baselines import (
+    identity_features,
+    load_scoring_features,
+    majority_class,
+)
 from src.models.training import load_training_config, train_run
+from src.run_metadata import file_sha256
 from tests.dataset_fixtures import build_frozen_corpus, feature_row
 
 
@@ -72,3 +77,28 @@ def test_scoring_reads_t13a_raw_features_and_checks_hash(tmp_path: Path) -> None
     source.write_bytes(source.read_bytes() + b"alterado")
     with pytest.raises(ValueError, match="difere de training_table.meta.json"):
         train_run("score_firmware", "principal", "grouped", None, config, force=True)
+
+
+@pytest.mark.parametrize("suffix", [".csv", ".txt"])
+def test_scoring_features_follow_008_formats(tmp_path: Path, suffix: str) -> None:
+    """Lê features em CSV como a 008 e recusa formato que ela não aceita."""
+    rows = [
+        feature_row("id-00", "acme/m0/fw.bin", has_debug_account=True),
+        feature_row("id-01", "acme/m1/fw.bin", has_debug_account=False),
+    ]
+    source = tmp_path / f"features_v2{suffix}"
+    pd.DataFrame(rows).to_csv(source, index=False)
+    meta = {
+        "inputs": {"features": {"path": str(source), "sha256": file_sha256(source)}},
+        "column_changes": {"has_debug_account": "t13a_reformular"},
+    }
+    (tmp_path / c.META_FILENAME).write_text(json.dumps(meta))
+    if suffix == ".txt":
+        with pytest.raises(ValueError, match="Formato de features inválido"):
+            load_scoring_features(tmp_path, ["id-00"])
+        return
+    frame, read, t13a = load_scoring_features(tmp_path, ["id-01", "id-00"])
+    assert frame.index.tolist() == ["id-01", "id-00"]
+    assert frame["has_debug_account"].tolist() == [False, True]
+    assert read == {"path": str(source), "sha256": file_sha256(source)}
+    assert t13a == ["has_debug_account"]
