@@ -17,7 +17,7 @@ import pandas as pd
 import pyarrow.parquet as pq
 
 from src.dataset import contract as c
-from src.dataset.corpus import FREEZE_FILENAME
+from src.dataset.corpus import FREEZE_FILENAME, check_frozen_artifacts
 from src.dataset.partition import read_provenance
 from src.run_metadata import code_commit, file_sha256
 
@@ -40,32 +40,6 @@ class FrozenCorpus:
     vendors: pd.Series
     columns: list[str]
     freeze: dict[str, Any]
-
-
-FROZEN_INPUTS = {
-    "table": c.TABLE_FILENAME,
-    "provenance": c.PROVENANCE_FILENAME,
-    "table_meta": c.META_FILENAME,
-}
-
-
-def _check_frozen_hashes(processed_dir: Path, freeze: dict[str, Any]) -> None:
-    """Confere tabela, proveniência e metadado contra os SHA256 congelados.
-
-    Levanta FileNotFoundError sem algum artefato e ValueError com o arquivo e os
-    dois hashes quando o conteúdo atual difere do registrado no congelamento.
-    """
-    artifacts = freeze["hashes"]["artifacts"]
-    for key, name in FROZEN_INPUTS.items():
-        path = processed_dir / name
-        if not path.is_file():
-            raise FileNotFoundError(f"artefato da 008 ausente: {path}")
-        expected = artifacts[key]["sha256"]
-        actual = file_sha256(path)
-        if actual != expected:
-            raise ValueError(
-                f"{path} difere do congelamento: congelado {expected}, atual {actual}"
-            )
 
 
 def _vendor_by_id(provenance: pd.DataFrame, ids: pd.Index) -> pd.Series:
@@ -91,11 +65,9 @@ def load_frozen_corpus(processed_dir: Path) -> FrozenCorpus:
     ValueError se tabela, proveniência ou metadado divergirem do congelamento
     ou se faltar coluna do vetor na tabela.
     """
-    freeze_path = processed_dir / FREEZE_FILENAME
-    if not freeze_path.is_file():
-        raise FileNotFoundError(f"congelamento ausente: {freeze_path}")
-    freeze = json.loads(freeze_path.read_text(encoding="utf-8"))
-    _check_frozen_hashes(processed_dir, freeze)
+    freeze = check_frozen_artifacts(
+        processed_dir, ("table", "provenance", "table_meta")
+    )
     table_path = processed_dir / c.TABLE_FILENAME
     columns = list(freeze["columns_vector"])
     missing = sorted(set(columns) - set(pq.read_schema(table_path).names))

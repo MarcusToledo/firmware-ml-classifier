@@ -3,12 +3,20 @@
 from __future__ import annotations
 
 import json
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 import yaml
 
+from src.dataset.corpus import freeze_corpus, load_freeze_config, write_freeze
+from src.dataset.partition import PartitionConfig, build_partition, write_folds
+from src.dataset.training_table import (
+    build_training_table,
+    load_dataset_config,
+    write_artifacts,
+)
 from src.run_metadata import file_sha256
 
 ONE_HOT_LISTS = {
@@ -104,3 +112,22 @@ def write_config(
     path = directory / "dataset.yaml"
     path.write_text(yaml.safe_dump(config, sort_keys=False))
     return path
+
+
+def build_frozen_corpus(
+    tmp_path: Path, rows: list[dict[str, Any]], levels: dict[str, str]
+) -> Path:
+    """Constrói entradas 008, folds 009 e congelamento de corpus sintético."""
+    features, labels = write_inputs(tmp_path / "inputs", rows, levels)
+    processed = tmp_path / "processed"
+    config = write_config(tmp_path, features, labels, processed)
+    write_artifacts(build_training_table(load_dataset_config(config, {})), processed)
+    write_folds(build_partition(PartitionConfig(5, (0,), processed)), processed)
+    raw = yaml.safe_load(config.read_text(encoding="utf-8"))
+    raw["freeze"] = {"milestone": date(2026, 10, 11), "deviation_reason": "teste"}
+    config.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
+    (tmp_path / "raw").mkdir()
+    freeze_config = load_freeze_config(config, None, tmp_path / "raw")
+    frozen_at = datetime(2026, 10, 30, 10, 0, tzinfo=timezone(timedelta(hours=-3)))
+    write_freeze(freeze_corpus(freeze_config, frozen_at), processed)
+    return processed

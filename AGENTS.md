@@ -25,7 +25,7 @@ the single source for these rules. Amend it only via
   - When reintroduced: train only on the training partition; save model and
     embeddings; document hyperparameters.
 - model-agent
-  - Train, tune, and evaluate Extra Trees and Random Forest.
+  - Train and evaluate Extra Trees and Random Forest.
   - Avoid scope creep into unrelated model families.
 - evaluation-agent
   - Produce reproducible metrics, confusion matrices, and reports.
@@ -65,6 +65,14 @@ the single source for these rules. Amend it only via
 - Inspecionar tokens:
   - `python scripts/inspect_tokens.py --input dataset/raw --limit 50 --max-docs 20`
   - `python scripts/inspect_tokens.py --input dataset/raw --override feature.max_doc_chars=200000`
+
+- Gerar folds e congelar o corpus:
+  - `python scripts/make_folds.py`
+  - `python scripts/freeze_corpus.py`
+  - `python scripts/describe_prevalence.py`
+- Treinar modelos e baselines (spec 010):
+  - `python scripts/train.py --model all --experiment principal --scheme grouped`
+  - `python scripts/train.py --model extra_trees --columns-file <arquivo> --override hyperparameters.n_estimators=500`
 
 ## Code Style Guidelines
 - Imports:

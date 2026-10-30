@@ -25,7 +25,7 @@ dist/
 dataset/raw/
 dataset/interim/
 dataset/processed/
-models/
+/models/
 
 # Reports (version only published outputs)
 reports/**
