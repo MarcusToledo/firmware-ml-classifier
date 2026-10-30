@@ -11,7 +11,6 @@ import yaml
 
 from src.dataset import contract as c
 from src.dataset.corpus import (
-    FREEZE_FILENAME,
     freeze_corpus,
     load_freeze_config,
     write_freeze,
@@ -23,6 +22,7 @@ from src.dataset.training_table import (
     load_dataset_config,
     write_artifacts,
 )
+from src.run_metadata import file_sha256
 from tests.dataset_fixtures import feature_row, write_config, write_inputs
 
 FROZEN_AT = datetime(2026, 10, 30, 10, 0, tzinfo=timezone(timedelta(hours=-3)))
@@ -62,8 +62,10 @@ def _row(table, column: str, vendor: str) -> dict:
 
 
 def test_prevalence_by_vendor_and_missing_values(tmp_path: Path) -> None:
-    """Conta presença por fabricante e tira ausentes do denominador."""
-    table = prevalence(load_frozen_corpus(_frozen(tmp_path)))
+    """Conta por fabricante, tira ausentes do denominador e não carrega rótulo."""
+    corpus = load_frozen_corpus(_frozen(tmp_path))
+    assert c.TARGET_COLUMN not in corpus.features.columns
+    table = prevalence(corpus)
 
     total = _row(table, "has_telnetd", ALL_VENDORS)
     assert (total["n"], total["n_presente"]) == (15, 3)
@@ -79,10 +81,29 @@ def test_prevalence_by_vendor_and_missing_values(tmp_path: Path) -> None:
 def test_table_differing_from_freeze_is_refused(tmp_path: Path) -> None:
     """Recusa descrever uma tabela que não é a registrada no congelamento."""
     processed = _frozen(tmp_path)
-    path = processed / FREEZE_FILENAME
-    freeze = json.loads(path.read_text(encoding="utf-8"))
-    freeze["hashes"]["artifacts"]["table"]["sha256"] = "0" * 64
-    path.write_text(json.dumps(freeze), encoding="utf-8")
+    table = processed / c.TABLE_FILENAME
+    table.write_bytes(table.read_bytes() + b"x")
 
-    with pytest.raises(ValueError, match="difere do congelamento"):
+    with pytest.raises(ValueError, match="training_table.parquet difere"):
+        load_frozen_corpus(processed)
+
+
+def test_vendor_change_consistent_with_008_meta_is_refused(tmp_path: Path) -> None:
+    """Recusa proveniência regravada com metadado da 008 atualizado após o congelamento.
+
+    A tabela fica intacta e o metadado da 008 continua coerente com a nova
+    proveniência; só o congelamento revela que os estratos mudaram.
+    """
+    processed = _frozen(tmp_path)
+    provenance = processed / c.PROVENANCE_FILENAME
+    provenance.write_text(
+        provenance.read_text(encoding="utf-8").replace('"beta"', '"acme"'),
+        encoding="utf-8",
+    )
+    meta_path = processed / c.META_FILENAME
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    meta["outputs"]["provenance"]["sha256"] = file_sha256(provenance)
+    meta_path.write_text(json.dumps(meta), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="training_table_provenance.jsonl difere"):
         load_frozen_corpus(processed)
