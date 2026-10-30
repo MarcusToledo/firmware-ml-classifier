@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,7 @@ import pandas as pd
 from src.run_metadata import file_sha256
 
 INPUT_KEYS = ("table", "provenance", "folds")
+RUN_ID_PATTERN = re.compile(r"[0-9a-f]{64}")
 
 
 @dataclass(frozen=True)
@@ -25,7 +27,13 @@ class EvaluatedRun:
 
 
 def load_run(runs_dir: Path, run_id: str) -> EvaluatedRun:
-    """Lê manifesto e predições da execução, exigindo identidade coincidente."""
+    """Lê manifesto e predições da execução, exigindo identidade coincidente.
+
+    Levanta ValueError quando run_id não é SHA256 hexadecimal (010/FR-006),
+    o que também impede caminhos fora de runs_dir.
+    """
+    if not RUN_ID_PATTERN.fullmatch(run_id):
+        raise ValueError(f"run_id inválido: {run_id!r}; esperado SHA256 hexadecimal")
     directory = runs_dir / run_id
     meta_path = directory / "run.meta.json"
     prediction_path = directory / "predictions.parquet"

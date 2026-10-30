@@ -10,6 +10,9 @@ import pandas as pd
 from src.evaluation.metrics import CLASSES
 from src.run_metadata import file_sha256
 
+FIRST = "a" * 64
+SECOND = "b" * 64
+
 
 def _write_run(runs_dir: Path, run_id: str, model: str) -> Path:
     """Prepara predições OOF pequenas para dois modelos com entradas iguais."""
@@ -33,22 +36,22 @@ def _write_run(runs_dir: Path, run_id: str, model: str) -> Path:
 def test_cli_reports_are_byte_identical_across_directories(tmp_path: Path) -> None:
     """Preserva linhas CSV e rastreia folds incompletos e hashes de origem."""
     runs_dir = tmp_path / "runs"
-    first = _write_run(runs_dir, "first", "extra_trees")
-    second = _write_run(runs_dir, "second", "random_forest")
+    first = _write_run(runs_dir, FIRST, "extra_trees")
+    second = _write_run(runs_dir, SECOND, "random_forest")
     reports = []
     for index in (0, 1):
         command = [sys.executable, "scripts/compute_metrics.py", "--runs-dir",
                    str(runs_dir), "--output-dir", str(tmp_path / f"report-{index}"),
-                   "--run-id", "second", "--run-id", "first"]
+                   "--run-id", SECOND, "--run-id", FIRST]
         process = subprocess.run(command, capture_output=True, text=True, check=False)
         assert process.returncode == 0, process.stderr
         reports.append(Path(process.stdout.strip()))
     for name in ("metrics.csv", "metrics_per_class.csv", "confusion.csv"):
         assert file_sha256(reports[0] / name) == file_sha256(reports[1] / name)
     summary = pd.read_csv(reports[0] / "metrics.csv")
-    assert summary["run_id"].tolist() == ["first", "second"]
+    assert summary["run_id"].tolist() == [FIRST, SECOND]
     manifest = json.loads((reports[0] / "report.meta.json").read_text())
-    assert manifest["runs"]["first"]["predictions_sha256"] == file_sha256(first)
-    assert manifest["runs"]["second"]["predictions_sha256"] == file_sha256(second)
-    missing = manifest["folds_missing_class"]["first"]["0"][0]["missing"]
+    assert manifest["runs"][FIRST]["predictions_sha256"] == file_sha256(first)
+    assert manifest["runs"][SECOND]["predictions_sha256"] == file_sha256(second)
+    missing = manifest["folds_missing_class"][FIRST]["0"][0]["missing"]
     assert missing == list(CLASSES[1:])
