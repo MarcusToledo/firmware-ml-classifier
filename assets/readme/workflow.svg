@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="650" viewBox="0 0 1200 650" role="img" aria-labelledby="title desc">
+  <title id="title">Pipeline do firmware-ml-classifier</title>
+  <desc id="desc">Duas trilhas separadas. Conteúdo: a imagem de firmware passa por extração estática (binwalk, unsquashfs, strings ASCII, ELF) e vira o vetor B2 de 32 colunas. Identidade: fabricante, modelo e versão consultam o cache da NVD e geram o rótulo por CVSS máximo. Uma barreira impede que identidade ou campos de CVE entrem no vetor. As trilhas se juntam na tabela de treino de 504 imagens, dividida em 5 folds agrupados por componente conectado; Extra Trees é comparado a Random Forest e aos baselines B0, B1 e BR, e o contraste Δ macro-F1 B2 − B1 com intervalo de confiança está em andamento.</desc>
+
+  <rect width="1200" height="650" rx="24" fill="#101113"/>
+
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" fill="#8b9099" letter-spacing="1">
+    <text x="56" y="60">CONTEÚDO → FEATURES</text>
+    <text x="56" y="286">IDENTIDADE → RÓTULO</text>
+    <text x="56" y="470">AVALIAÇÃO</text>
+  </g>
+
+  <g id="boxes" fill="#17181b" stroke="#2a2c30" stroke-width="2">
+    <rect x="56" y="80" width="332" height="104" rx="10"/>
+    <rect x="434" y="80" width="332" height="104" rx="10"/>
+    <rect x="812" y="80" width="332" height="104" rx="10" stroke="#e8a33d"/>
+    <rect x="56" y="306" width="332" height="104" rx="10"/>
+    <rect x="434" y="306" width="332" height="104" rx="10"/>
+    <rect x="812" y="306" width="332" height="104" rx="10"/>
+    <rect x="56" y="490" width="220" height="120" rx="10"/>
+    <rect x="312" y="490" width="240" height="120" rx="10"/>
+    <rect x="588" y="490" width="220" height="120" rx="10" stroke="#e8a33d"/>
+    <rect x="844" y="490" width="300" height="120" rx="10"/>
+  </g>
+
+  <g id="labels" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+    <g font-size="22" font-weight="600" fill="#f3efe7">
+      <text x="78" y="122">Imagem de firmware</text>
+      <text x="456" y="122">Extração estática</text>
+      <text x="834" y="122">Vetor B2</text>
+      <text x="78" y="348">Fabricante · modelo</text>
+      <text x="456" y="348">Cache da NVD</text>
+      <text x="834" y="348">Rótulo por CVSS</text>
+      <text x="76" y="530">Tabela de treino</text>
+      <text x="332" y="530">5 folds agrupados</text>
+      <text x="608" y="530">Extra Trees</text>
+      <text x="864" y="530">Δ macro-F1 B2 − B1</text>
+    </g>
+    <g font-size="18" fill="#a9a59d">
+      <text x="78" y="156">lida, nunca executada</text>
+      <text x="456" y="154">binwalk · unsquashfs</text>
+      <text x="456" y="176">strings ASCII · ELF</text>
+      <text x="834" y="156">32 colunas de conteúdo</text>
+      <text x="78" y="382">e versão, se conhecida</text>
+      <text x="456" y="382">CVE e CPE aplicáveis</text>
+      <text x="834" y="374">3 classes; indeterminado</text>
+      <text x="834" y="398">fica fora do treino</text>
+      <text x="76" y="562">504 imagens</text>
+      <text x="76" y="588">193 componentes</text>
+      <text x="332" y="562">por componente</text>
+      <text x="332" y="588">conectado</text>
+      <text x="608" y="562">principal, contra</text>
+      <text x="608" y="588">RF · B0 · B1 · BR</text>
+      <text x="864" y="562">IC por bootstrap pareado</text>
+      <text x="864" y="588">por grupo (em andamento)</text>
+    </g>
+  </g>
+
+  <g id="arrows" stroke="#6b7078" stroke-width="2" fill="none">
+    <path d="M388 132 H426"/>
+    <path d="M766 132 H804"/>
+    <path d="M388 358 H426"/>
+    <path d="M766 358 H804"/>
+    <path d="M1144 132 H1168 V446 H166 V480"/>
+    <path d="M1144 358 H1168"/>
+    <path d="M276 550 H304"/>
+    <path d="M552 550 H580"/>
+    <path d="M808 550 H836"/>
+  </g>
+  <g id="heads" fill="#6b7078">
+    <path d="M434 132 l-10 -6 v12 z"/>
+    <path d="M812 132 l-10 -6 v12 z"/>
+    <path d="M434 358 l-10 -6 v12 z"/>
+    <path d="M812 358 l-10 -6 v12 z"/>
+    <path d="M166 490 l-6 -10 h12 z"/>
+    <path d="M312 550 l-10 -6 v12 z"/>
+    <path d="M588 550 l-10 -6 v12 z"/>
+    <path d="M844 550 l-10 -6 v12 z"/>
+  </g>
+
+  <g id="barrier">
+    <line x1="56" y1="234" x2="1144" y2="234" stroke="#e5484d" stroke-width="2" stroke-dasharray="8 8"/>
+    <rect x="315" y="220" width="570" height="28" fill="#101113"/>
+    <text x="600" y="241" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="20" fill="#e5484d">identidade e campos de CVE nunca entram no vetor</text>
+  </g>
+</svg>
