@@ -27,6 +27,41 @@ from src.dataset.validation import validate_artifacts
 from src.run_metadata import code_commit, file_sha256
 
 FREEZE_FILENAME = "corpus.freeze.json"
+FROZEN_ARTIFACTS: dict[str, str] = {
+    "table": c.TABLE_FILENAME,
+    "exclusions": c.EXCLUSIONS_FILENAME,
+    "provenance": c.PROVENANCE_FILENAME,
+    "table_meta": c.META_FILENAME,
+    "folds": FOLDS_FILENAME,
+    "folds_meta": FOLDS_META_FILENAME,
+}
+
+
+def check_frozen_artifacts(
+    processed_dir: Path, keys: tuple[str, ...]
+) -> dict[str, Any]:
+    """Confere hashes dos artefatos com o manifesto e retorna o congelamento.
+
+    Levanta FileNotFoundError para entradas ausentes e ValueError para hashes
+    divergentes, exibindo o valor registrado e o valor atual.
+    """
+    freeze_path = processed_dir / FREEZE_FILENAME
+    if not freeze_path.is_file():
+        raise FileNotFoundError(f"congelamento ausente: {freeze_path}")
+    freeze: dict[str, Any] = json.loads(freeze_path.read_text(encoding="utf-8"))
+    for key in keys:
+        path = processed_dir / FROZEN_ARTIFACTS[key]
+        if not path.is_file():
+            raise FileNotFoundError(f"artefato congelado ausente: {path}")
+        expected = freeze["hashes"]["artifacts"][key]["sha256"]
+        actual = file_sha256(path)
+        if actual != expected:
+            raise ValueError(
+                f"{path} difere do congelamento: congelado {expected}, atual {actual}"
+            )
+    return freeze
+
+
 
 
 @dataclass(frozen=True)
@@ -146,12 +181,7 @@ def _artifact_hashes(config: FreezeConfig, table_meta: dict) -> dict[str, Any]:
     """Reúne caminho e SHA256 de configuração, entradas, tabela e folds."""
     directory = config.processed_dir
     produced = {
-        "table": directory / c.TABLE_FILENAME,
-        "exclusions": directory / c.EXCLUSIONS_FILENAME,
-        "provenance": directory / c.PROVENANCE_FILENAME,
-        "table_meta": directory / c.META_FILENAME,
-        "folds": directory / FOLDS_FILENAME,
-        "folds_meta": directory / FOLDS_META_FILENAME,
+        name: directory / filename for name, filename in FROZEN_ARTIFACTS.items()
     }
     return {
         "config": {

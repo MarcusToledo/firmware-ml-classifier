@@ -192,13 +192,14 @@ def load_training_inputs(processed_dir: Path) -> TrainingInputs:
     )
 
 
+def normalize_key(value: str) -> str:
+    """Normaliza fabricante ou modelo sem hífens, sublinhados e espaços."""
+    return "".join(char for char in value.lower() if char not in "-_ ")
+
+
 def model_key(vendor: str, model: str) -> str:
     """Normaliza fabricante e modelo sem remover sufixos de revisão."""
-
-    def normalize(value: str) -> str:
-        return "".join(char for char in value.lower() if char not in "-_ ")
-
-    return f"{normalize(vendor)}/{normalize(model)}"
+    return f"{normalize_key(vendor)}/{normalize_key(model)}"
 
 
 def build_groups(provenance: pd.DataFrame) -> dict[str, str]:
