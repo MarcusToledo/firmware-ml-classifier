@@ -74,6 +74,9 @@ the single source for these rules. Amend it only via
   - `python scripts/train.py --model all --experiment principal --scheme grouped`
   - `python scripts/train.py --model extra_trees --columns-file <arquivo> --override hyperparameters.n_estimators=500`
 
+- Calcular métricas das execuções da spec 010 (011/FR-002):
+  - `python scripts/compute_metrics.py --run-id <run_id> [--run-id ...]`
+
 ## Code Style Guidelines
 - Imports:
   - Order: standard library, third-party, local modules.
