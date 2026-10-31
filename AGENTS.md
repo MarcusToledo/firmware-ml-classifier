@@ -77,6 +77,10 @@ the single source for these rules. Amend it only via
 - Calcular métricas das execuções da spec 010 (011/FR-002):
   - `python scripts/compute_metrics.py --run-id <run_id> [--run-id ...]`
 
+- Avaliação final e relatório (spec 011, T10):
+  - `python scripts/evaluate.py`
+  - `python scripts/evaluate.py --config configs/evaluation.yaml --override bootstrap.n_resamples=2000`
+
 ## Code Style Guidelines
 - Imports:
   - Order: standard library, third-party, local modules.
