@@ -44,9 +44,14 @@ def _applicable_cve(cve_id: str, score: float = 7.5) -> dict:
 def _cache_entry(cves: list[dict]) -> dict:
     return {
         "source": "keyword",
-        "schema_version": 3,
+        "schema_version": 4,
         "fetched_at": "2026-09-26T00:00:00+00:00",
+        "queries": [],
+        "cpe_candidates": ["cpe:2.3:o:dlink:dir300:*:*:*:*:*:*:*:*"],
         "cves": cves,
+        "evidence_state": (
+            "cve_encontrada" if cves else "produto_encontrado_sem_cve"
+        ),
     }
 
 
@@ -98,6 +103,8 @@ def test_lookup_normalizes_identity_and_rejects_old_cache() -> None:
         _lookup_cve_entry(row, {"dlink/dir300": {**entry, "schema_version": 1}})
     with pytest.raises(ValueError, match="schema"):
         _lookup_cve_entry(row, {"dlink/dir300": {**entry, "schema_version": 2}})
+    with pytest.raises(ValueError, match="dlink/dir300.*rotulagem"):
+        _lookup_cve_entry(row, {"dlink/dir300": {**entry, "schema_version": 3}})
     with pytest.raises(ValueError, match="fetched_at.*dlink/dir300"):
         _lookup_cve_entry(
             row,
@@ -111,6 +118,163 @@ def test_lookup_normalizes_identity_and_rejects_old_cache() -> None:
         # Entrada com "cves" mas sem schema_version deve falhar igual a
         # fetch_cves.py, nao ser aceita silenciosamente como schema 2.
         _lookup_cve_entry(row, {"dlink/dir300": {"cves": []}})
+
+
+@pytest.mark.parametrize(
+    ("state", "expected", "reason"),
+    [
+        ("nao_encontrado", LABEL_INDETERMINATE, "nao_encontrado"),
+        ("produto_encontrado_sem_cve", LABEL_NO_KNOWN_CVE, None),
+    ],
+)
+def test_cli_labels_evidence_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    state: str, expected: str, reason: str | None
+) -> None:
+    """Distingue ausência de produto de evidência negativa CPE."""
+    row = {
+        "firmware_id": "fw", "meta_path": "dlink/dir300/fw.bin",
+        "meta_brand": "dlink", "meta_model": "dir300",
+        "meta_version": None, "meta_version_source": None,
+    }
+    labels = _run_cli(
+        tmp_path, monkeypatch, [row],
+        {"dlink/dir300": {
+            **_cache_entry([]), "evidence_state": state,
+            "cpe_candidates": [] if state == "nao_encontrado" else [
+                "cpe:2.3:o:dlink:dir300:*:*:*:*:*:*:*:*"
+            ],
+        }},
+    )
+    assert labels.loc[0, "security_level"] == expected
+    if reason is None:
+        assert pd.isna(labels.loc[0, "evidence_reason"])
+    else:
+        assert labels.loc[0, "evidence_reason"] == reason
+
+
+def _aliases_with_unknown_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, score: float
+) -> pd.DataFrame:
+    """Executa rotulagem de firmware com alias ausente e CVE de outro alias."""
+    rows = [
+        {
+            "firmware_id": "shared", "meta_path": "dlink/dir300_1.0/fw.bin",
+            "meta_brand": "dlink", "meta_model": "dir300",
+            "meta_version": "1.0", "meta_version_source": VERSION_SOURCE_DIRECTORY,
+        },
+        {
+            "firmware_id": "shared", "meta_path": "dlink/dir300b_1.0/fw.bin",
+            "meta_brand": "dlink", "meta_model": "dir300b",
+            "meta_version": "1.0", "meta_version_source": VERSION_SOURCE_DIRECTORY,
+        },
+    ]
+    return _run_cli(
+        tmp_path, monkeypatch, rows,
+        {
+            "dlink/dir300": {
+                **_cache_entry([]), "evidence_state": "nao_encontrado",
+                "cpe_candidates": [],
+            },
+            "dlink/dir300b": _cache_entry([_applicable_cve("CVE-ONE", score)]),
+        },
+    )
+
+
+def test_unknown_alias_preserves_critical_lower_bound(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CVE crítica aplicável mantém classe apesar de alias sem produto."""
+    labels = _aliases_with_unknown_evidence(tmp_path, monkeypatch, 9.8)
+    assert labels["security_level"].tolist() == [LABEL_CRITICAL_CVE] * 2
+    assert labels["evidence_reason"].tolist() == ["nao_encontrado"] * 2
+
+
+def test_unknown_alias_makes_noncritical_lower_bound_indeterminate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Alias desconhecido pode elevar CVE não crítica e torna classe incerta."""
+    labels = _aliases_with_unknown_evidence(tmp_path, monkeypatch, 7.5)
+    assert labels["security_level"].tolist() == [LABEL_INDETERMINATE] * 2
+    assert labels["evidence_reason"].tolist() == ["nao_encontrado"] * 2
+
+
+def _keyword_product_case(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    cves: list[dict], candidates: list[str]
+) -> tuple[pd.DataFrame, dict]:
+    """Rotula uma consulta keyword sem depender de rede ou versão inferida."""
+    row = {
+        "firmware_id": "fw", "meta_path": "dlink/dir300_2.0/fw.bin",
+        "meta_brand": "dlink", "meta_model": "dir300",
+        "meta_version": "2.0", "meta_version_source": VERSION_SOURCE_DIRECTORY,
+    }
+    entry = {
+        **_cache_entry(cves), "cpe_candidates": candidates,
+        "vendor": "d-link", "model": "DIR-300",
+    }
+    labels = _run_cli(tmp_path, monkeypatch, [row], {"dlink/dir300": entry})
+    alias = json.loads((tmp_path / "labels_aliases.jsonl").read_text().splitlines()[0])
+    return labels, alias
+
+
+def _product_cve(product: str) -> dict:
+    """Descreve CVE de produto-alvo ou de outro produto por CPE real."""
+    return {
+        **_cve("CVE-ONE"),
+        "configurations": [{
+            "nodes": [{"cpeMatch": [{
+                "vulnerable": True,
+                "criteria": f"cpe:2.3:o:dlink:{product}:*:*:*:*:*:*:*:*",
+                "versionEndExcluding": "1.0",
+            }]}],
+        }],
+    }
+
+
+def test_keyword_other_product_without_cpe_is_unknown(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CVE de outro produto não fundamenta negativo para produto ausente."""
+    labels, audit = _keyword_product_case(
+        tmp_path, monkeypatch, [_product_cve("other")], []
+    )
+    assert labels.loc[0, "security_level"] == LABEL_INDETERMINATE
+    assert labels.loc[0, "evidence_reason"] == "nao_encontrado"
+    assert audit["aliases"][0]["evidence_state"] == "nao_encontrado"
+
+
+def test_keyword_target_product_unaffected_version_is_negative(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CPE na configuration prova produto, mas versão corrigida exclui CVE."""
+    labels, audit = _keyword_product_case(
+        tmp_path, monkeypatch, [_product_cve("dir300_firmware")], []
+    )
+    assert labels.loc[0, "security_level"] == LABEL_NO_KNOWN_CVE
+    assert pd.isna(labels.loc[0, "evidence_reason"])
+    assert audit["aliases"][0]["evidence_state"] == "cve_encontrada"
+
+
+def test_cpe_candidate_without_cve_stays_negative(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Candidato CPE filtrado sustenta negativo mesmo sem CVEs."""
+    labels, audit = _keyword_product_case(
+        tmp_path, monkeypatch, [], ["cpe:2.3:o:dlink:dir300:*:*:*:*:*:*:*:*"]
+    )
+    assert labels.loc[0, "security_level"] == LABEL_NO_KNOWN_CVE
+    assert audit["aliases"][0]["evidence_state"] == "produto_encontrado_sem_cve"
+
+
+def test_keyword_without_configurations_remains_fr025_indeterminate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CVE sem configurations permanece incerta pela FR-025, sem nova regra."""
+    labels, audit = _keyword_product_case(tmp_path, monkeypatch, [_cve("CVE-1")], [])
+    assert labels.loc[0, "security_level"] == LABEL_INDETERMINATE
+    assert pd.isna(labels.loc[0, "evidence_reason"])
+    assert audit["aliases"][0]["evidence_state"] == "cve_encontrada"
 
 
 def test_lookup_missing_pair_fails_instead_of_becoming_negative() -> None:
@@ -560,6 +724,7 @@ def test_cli_records_aliases_strategy_and_per_alias_cves(
         "cve_total",
         "cvss_max",
         "label_strategy",
+        "evidence_reason",
         "alias_count",
     ]
     assert labels["label_strategy"].tolist() == [

@@ -24,6 +24,24 @@ LABEL_KNOWN_CVE = "cve_conhecida"
 LABEL_CRITICAL_CVE = "cve_critica"
 LABEL_INDETERMINATE = "indeterminado"
 
+CVE_CACHE_SCHEMA_VERSION = 4
+EVIDENCE_CVE_FOUND = "cve_encontrada"
+EVIDENCE_PRODUCT_NO_CVE = "produto_encontrado_sem_cve"
+EVIDENCE_NOT_FOUND = "nao_encontrado"
+EVIDENCE_STATES = (
+    EVIDENCE_CVE_FOUND,
+    EVIDENCE_PRODUCT_NO_CVE,
+    EVIDENCE_NOT_FOUND,
+)
+NVD_VENDOR_NAMES = {
+    "netgear": "NETGEAR",
+    "asus": "ASUS",
+    "belkin": "Belkin",
+    "dlink": "D-Link",
+    "tplink": "TP-Link",
+    "tp_link": "TP-Link",
+}
+
 _NUMERIC_VERSION_RE = re.compile(r"^\d+(?:\.\d+)*$")
 _NETGEAR_PACKAGE_RE = re.compile(r"^(\d+(?:\.\d+){2,3})_\d+(?:\.\d+)*$")
 _BUILD_BOUND_RE = re.compile(
@@ -499,6 +517,22 @@ def _cites_only_other_products(
     return bool(configurations) and all(
         _is_other_product(c, target) for c in configurations
     )
+
+
+def effective_evidence_state(cache_entry: dict[str, Any]) -> str:
+    """Reclassifica keyword só de outros produtos quando nenhum CPE foi encontrado.
+
+    CVEs sem configurations não são reclassificadas: continuam indeterminadas
+    pela FR-025, mesmo sem candidato CPE.
+    """
+    state: str = cache_entry["evidence_state"]
+    if state != EVIDENCE_CVE_FOUND or cache_entry.get("cpe_candidates"):
+        return state
+    cves: list[dict[str, Any]] = cache_entry["cves"]
+    target = _target_parts(cache_entry)
+    if cves and all(_cites_only_other_products(cve, target) for cve in cves):
+        return EVIDENCE_NOT_FOUND
+    return state
 
 
 def _indeterminate_without_version(

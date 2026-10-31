@@ -22,6 +22,9 @@ from pipeline.feature_extraction import (
     infer_brand_model_label_from_path,
 )
 from src.labeling.cve_labels import (
+    CVE_CACHE_SCHEMA_VERSION,
+    EVIDENCE_NOT_FOUND,
+    EVIDENCE_STATES,
     LABEL_CRITICAL_CVE,
     LABEL_INDETERMINATE,
     LABEL_KNOWN_CVE,
@@ -29,6 +32,7 @@ from src.labeling.cve_labels import (
     CveLabelThresholds,
     aggregate_cve_scores,
     applicable_cves_for_version,
+    effective_evidence_state,
     label_from_cve_stats,
 )
 from src.run_metadata import code_commit, file_sha256
@@ -56,6 +60,7 @@ class AliasEvaluation:
     applicable: list[dict[str, Any]]
     indeterminate: list[dict[str, Any]]
     version_source: str | None
+    evidence_state: str
 
 
 def _cache_key(row: dict[str, Any]) -> str:
@@ -73,14 +78,20 @@ def _cache_key(row: dict[str, Any]) -> str:
 
 
 def _validate_cache_entry(key: str, entry: object) -> dict[str, Any]:
-    """Exige lista de CVEs, schema_version 3 e fetched_at na entrada do cache."""
+    """Exige cache v4 completo antes da etapa de aplicabilidade por versão."""
     if not isinstance(entry, dict) or not isinstance(entry.get("cves"), list):
         raise ValueError(f"Resultado CVE inválido no cache para {key}")
-    if entry.get("schema_version") != 3:
-        raise ValueError(f"Versão de schema inválida no cache para {key}")
+    if entry.get("schema_version") != CVE_CACHE_SCHEMA_VERSION:
+        raise ValueError(f"schema_version inválido para {key} na etapa de rotulagem")
     fetched_at = entry.get("fetched_at")
     if not isinstance(fetched_at, str) or not fetched_at.strip():
         raise ValueError(f"fetched_at ausente no cache para {key}")
+    if not isinstance(entry.get("queries"), list):
+        raise ValueError(f"queries ausentes para {key} na etapa de rotulagem")
+    if not isinstance(entry.get("cpe_candidates"), list):
+        raise ValueError(f"cpe_candidates ausentes para {key} na rotulagem")
+    if entry.get("evidence_state") not in EVIDENCE_STATES:
+        raise ValueError(f"evidence_state inválido para {key} na rotulagem")
     return entry
 
 
@@ -124,12 +135,13 @@ def _score_stats(cves: Iterable[dict[str, Any]]) -> dict[str, Any]:
 def _aggregate_firmware_label(
     alias_results: list[AliasEvidence],
     thresholds: CveLabelThresholds,
+    unknown_evidence: bool = False,
 ) -> tuple[str, dict[str, Any]]:
-    """Une as evidencias de todos os aliases e decide o rotulo por limites.
+    """Une evidências de aliases e só rotula quando ambos limites concordam.
 
-    O rotulo so e atribuido quando toda resolucao possivel das CVEs
-    indeterminadas leva a mesma classe. ``cve_total`` e ``cvss_max`` refletem
-    apenas as CVEs aplicaveis e, portanto, formam um limite inferior.
+    ``unknown_evidence`` deixa o limite superior ilimitado: pode existir
+    qualquer CVE em um alias sem produto encontrado. Apenas uma CVE crítica
+    já aplicável fixa a classe. As estatísticas refletem o limite inferior.
     """
     applicable_by_id, indeterminate_by_id = _merge_alias_evidence(alias_results)
     stats = _score_stats(applicable_by_id.values())
@@ -137,7 +149,10 @@ def _aggregate_firmware_label(
         chain(applicable_by_id.values(), indeterminate_by_id.values())
     )
     lower_bound_label = label_from_cve_stats(stats, thresholds)
-    upper_bound_label = label_from_cve_stats(upper_bound_stats, thresholds)
+    upper_bound_label = (
+        LABEL_CRITICAL_CVE if unknown_evidence
+        else label_from_cve_stats(upper_bound_stats, thresholds)
+    )
     if lower_bound_label == upper_bound_label:
         return lower_bound_label, stats
     return LABEL_INDETERMINATE, stats
@@ -150,6 +165,7 @@ def _build_label_record(
     version_source: str | None,
     label_strategy: str,
     alias_count: int,
+    evidence_reason: str | None = None,
 ) -> dict[str, Any]:
     """Monta registro auditável sem features estatísticas ou semânticas."""
     return {
@@ -163,6 +179,7 @@ def _build_label_record(
         "cve_total": cve_stats["cve_total"],
         "cvss_max": cve_stats.get("cvss_max", 0.0),
         "label_strategy": label_strategy,
+        "evidence_reason": evidence_reason,
         "alias_count": alias_count,
     }
 
@@ -270,7 +287,10 @@ def _evaluate_alias(row: dict[str, Any], cache: dict[str, Any]) -> AliasEvaluati
     applicable, indeterminate = applicable_cves_for_version(
         _none_if_missing(row.get("meta_version")), entry
     )
-    return AliasEvaluation(row, applicable, indeterminate, version_source)
+    return AliasEvaluation(
+        row, applicable, indeterminate, version_source,
+        effective_evidence_state(entry),
+    )
 
 
 def _group_indexes_by_firmware(
@@ -292,6 +312,7 @@ def _alias_summary(alias: AliasEvaluation) -> dict[str, Any]:
         "version": _none_if_missing(alias.row["meta_version"]),
         "applicable_cves": sorted({_cve_id(c) for c in alias.applicable}),
         "indeterminate_cves": sorted({_cve_id(c) for c in alias.indeterminate}),
+        "evidence_state": alias.evidence_state,
     }
 
 
@@ -304,14 +325,18 @@ def _label_firmware(
 
     Retorna (registros do CSV, um por alias, registro do JSONL de aliases).
     """
+    unknown = any(alias.evidence_state == EVIDENCE_NOT_FOUND for alias in aliases)
     label, stats = _aggregate_firmware_label(
-        [(alias.applicable, alias.indeterminate) for alias in aliases], thresholds
+        [(alias.applicable, alias.indeterminate) for alias in aliases],
+        thresholds, unknown_evidence=unknown,
     )
+    reason = EVIDENCE_NOT_FOUND if unknown else None
     strategy = STRATEGY_SINGLE_ALIAS if len(aliases) == 1 else STRATEGY_CONSERVATIVE
     alias_summaries = [_alias_summary(alias) for alias in aliases]
     records = [
         _build_label_record(
-            alias.row, stats, label, alias.version_source, strategy, len(aliases)
+            alias.row, stats, label, alias.version_source, strategy, len(aliases),
+            reason,
         )
         for alias in aliases
     ]
@@ -320,6 +345,7 @@ def _label_firmware(
         "label_strategy": strategy,
         "versions_differ": len({alias["version"] for alias in alias_summaries}) > 1,
         "aliases": alias_summaries,
+        "evidence_reason": reason,
     }
     return records, alias_record
 
