@@ -394,24 +394,79 @@ def _fold_rows(
 
 
 def _run_parameters(
-    model: str, classes: tuple[str, ...], config: TrainingConfig, seed: int
+    model: str, classes: tuple[str, ...], hyperparameters: dict[str, Any] | None,
+    class_weight: str | None, seed: int,
 ) -> dict[str, Any]:
     """Forma configuração canônica com parâmetros de estimador quando cabíveis."""
     parameters: dict[str, Any] = {"target": c.TARGET_COLUMN, "classes": classes}
     if model in (*TREE_MODELS, "identidade"):
         parameters.update(
-            hyperparameters=config.hyperparameters,
-            class_weight=config.class_weight,
+            hyperparameters=hyperparameters,
+            class_weight=class_weight,
             seed=seed,
         )
     return parameters
 
 
-def train_run(
+@dataclass(frozen=True)
+class PreparedRun:
+    """Contém identidade, entradas e dados de uma execução ainda não treinada."""
+
+    run_id: str
+    model: str
+    experiment: str
+    scheme: str
+    classes: tuple[str, ...]
+    selected: list[str]
+    purpose: str
+    seed: int
+    data: TrainingData
+    table: pd.DataFrame
+    features: pd.DataFrame | None
+    levels: pd.Series | None
+    inputs: dict[str, dict[str, str]]
+    extra: dict[str, Any]
+
+
+def _model_inputs(
+    model: str, config: TrainingConfig, data: TrainingData, table: pd.DataFrame,
+    selected: list[str],
+) -> tuple[
+    pd.DataFrame | None, pd.Series | None, dict[str, dict[str, str]], dict[str, Any]
+]:
+    """Monta features, níveis do score, hashes de entrada e campos extras.
+
+    Retorna (features, levels, inputs, extra); levels só existe no BR.
+    """
+    inputs = dict(data.inputs)
+    if model in TREE_MODELS:
+        return table[selected].astype("float64"), None, inputs, {}
+    if model == "identidade":
+        identity = identity_features(data.fold_set.provenance, table.index)
+        return identity, None, inputs, {}
+    if model != "score_firmware":
+        return None, None, inputs, {}
+    rows, source, t13a = load_scoring_features(
+        config.processed_dir, table.index.tolist()
+    )
+    scoring_source = {
+        "path": str(config.scoring_config),
+        "sha256": file_sha256(config.scoring_config),
+    }
+    inputs.update(features=source, scoring_config=scoring_source)
+    extra = {"scoring_config": scoring_source, "t13a_columns_read": t13a}
+    levels = score_firmware_levels(rows, load_scoring_config(config.scoring_config))
+    return rows, levels, inputs, extra
+
+
+def prepare_run(
     model: str, experiment: str, scheme: str, columns: list[str] | None,
-    config: TrainingConfig, force: bool = False,
-) -> Path:
-    """Executa uma experiência no corpus congelado e salva artefatos rastreáveis."""
+    config: TrainingConfig,
+) -> PreparedRun:
+    """Valida a experiência, lê o corpus congelado e calcula o run_id sem treinar.
+
+    Levanta ValueError para esquema, modelo, experimento ou colunas inválidos.
+    """
     if scheme != "grouped":
         raise ValueError(
             f"esquema não suportado: {scheme}; random é B6 Proposto (010/FR-016)"
@@ -423,33 +478,55 @@ def train_run(
     classes = target_for_experiment(experiment, config)
     data = load_inputs(config)
     selected = resolve_columns(columns, data.columns_vector)
-    full = selected == data.columns_vector
-    purpose = purpose_for(model, full)
+    purpose = purpose_for(model, selected == data.columns_vector)
     table = data.fold_set.table.set_index(c.KEY_COLUMN)
-    features = None
-    levels = None
-    inputs = dict(data.inputs)
-    extra: dict[str, Any] = {}
-    if model in TREE_MODELS:
-        features = table[selected].astype("float64")
-    elif model == "identidade":
-        features = identity_features(data.fold_set.provenance, table.index)
-    elif model == "score_firmware":
-        rows, source, t13a = load_scoring_features(
-            config.processed_dir, table.index.tolist()
-        )
-        scoring_hash = file_sha256(config.scoring_config)
-        scoring_source = {"path": str(config.scoring_config), "sha256": scoring_hash}
-        inputs.update(features=source, scoring_config=scoring_source)
-        extra = {"scoring_config": scoring_source, "t13a_columns_read": t13a}
-        levels = score_firmware_levels(
-            rows, load_scoring_config(config.scoring_config)
-        )
-        features = rows
-    return _execute_folds(
-        model, experiment, scheme, selected, config, force, data, table,
-        features, levels, inputs, purpose, extra, classes,
+    features, levels, inputs, extra = _model_inputs(
+        model, config, data, table, selected
     )
+    seed = int(data.fold_set.meta["seeds"][0])
+    canonical = _run_parameters(
+        model, classes, config.hyperparameters, config.class_weight, seed
+    )
+    run_id = compute_run_id(
+        model, experiment, scheme, selected, canonical,
+        {name: value["sha256"] for name, value in inputs.items()},
+    )
+    return PreparedRun(
+        run_id, model, experiment, scheme, classes, selected, purpose, seed,
+        data, table, features, levels, inputs, extra,
+    )
+
+
+def train_run(
+    model: str, experiment: str, scheme: str, columns: list[str] | None,
+    config: TrainingConfig, force: bool = False,
+) -> Path:
+    """Executa uma experiência no corpus congelado e salva artefatos rastreáveis."""
+    return execute_run(
+        prepare_run(model, experiment, scheme, columns, config), config, force
+    )
+
+
+def run_id_from_meta(meta: dict[str, Any]) -> str:
+    """Recalcula o run_id a partir dos parâmetros registrados no run.meta.json.
+
+    Levanta ValueError quando falta campo necessário ao recálculo.
+    """
+    try:
+        classes = tuple(meta["config"]["experiments"][meta["experiment"]]["classes"])
+        canonical = _run_parameters(
+            meta["model"], classes, meta["hyperparameters"], meta["class_weight"],
+            int(meta["seeds"][0]),
+        )
+        return compute_run_id(
+            meta["model"], meta["experiment"], meta["scheme"], meta["columns"],
+            canonical, {key: value["sha256"] for key, value in meta["inputs"].items()},
+        )
+    except (KeyError, TypeError, IndexError) as exc:
+        raise ValueError(
+            "run.meta.json incompleto para recalcular o run_id "
+            f"{meta.get('run_id')}: {exc}"
+        ) from exc
 
 
 def _run_metadata(
@@ -473,35 +550,26 @@ def _run_metadata(
     }
 
 
-def _execute_folds(
-    model: str, experiment: str, scheme: str, selected: list[str],
-    config: TrainingConfig, force: bool, data: TrainingData, table: pd.DataFrame,
-    features: pd.DataFrame | None, levels: pd.Series | None,
-    inputs: dict[str, dict[str, str]], purpose: str, extra: dict[str, Any],
-    classes: tuple[str, ...],
+def execute_run(
+    prepared: PreparedRun, config: TrainingConfig, force: bool = False
 ) -> Path:
-    """Agrega folds, constrói identidade do run e persiste a execução."""
-    seed = int(data.fold_set.meta["seeds"][0])
+    """Treina ou aplica o modelo em todos os folds e persiste a execução."""
     params = {
         "hyperparameters": config.hyperparameters,
         "class_weight": config.class_weight,
     }
-    canonical = _run_parameters(model, classes, config, seed)
-    run_id = compute_run_id(
-        model, experiment, scheme, selected, canonical,
-        {name: value["sha256"] for name, value in inputs.items()},
-    )
-    save_model = model in TREE_MODELS and purpose != "ablation"
+    model, features = prepared.model, prepared.features
+    save_model = model in TREE_MODELS and prepared.purpose != "ablation"
     predictions = []
     records = []
     models: dict[str, Pipeline] = {}
-    used_columns = list(features.columns) if features is not None else selected
-    for _, frame in data.fold_set.folds.groupby(["repeat", "fold"], sort=True):
+    used_columns = list(features.columns) if features is not None else prepared.selected
+    for _, frame in prepared.data.fold_set.folds.groupby(["repeat", "fold"], sort=True):
         rows, record, pipeline = _fold_rows(
-            frame, table, classes, model, used_columns, params,
-            features, levels, save_model,
+            frame, prepared.table, prepared.classes, model, used_columns, params,
+            features, prepared.levels, save_model,
         )
-        rows["purpose"] = purpose
+        rows["purpose"] = prepared.purpose
         predictions.append(rows)
         records.append(record)
         if pipeline is not None:
@@ -512,7 +580,8 @@ def _execute_folds(
         .reset_index(drop=True)
     )
     meta = _run_metadata(
-        run_id, model, purpose, experiment, scheme, selected, config,
-        seed, inputs, records, extra,
+        prepared.run_id, model, prepared.purpose, prepared.experiment,
+        prepared.scheme, prepared.selected, config, prepared.seed, prepared.inputs,
+        records, prepared.extra,
     )
-    return write_run(config.output_dir, run_id, result, meta, models, force)
+    return write_run(config.output_dir, prepared.run_id, result, meta, models, force)
