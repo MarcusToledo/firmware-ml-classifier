@@ -1,168 +1,188 @@
-# Classificação de Firmware (TCC)
+<p align="center">
+  <img src="./assets/readme/hero.svg" width="100%" alt="firmware-ml-classifier: classifica imagens de firmware de roteadores pela exposição conhecida a CVEs, sem executar o binário. Corpus congelado de 504 imagens: 346 sem CVE conhecida, 55 com CVE conhecida, 103 com CVE crítica.">
+</p>
 
-## Visão geral
-Este repositório corresponde a um Trabalho de Conclusão de Curso (TCC)
-de Engenharia de Software focado em classificação automatizada de
-firmwares embarcados usando análise estática e aprendizado de máquina.
+Trabalho de Conclusão de Curso (Engenharia de Software). O classificador recebe
+uma imagem de firmware de roteador, extrai features por **análise estática** e
+prevê uma de três classes de **exposição conhecida declarada**:
 
-## Objetivos
-- Classificar firmwares por classe de vulnerabilidade conhecida: `sem_cve_conhecida`,
-  `cve_conhecida` ou `cve_critica`. A ausência de CVE conhecida não prova segurança.
-- Gerar rótulos apenas a partir do cache de CVE consultado por fabricante/modelo.
-- Extrair features estatísticas, strings ASCII e evidências de segurança, sem incluir
-  fabricante/modelo nem campos CVE no vetor do classificador. O Doc2Vec existe no
-  código, mas fica fora do núcleo e da entrega mínima do TCC.
-- Comparar Extra Trees (modelo principal), Random Forest (baseline ML) e o
-  baseline determinístico de regras de `src/scoring.py`. A escolha dos modelos
-  ainda está a definir.
+| Classe | Critério do rótulo |
+|---|---|
+| `sem_cve_conhecida` | nenhuma CVE aplicável ao produto |
+| `cve_conhecida` | CVSS máximo < 9,0 |
+| `cve_critica` | CVSS máximo ≥ 9,0 |
 
-## Pipeline experimental
-1. Organizar o dataset e preservar fabricante/modelo como metadados de consulta.
-2. Extrair features estatísticas, strings, evidências estruturadas e Binwalk.
-3. (Fora da entrega mínima) Treinar embeddings Doc2Vec (DM/DBOW) por firmware.
-4. Consultar CVEs por fabricante/modelo e gerar rótulos em etapa separada.
-5. Treinar e avaliar os modelos supervisionados com rótulos CVE, sem vazamento.
-6. Gerar métricas e relatórios reprodutíveis.
+O rótulo é um proxy de CVE/CPE publicada para fabricante, modelo e versão, não
+vulnerabilidade confirmada. **Ausência de CVE conhecida não prova segurança.**
+Quando a aplicabilidade de uma CVE não se decide pela versão, o firmware fica
+`indeterminado`: sai do treino e aparece nos relatórios, por fabricante.
 
-## Como executar
-Instalar dependências (cria `.venv` e resolve a partir de `pyproject.toml`/`uv.lock`):
-- `uv sync`
+## Corpus
 
-Instalar incluindo ferramentas de desenvolvimento (pytest, ruff, black, mypy, pre-commit):
-- `uv sync --extra dev`
+Corpus congelado antes de qualquer treino:
 
-O modo editável e os comandos de CLI (`train-doc2vec`, `extract-features`, `inspect-tokens`, `generate-labels`) já ficam disponíveis dentro do `.venv` após o `uv sync`, sem passo separado de instalação.
+| Medida | Valor |
+|---|---|
+| Imagens no treino | 504 (346 / 55 / 103 por classe) |
+| Componentes conectados `firmware_id`–modelo | 193 |
+| Fabricantes | ASUS, Belkin, D-Link, Netgear, TP-Link |
+| Features no vetor B2 | 32 colunas de conteúdo |
+| Excluídas (motivos sobrepostos) | 34 falha de extração, 28 de terceiros, 156 `indeterminado` |
 
-Treinar Doc2Vec (treino separado):
-- `uv run python scripts/train_doc2vec.py --config configs/feature_extraction.yaml --input dataset/raw/`
+As imagens de firmware não fazem parte do repositório.
 
-Treinar Doc2Vec via CLI instalada:
-- `uv run train-doc2vec --config configs/feature_extraction.yaml --input dataset/raw/`
+## Como funciona
 
-Extrair features (Doc2Vec desligado por padrão, sem colunas `doc2vec_*`):
-- `uv run python scripts/extract_features.py --config configs/feature_extraction.yaml --input dataset/raw/ --output dataset/processed/features.parquet`
+<p align="center">
+  <img src="./assets/readme/workflow.svg" width="100%" alt="Pipeline em duas trilhas separadas por uma barreira: a imagem de firmware passa por extração estática e vira o vetor B2 de 32 colunas; fabricante, modelo e versão consultam o cache da NVD e geram o rótulo. As trilhas se juntam na tabela de treino, dividida em 5 folds agrupados por componente; Extra Trees é comparado a Random Forest e aos baselines B0, B1 e BR.">
+</p>
 
-Extrair features com embeddings (requer `models/doc2vec.model`):
-- `uv run python scripts/extract_features.py --config configs/feature_extraction.yaml --input dataset/raw/ --output dataset/processed/features.parquet --override doc2vec.enabled=true`
+- **Somente estática.** Desempacota a imagem (`binwalk`, `unsquashfs`) e lê
+  bytes, strings ASCII e cabeçalhos ELF. Nenhum binário é emulado ou executado.
+  Leituras têm limite `max_bytes` e falhas ficam registradas por arquivo.
+- **Rótulo externo.** O rótulo vem só do cache local de CVEs da NVD, consultado
+  por fabricante/modelo e filtrado pela versão. Consulta ausente no cache é erro,
+  não `sem_cve_conhecida`.
+- **Sem vazamento.** Fabricante, modelo, versão e campos derivados de CVE nunca
+  entram no vetor. Os folds agrupam todas as versões de um modelo e todas as
+  ocorrências do mesmo `firmware_id`.
+- **Comparadores.** O conteúdo do binário também carrega identidade (cabeçalhos,
+  SDK). Por isso o modelo é comparado a B1, que só vê o fabricante.
 
-Extrair features via CLI instalada:
-- `uv run extract-features --config configs/feature_extraction.yaml --input dataset/raw/ --output dataset/processed/features.parquet`
+### Modelos e baselines
 
-> **`--findings-output`**: grava os achados de segurança estruturados (`SecurityFinding`)
-> em JSONL, um por linha, correlacionáveis ao `features.parquet` via `firmware_id` (ex.:
-> `... --findings-output dataset/processed/findings.jsonl`). Opcional, sem essa flag,
-> os achados são calculados mas descartados, só as contagens/flags (`count_*`/`has_*`)
-> vão para o `features.parquet`.
+| Braço | Papel | Entrada |
+|---|---|---|
+| Extra Trees | modelo reportado (B2) | 32 colunas de conteúdo |
+| Random Forest | baseline de ML | mesmas 32 colunas |
+| B0 `majoritario` | baseline | nenhuma; prevê a classe majoritária do treino |
+| B1 `identidade` | diagnóstico | one-hot do fabricante |
+| BR `score_firmware` | baseline de regras fixas | sinais extraídos; ver [`docs/SCORING.md`](docs/SCORING.md) |
 
-> **`--label-from-path`**: para montar o dataset de treino, adicione essa flag aos comandos
-> acima (ex.: `... --output dataset/processed/features.parquet --label-from-path`).
-> O pipeline infere `brand`/`model` a partir do caminho
-> `dataset/raw/<brand>/<model>/...`, mas o CLI omite esses metadados por padrão.
-> A flag é necessária para consultar CVEs. Sem metadados ou sem entrada no cache,
-> `generate-labels` falha com contexto; não inventa um rótulo negativo.
+**Estado.** Os cinco braços já foram treinados nos folds congelados. A avaliação
+final, com Δ macro-F1 (B2 − B1), intervalo de confiança por bootstrap pareado
+por componente, ablações e importância de features, está em andamento. Este
+README não publica métricas antes dela.
 
-Gerar cache de CVEs por fabricante/modelo (obrigatório para rotulagem):
-- `uv run python scripts/fetch_cves.py --features dataset/processed/features.parquet`
-- Sem `--output`, grava `dataset/processed/cve_cache_v2.json` e
-  `dataset/processed/cve_cache_v2.meta.json`; entrada com schema antigo exige `--force`.
-- Usa a API pública da NVD v2.0; sem `NVD_API_KEY` no ambiente, o delay entre requisições é de
-  6s (1s com a key). Pares já presentes no cache são pulados automaticamente (use `--force`
-  para refazer). `--dry-run` lista os pares vendor/model sem fazer requisições.
+## Início rápido
 
-Gerar rótulos a partir do cache de CVEs:
-- `uv run python scripts/generate_labels.py --features dataset/processed/features.parquet --cves dataset/processed/cve_cache_v2.json`
-- Sem `--output`, grava `dataset/processed/labels_v2.csv`. Ao lado da tabela ficam
-  `<nome>_aliases.jsonl` (aliases e CVEs aplicáveis/indeterminadas por alias) e
-  `<nome>.meta.json` (limiar, SHA256 das entradas, commit do código e data).
-- `--critical-cvss` ajusta o limiar crítico (padrão: 9.0); `--dry-run` mostra a
-  distribuição sem salvar. As features são lidas apenas para obter IDs e metadados;
-  a tabela precisa de `meta_version_source` e o cache precisa de `schema_version: 3`
-  com `fetched_at`.
-- O cache é consultado por fabricante/modelo; a versão do firmware é filtrada na
-  rotulagem, e CVEs cuja aplicabilidade não se decide ficam indeterminadas.
+Requer Python ≥ 3.9, [`uv`](https://docs.astral.sh/uv/) e `binwalk` no `PATH`.
 
-Montar a tabela de treino:
-- `uv run python scripts/build_dataset.py` (ou `uv run build-dataset`); lê
-  `configs/dataset.yaml` e aceita `--features`, `--labels`, `--output-dir` e
-  `--override chave=valor`.
-- Junta `features_v2.parquet` e só `security_level` de `labels_v2.csv` por
-  `firmware_id`; exclui IDs com falha de extração, firmware de terceiros ou rótulo
-  `indeterminado`; troca `fs_type`/`compression_type` por one-hot de lista fixa.
-  Interrompe sem gravar em estado transitório ou desconhecido, IDs sem par ou
-  `features_sha256` divergente do `labels_v2.meta.json`.
-- Grava em `dataset/processed/`: `training_table.parquet`,
-  `training_table_exclusions.csv` (motivos e fabricantes),
-  `training_table_provenance.jsonl` (aliases por ID) e `training_table.meta.json`
-  (SHA256 de entradas e saídas, colunas do vetor, contagens, commit).
-- `uv run python scripts/validate_dataset.py` (ou `uv run validate-dataset`) confere
-  esses artefatos (IDs únicos, vetor sem colunas proibidas ou de texto, classes,
-  hashes, colunas) e lista firmwares de `dataset/raw/` ausentes das features.
+```bash
+uv sync --extra dev
+uv run pytest
+```
 
-Inspecionar tokens usados no Doc2Vec:
-- `uv run python scripts/inspect_tokens.py --config configs/feature_extraction.yaml --input dataset/raw/ --limit 50 --max-docs 20`
+Pipeline completo, com as imagens em `dataset/raw/<fabricante>/<modelo>/`:
 
-Inspecionar tokens via CLI instalada:
-- `uv run inspect-tokens --config configs/feature_extraction.yaml --input dataset/raw/ --limit 50 --max-docs 20`
+```bash
+# 1. Features estáticas (metadados de consulta a partir do caminho)
+uv run python scripts/extract_features.py --input dataset/raw/ \
+  --output dataset/processed/features_v2.parquet --label-from-path
 
-Limite de leitura por firmware:
-- configurado em `configs/feature_extraction.yaml` via `max_bytes`.
+# 2. Cache de CVEs da NVD (única etapa com rede; NVD_API_KEY opcional)
+uv run python scripts/fetch_cves.py --features dataset/processed/features_v2.parquet
 
-Testes (requer `uv sync --extra dev`):
-- `uv run pytest`
-- `uv run pytest tests/path::test_name`
+# 3. Rótulos a partir do cache
+uv run python scripts/generate_labels.py \
+  --features dataset/processed/features_v2.parquet \
+  --cves dataset/processed/cve_cache_v2.json
 
-## Qualidade de codigo
+# 4. Tabela de treino, validação, folds agrupados e congelamento
+uv run python scripts/build_dataset.py
+uv run python scripts/validate_dataset.py
+uv run python scripts/make_folds.py
+uv run python scripts/freeze_corpus.py
 
-Instalar ferramentas de desenvolvimento:
-- `uv sync --extra dev`
+# 5. Treino dos cinco braços e métricas OOF por run_id
+uv run python scripts/train.py --model all --experiment principal --scheme grouped
+uv run python scripts/compute_metrics.py --run-id <run_id> [--run-id ...]
+```
 
-Configurar pre-commit:
-- `uv run pre-commit install`
+Do cache de CVEs em diante, os artefatos registram proveniência (hashes,
+configuração, commit) em `.meta.json` ou, no congelamento, em
+`corpus.freeze.json`. Os parâmetros vêm de
+`configs/*.yaml`; as etapas com `--override chave=valor` aceitam ajuste
+registrado na linha de comando. A semente da partição é fixa em
+`configs/dataset.yaml`.
 
-Rodar manualmente:
-- `uv run ruff check .`
-- `uv run black .`
-- `uv run mypy src/`
+<details>
+<summary><strong>Detalhes das etapas</strong></summary>
 
-Atualizar/travar dependências:
-- `uv add <pacote>` — adiciona dependência de produção (atualiza `pyproject.toml` e `uv.lock`).
-- `uv add --optional dev <pacote>` — adiciona dependência de desenvolvimento.
-- `uv remove <pacote>` — remove dependência.
-- `uv lock --upgrade` — atualiza versões travadas no `uv.lock` sem mudar o `pyproject.toml`.
+**Extração.** `--findings-output dataset/processed/findings.jsonl` grava os
+achados estruturados (`SecurityFinding`) em JSONL, ligados às features por
+`firmware_id`; sem a flag só as contagens `count_*`/`has_*` vão para a tabela.
+`--label-from-path` é obrigatório para a rotulagem: sem `meta_brand`/`meta_model`,
+`generate_labels.py` falha com contexto em vez de inventar rótulo negativo.
+`--workers 1` força execução sequencial.
 
-## API Interna
+**Cache de CVEs.** Sem `NVD_API_KEY` o intervalo entre requisições é de 6 s
+(1 s com a chave). Pares já em cache são pulados (`--force` refaz); `--dry-run`
+lista os pares sem rede. Grava `cve_cache_v2.json` e `cve_cache_v2.meta.json`.
 
-src/io_utils:
-- `read_binary`: leitura segura de binarios com limite opcional.
-- `normalize_binary`: validacao de tipo para bytes.
+**Rótulos.** Grava `labels_v2.csv`, `labels_v2_aliases.jsonl` (CVEs aplicáveis e
+indeterminadas por alias) e `labels_v2.meta.json`. `--critical-cvss` muda o
+limiar (padrão 9.0); `--dry-run` mostra a distribuição sem salvar.
 
-src/features/statistics:
-- `shannon_entropy`, `byte_mean`, `compress_ratio`: features estatisticas.
+**Tabela de treino.** `build_dataset.py` lê `configs/dataset.yaml`, junta
+features e `security_level` por `firmware_id`, exclui falhas de extração,
+firmware de terceiros e `indeterminado`, e troca `fs_type`/`compression_type`
+por one-hot de lista fixa. Interrompe sem gravar diante de IDs sem par ou hash
+divergente. `validate_dataset.py` confere IDs, colunas proibidas, classes e
+hashes.
 
-src/features/strings:
-- `extract_ascii_strings`: extracao de strings ASCII.
-- `limit_strings`, `strings_to_document`, `tokenize_document`: processamento de texto.
+**Partição e congelamento.** `make_folds.py` gera 5 folds agrupados por
+componente conectado; `freeze_corpus.py` grava `corpus.freeze.json`, e o treino
+recusa folds ou tabela que divirjam dele. `describe_prevalence.py` descreve a
+prevalência dos detectores no corpus congelado.
 
-src/features/doc2vec:
-- `build_corpus`, `train_doc2vec`: treino de Doc2Vec.
-- `infer_embedding`: inferencia de embeddings.
-- `save_doc2vec`, `load_doc2vec`: persistencia de modelos.
+**Treino.** `train.py` grava cada braço em `models/runs/<run_id>/` e recusa
+sobrescrita sem `--force`. `--columns-file` treina um subconjunto de colunas
+(ablações). `compute_metrics.py` grava `metrics.csv`, `metrics_per_class.csv` e
+`confusion.csv` em `reports/<timestamp>/`.
 
-src/evidence:
-- `SecurityFinding`: achado auditável com origem, contexto, confiança e detector.
-- `scan_strings_findings`: achados em strings ASCII já extraídas.
-- `find_crypto_signatures`, `find_encrypted_sections`: achados de Binwalk.
+**Doc2Vec.** O código de Doc2Vec (`scripts/train_doc2vec.py`,
+`scripts/inspect_tokens.py`) existe, mas é trabalho futuro: fica fora do vetor
+reportado e desligado por padrão na extração (`doc2vec.enabled=false`).
 
-src/labeling/cve_labels:
-- `label_from_cve_stats`: converte estatísticas CVE externas em classe de treino.
+</details>
 
-src/scoring:
-- `score_firmware`: baseline determinístico de comparação, sem campos CVE.
+<details>
+<summary><strong>Estrutura do repositório</strong></summary>
 
-src/feature_extraction:
-- `extract_features`: extracao completa (stats + embedding).
-- `combine_features`: conversao para dicionario plano.
+| Caminho | Conteúdo |
+|---|---|
+| `pipeline/` | orquestração da extração por imagem |
+| `src/features/` | estatística de bytes, strings ASCII, binwalk, filesystem, ELF desempacotado |
+| `src/evidence/` | detectores de strings e achados estruturados (`SecurityFinding`) |
+| `src/labeling/` | rótulo a partir do cache de CVEs e casamento de versão |
+| `src/dataset/` | tabela de treino, validação, partição, congelamento, prevalência |
+| `src/models/` | treino de Extra Trees, Random Forest e baselines |
+| `src/evaluation/` | leitura de execuções e métricas OOF |
+| `src/scoring.py` | baseline de regras BR |
+| `scripts/` | uma CLI por etapa do pipeline |
+| `configs/` | parâmetros versionados de cada etapa |
+| `tests/` | pytest, incluindo a guarda de vazamento do vetor |
 
-pipeline/feature_extraction:
-- `load_pipeline_config`: carregamento de YAML com overrides.
-- `extract_features_from_path`, `extract_features_batch`: pipeline de extracao.
+</details>
+
+## Qualidade de código
+
+```bash
+uv run pre-commit install
+uv run ruff check .
+uv run black --check .
+uv run mypy src/
+```
+
+Dependências ficam em `pyproject.toml` e `uv.lock` (`uv add`, `uv add --optional dev`,
+`uv lock --upgrade`).
+
+## Documentação
+
+- [`docs/PIPELINE.md`](docs/PIPELINE.md): etapas, artefatos e decisões do pipeline.
+- [`docs/SCORING.md`](docs/SCORING.md): baseline de regras BR.
+
+## Licença
+
+[GPL-3.0](LICENSE).

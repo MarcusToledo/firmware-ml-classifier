@@ -23,7 +23,7 @@ graph TD
   FW["Firmware bruto"]
 
   subgraph EXT["Extração compartilhada · src/features/"]
-    STATS["stats.py<br/>entropia, byte_mean, compress_ratio"]
+    STATS["statistics.py<br/>entropia, byte_mean, compress_ratio"]
     STR["strings.py<br/>strings ASCII"]
     D2V["doc2vec.py<br/>embeddings"]
     BW["binwalk.py<br/>filesystem, compressão"]
@@ -128,12 +128,12 @@ firmware de novo.
 
 - `src/evidence/findings.py` define `SecurityFinding` (type, source,
   context, confidence, detector, detector_version)
-- `src/evidence/patterns.py`: 8 detectores (credenciais, IPs, serviços
+- `src/evidence/patterns.py`: 11 detectores (credenciais, IPs, serviços
   expostos, libs desatualizadas, URLs, tokens)
 - `src/evidence/binwalk_findings.py`: assinaturas de cripto e seções
   criptografadas
 - `scripts/extract_features.py --findings-output` grava os achados em
-  JSONL, correlacionáveis ao `features.parquet` por `firmware_id`
+  JSONL, correlacionáveis ao `features_v2.parquet` por `firmware_id`
 
 ### 3. Rotulagem por CVE
 
@@ -196,8 +196,8 @@ exclusão, o one-hot e os metadados estão no `README.md`.
   `indeterminado` quando divergem. `cve_total` e `cvss_max` sempre
   descrevem apenas `A`, portanto são limites inferiores. Par
   fabricante/modelo ausente no cache gera erro. O arquivo `labels_v2.csv`
-  mantém o estado `indeterminado`, que deve ser excluído pelo futuro
-  código de treino. `label_strategy` (`alias_unico` ou
+  mantém o estado `indeterminado`, que `src/dataset/training_table.py`
+  exclui do conjunto de treino. `label_strategy` (`alias_unico` ou
   `agregacao_conservadora`) e `alias_count` registram a agregação.
 - Artefatos (padrão `dataset/processed/labels_v2.csv`): a tabela;
   `labels_v2_aliases.jsonl`, uma linha por `firmware_id` com os aliases,
@@ -267,7 +267,7 @@ determinístico. Eles nunca alteram o rótulo de treino.
 ## Estado real do dataset (`labels_v2.csv` de 2026-09-23)
 
 O `labels_v2.csv` foi gerado de `dataset/processed/features_v2.parquet` e
-`dataset/cve_cache_v2.json`: 840 linhas e 699 `firmware_id`. A comparação
+`dataset/processed/cve_cache_v2.json`: 840 linhas e 699 `firmware_id`. A comparação
 antes/depois da regra C + B1, da guarda B e da opção (b) do campo
 `update` é:
 
@@ -381,7 +381,7 @@ Artifact: https://claude.ai/artifact/Du4StfnEjSpDB2eyXN8LBn
 ## Referências
 
 - `AGENTS.md`: escopo científico e regras de integridade
-- `README.md`: comandos de CLI e API interna
+- `README.md`: comandos de CLI e estrutura do repositório
 - `docs/SCORING.md`: detalhe do baseline determinístico
 - [NVD CPE FAQ](https://nvd.nist.gov/general/faq-sections/cpe-faqs):
   critérios CPE, ranges e configurações de aplicabilidade

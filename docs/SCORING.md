@@ -10,13 +10,16 @@ por meio de `src/labeling/cve_labels.py` e `scripts/generate_labels.py`.
 Cada grupo presente produz um sub-score de 0 a 1. O score final é a média
 ponderada dos grupos presentes; grupos ausentes têm peso zero. Sem grupos
 presentes, o score é zero e a classe inicial é `sem_cve_conhecida`,
-independentemente dos limiares. Os parâmetros estão em `configs/scoring.yaml`.
+independentemente dos limiares. `configs/scoring.yaml` define pesos, limiares,
+níveis mínimos das regras e parâmetros dos sub-scores (faixas, fatores e
+saturações); `src/scoring.py` define os valores padrão dessas opções quando
+omitidas no YAML.
 
-| Grupo | Peso configurado | Sinais |
+| Grupo | Peso configurado | Sinais lidos pelo sub-score |
 |---|---:|---|
-| Stats | 0,10 | entropia, compressibilidade, média de bytes |
-| Strings | 0,30 | credenciais, IPs, bibliotecas desatualizadas |
-| Binwalk | 0,15 | seções cifradas, assinaturas, filesystem e compressão |
+| Stats | 0,10 | `entropy`, `compress_ratio`, `byte_mean` |
+| Strings | 0,30 | `count_hardcoded_passwords`, `count_credential_pairs`, `count_non_public_ips`, `count_public_ips`, `has_outdated_libssl`, `has_outdated_busybox`, `has_outdated_dropbear` |
+| Binwalk | 0,15 | `has_encrypted_sections`, `n_crypto_signatures`, `entropy_variance_across_sections`, `fs_type`, `compression_type`, `n_filesystems` |
 
 Os pesos preservam as razões relativas anteriores à remoção do sinal CVE.
 Quando os três grupos estão presentes, a implementação divide pela soma
@@ -41,21 +44,27 @@ participam do baseline nem do vetor do classificador. `meta_brand` e
 `meta_model` são metadados de consulta, não features. A guarda em
 `tests/test_pipeline_extraction.py` verifica essa separação.
 
-O cache de `scripts/fetch_cves.py` usa fabricante/modelo e atualmente não
-filtra a versão exata do firmware. Uma entrada ausente indica consulta
-incompleta, por isso `generate-labels` interrompe a execução em vez de
-atribuir `sem_cve_conhecida`.
+O cache de `scripts/fetch_cves.py` é consultado por fabricante/modelo; a
+aplicabilidade à versão do firmware é avaliada depois, na rotulagem por
+`src/labeling/cve_labels.py` e `scripts/generate_labels.py`. Quando as CVEs
+indeterminadas podem mudar a classe, o rótulo é `indeterminado`. Uma entrada
+ausente no cache indica consulta incompleta, por isso `generate_labels.py`
+interrompe a execução em vez de atribuir `sem_cve_conhecida`.
 
 ## Execução
 
 ```bash
 uv run python scripts/generate_labels.py \
-  --features dataset/processed/features.parquet \
+  --features dataset/processed/features_v2.parquet \
   --cves dataset/processed/cve_cache_v2.json \
   --output dataset/processed/labels_v2.csv
 ```
 
 Para consultar apenas a distribuição sem salvar, adicione `--dry-run`.
+O caminho de features corresponde ao `configs/dataset.yaml`; o cache CVE
+usa o caminho padrão de `scripts/fetch_cves.py` e a saída corresponde ao
+padrão de `scripts/generate_labels.py`.
+
 Para calcular o baseline em código:
 
 ```python
@@ -67,6 +76,11 @@ config = load_scoring_config(Path("configs/scoring.yaml"))
 result = score_firmware({"entropy": 7.5, "has_telnetd": True}, config)
 print(result.level, result.numeric_score, result.hard_rule_applied)
 ```
+
+No treino, `scripts/train.py --model score_firmware` executa o baseline nos
+folds congelados. Ele lê as features brutas, inclusive colunas retiradas do
+vetor do classificador na seleção de detectores, e as registra em
+`t13a_columns_read` nos metadados da execução; não usa o vetor selecionado.
 
 O baseline e os rótulos CVE precisam ser avaliados no mesmo conjunto de
 firmwares antes de qualquer afirmação de desempenho. Este documento não

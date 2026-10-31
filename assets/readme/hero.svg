@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="490" viewBox="0 0 1200 490" role="img" aria-labelledby="title desc">
+  <title id="title">firmware-ml-classifier</title>
+  <desc id="desc">Classifica imagens de firmware de roteadores pela exposição conhecida a CVEs, sem executar o binário. À direita, as três classes do corpus congelado: 346 sem CVE conhecida, 55 com CVE conhecida e 103 com CVE crítica, em 504 imagens. Abaixo, um exemplo ilustrativo de strings e assinaturas extraídas da imagem e da coluna do vetor de features que cada uma alimenta.</desc>
+
+  <rect width="1200" height="490" rx="24" fill="#101113"/>
+
+  <g id="title-block" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+    <text x="56" y="80" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" fill="#8b9099" letter-spacing="1">TCC · ANÁLISE ESTÁTICA · ML SUPERVISIONADO</text>
+    <text x="56" y="150" font-size="56" font-weight="700" fill="#f3efe7">firmware-ml-classifier</text>
+    <text x="56" y="200" font-size="24" fill="#c9c5bd">Classifica imagens de firmware de roteadores pela</text>
+    <text x="56" y="232" font-size="24" fill="#c9c5bd">exposição conhecida a CVEs, sem executar o binário.</text>
+  </g>
+
+  <g id="corpus" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18">
+    <text x="800" y="80" fill="#8b9099" letter-spacing="1">CORPUS · 504 IMAGENS</text>
+
+    <text x="800" y="122" fill="#d9d5cd">sem_cve_conhecida</text>
+    <text x="1144" y="122" fill="#d9d5cd" text-anchor="end">346</text>
+    <rect x="800" y="132" width="344" height="4" fill="#26282c"/>
+    <rect x="800" y="132" width="344" height="4" fill="#9aa0a6"/>
+
+    <text x="800" y="170" fill="#d9d5cd">cve_conhecida</text>
+    <text x="1144" y="170" fill="#d9d5cd" text-anchor="end">55</text>
+    <rect x="800" y="180" width="344" height="4" fill="#26282c"/>
+    <rect x="800" y="180" width="55" height="4" fill="#e8a33d"/>
+
+    <text x="800" y="218" fill="#d9d5cd">cve_critica</text>
+    <text x="1144" y="218" fill="#d9d5cd" text-anchor="end">103</text>
+    <rect x="800" y="228" width="344" height="4" fill="#26282c"/>
+    <rect x="800" y="228" width="102" height="4" fill="#e5484d"/>
+  </g>
+
+  <line x1="56" y1="276" x2="1144" y2="276" stroke="#2a2c30" stroke-width="2"/>
+
+  <g id="evidence" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+    <text x="56" y="314" font-size="18" fill="#8b9099" letter-spacing="1">EXEMPLO · STRING NA IMAGEM</text>
+    <text x="600" y="314" font-size="18" fill="#8b9099" letter-spacing="1">COLUNA DO VETOR</text>
+
+    <g font-size="20">
+      <text x="56" y="356" fill="#6b7078">0x00040</text>
+      <text x="200" y="356" fill="#e8a33d">hsqs</text>
+      <text x="560" y="356" fill="#6b7078">→</text>
+      <text x="600" y="356" fill="#f3efe7">fs_type__squashfs</text>
+      <text x="1144" y="356" fill="#6b7078" text-anchor="end" font-size="18">binwalk</text>
+
+      <text x="56" y="392" fill="#6b7078">0x4a1c0</text>
+      <text x="200" y="392" fill="#e8a33d">BusyBox v1.12.1</text>
+      <text x="560" y="392" fill="#6b7078">→</text>
+      <text x="600" y="392" fill="#f3efe7">has_outdated_busybox</text>
+      <text x="1144" y="392" fill="#6b7078" text-anchor="end" font-size="18">strings</text>
+
+      <text x="56" y="428" fill="#6b7078">0x4b2e8</text>
+      <text x="200" y="428" fill="#e8a33d">/usr/sbin/telnetd</text>
+      <text x="560" y="428" fill="#6b7078">→</text>
+      <text x="600" y="428" fill="#f3efe7">has_telnetd</text>
+      <text x="1144" y="428" fill="#6b7078" text-anchor="end" font-size="18">strings</text>
+
+      <text x="56" y="464" fill="#6b7078">0x7f010</text>
+      <text x="200" y="464" fill="#e8a33d">http://update.example.com</text>
+      <text x="560" y="464" fill="#6b7078">→</text>
+      <text x="600" y="464" fill="#f3efe7">count_urls</text>
+      <text x="1144" y="464" fill="#6b7078" text-anchor="end" font-size="18">strings</text>
+    </g>
+  </g>
+</svg>
