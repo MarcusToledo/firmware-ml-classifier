@@ -9,7 +9,11 @@ import pandas as pd
 
 from src.dataset import contract as c
 from src.dataset.partition import normalize_key
-from src.dataset.training_table import collapse_aliases, input_feature_columns
+from src.dataset.training_table import (
+    collapse_aliases,
+    input_feature_columns,
+    read_features,
+)
 from src.run_metadata import file_sha256
 from src.scoring import ScoringConfig, score_firmware
 
@@ -39,7 +43,8 @@ def load_scoring_features(
 ) -> tuple[pd.DataFrame, dict[str, str], list[str]]:
     """Lê features brutas verificadas e reúne os detectores T13-A lidos.
 
-    Levanta ValueError quando a fonte diverge do SHA256 registrado pela 008.
+    Levanta ValueError quando a fonte diverge do SHA256 registrado pela 008 ou
+    não é parquet nem CSV, os formatos aceitos pela 008.
     """
     meta_path = processed_dir / c.META_FILENAME
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
@@ -52,7 +57,7 @@ def load_scoring_features(
             f"{path} difere de training_table.meta.json: "
             f"registrado {expected}, atual {actual}"
         )
-    features = pd.read_parquet(path)
+    features = read_features(path)
     columns = input_feature_columns(features)
     collapsed = collapse_aliases(features, set(ids), columns)
     t13a = sorted(

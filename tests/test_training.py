@@ -18,6 +18,7 @@ from src.models.training import (
     load_inputs,
     load_training_config,
     train_run,
+    write_run,
 )
 from tests.dataset_fixtures import build_frozen_corpus, feature_row
 
@@ -158,6 +159,35 @@ def test_run_id_and_force_distinguish_models_and_columns(tmp_path: Path) -> None
         "majoritario", "principal", "grouped", None, config, force=True
     )
     assert replaced == path
+
+
+def test_concurrent_staging_and_late_publication_are_isolated(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Preserva staging alheio e recusa publicar sobre execução concorrente."""
+    output = tmp_path / "runs"
+    run_id = "a" * 64
+    foreign = output / f".{run_id}.outro.tmp"
+    foreign.mkdir(parents=True)
+    (foreign / "predictions.parquet").write_text("em gravação")
+    winner = output / run_id
+    real_dump = joblib.dump
+
+    def publish_during_write(value: object, path: Path) -> None:
+        winner.mkdir()
+        (winner / "run.meta.json").write_text("outra execução")
+        real_dump(value, path)
+
+    monkeypatch.setattr(joblib, "dump", publish_during_write)
+    predictions = pd.DataFrame({"firmware_id": ["id-00"]})
+    with pytest.raises(FileExistsError, match=f"run_id {run_id}.*durante a gravação"):
+        write_run(output, run_id, predictions, {}, {"fold_0_0.joblib": {}}, False)
+    assert (winner / "run.meta.json").read_text() == "outra execução"
+    assert (foreign / "predictions.parquet").read_text() == "em gravação"
+    assert sorted(path.name for path in output.iterdir()) == sorted(
+        [run_id, foreign.name]
+    )
+
 
 
 def test_rf_uses_same_test_splits_as_et(tmp_path: Path) -> None:

@@ -117,7 +117,7 @@ def _require_columns(frame: pd.DataFrame, path: Path, columns: tuple[str, ...]) 
             raise ValueError(f"Coluna ausente em {path}: {column}{advice}")
 
 
-def _read_features(path: Path) -> pd.DataFrame:
+def read_features(path: Path) -> pd.DataFrame:
     """Lê a tabela de features em parquet ou CSV; rejeita outros formatos."""
     if path.suffix == ".parquet":
         return pd.read_parquet(path)
@@ -132,7 +132,7 @@ def load_inputs(config: DatasetConfig) -> InputTables:
     for path in (config.features, config.labels, meta_path):
         if not path.is_file():
             raise FileNotFoundError(f"Entrada não encontrada: {path}")
-    features = _read_features(config.features)
+    features = read_features(config.features)
     labels = pd.read_csv(config.labels)
     _require_columns(
         features,

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
 import logging
 import shutil
+import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -257,11 +259,35 @@ def compute_run_id(
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
+def _publish(temporary: Path, destination: Path, run_id: str, force: bool) -> None:
+    """Renomeia o staging para o destino sem sobrescrever outra execução.
+
+    Levanta FileExistsError se outra execução publicou o mesmo ``run_id``
+    durante a gravação; o rename não substitui diretório com conteúdo.
+    """
+    if force and destination.exists():
+        shutil.rmtree(destination)
+    try:
+        temporary.rename(destination)
+    except OSError as exc:
+        if exc.errno not in (errno.EEXIST, errno.ENOTEMPTY):
+            raise
+        raise FileExistsError(
+            f"execução já existe: run_id {run_id} em {destination}, publicada "
+            "por outra execução durante a gravação"
+        ) from exc
+
+
 def write_run(
     output_dir: Path, run_id: str, predictions: pd.DataFrame, meta: dict[str, Any],
     models: dict[str, Pipeline], force: bool,
 ) -> Path:
-    """Grava predições, modelos e metadado em diretório temporário atômico."""
+    """Grava predições, modelos e metadado em staging exclusivo e publica.
+
+    Cada chamada usa um diretório temporário próprio, para que execuções
+    concorrentes do mesmo ``run_id`` não apaguem nem misturem arquivos.
+    Levanta FileExistsError se o destino já existe e ``force`` é falso.
+    """
     destination = output_dir / run_id
     if destination.exists() and not force:
         raise FileExistsError(
@@ -269,9 +295,8 @@ def write_run(
             "use --force para substituir"
         )
     output_dir.mkdir(parents=True, exist_ok=True)
-    temporary = output_dir / f".{run_id}.tmp"
-    if temporary.exists():
-        shutil.rmtree(temporary)
+    # Nome único com mkdir exclusivo; mkdtemp criaria o run com permissão 0700.
+    temporary = output_dir / f".{run_id}.{uuid.uuid4().hex}.tmp"
     temporary.mkdir()
     try:
         predictions.to_parquet(temporary / "predictions.parquet", index=False)
@@ -280,10 +305,8 @@ def write_run(
         (temporary / "run.meta.json").write_text(
             json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
         )
-        if destination.exists():
-            shutil.rmtree(destination)
-        temporary.rename(destination)
-    except Exception:
+        _publish(temporary, destination, run_id, force)
+    except BaseException:
         shutil.rmtree(temporary, ignore_errors=True)
         raise
     return destination
