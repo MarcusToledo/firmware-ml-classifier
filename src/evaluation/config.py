@@ -81,8 +81,8 @@ def _validate_ablations(ablations: Any, path: Path) -> None:
             raise _invalid(path, f"ablations.{item['arm']}.remove")
 
 
-def _validate_parameters(raw: dict[str, Any], path: Path) -> None:
-    """Exige bootstrap, permutação e fabricante de sensibilidade bem tipados."""
+def _validate_bootstrap(raw: dict[str, Any], path: Path) -> None:
+    """Exige bootstrap com n_resamples positivo, seed inteira e ci em (0, 1)."""
     bootstrap = raw.get("bootstrap")
     if not isinstance(bootstrap, dict):
         raise _invalid(path, "bootstrap")
@@ -93,6 +93,10 @@ def _validate_parameters(raw: dict[str, Any], path: Path) -> None:
     ci = bootstrap.get("ci")
     if not isinstance(ci, float) or not 0 < ci < 1:
         raise _invalid(path, "bootstrap.ci")
+
+
+def _validate_permutation(raw: dict[str, Any], path: Path) -> None:
+    """Exige permutação com n_repeats positivo e seed inteira."""
     permutation = raw.get("permutation")
     if not isinstance(permutation, dict):
         raise _invalid(path, "permutation")
@@ -100,6 +104,12 @@ def _validate_parameters(raw: dict[str, Any], path: Path) -> None:
         raise _invalid(path, "permutation.n_repeats")
     if not _is_int(permutation.get("seed")):
         raise _invalid(path, "permutation.seed")
+
+
+def _validate_parameters(raw: dict[str, Any], path: Path) -> None:
+    """Exige bootstrap, permutação e fabricante de sensibilidade bem tipados."""
+    _validate_bootstrap(raw, path)
+    _validate_permutation(raw, path)
     sensitivity = raw.get("sensitivity")
     if not isinstance(sensitivity, dict) or not _is_text(
         sensitivity.get("exclude_alias_vendor")

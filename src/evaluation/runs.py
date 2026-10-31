@@ -81,14 +81,18 @@ class ArmRun:
 
 
 def ensure_run(
-    spec: ArmSpec, experiment: str, scheme: str, config: TrainingConfig
+    spec: ArmSpec, experiment: str, scheme: str, config: TrainingConfig,
+    data: TrainingData | None = None,
 ) -> ArmRun:
     """Reaproveita a execução do braço pelo run_id ou a treina pela 010.
 
+    ``data`` evita reler o corpus congelado a cada braço.
     Levanta ValueError se o diretório existe incompleto ou se os parâmetros
     registrados em run.meta.json não reproduzem o run_id.
     """
-    prepared = prepare_run(spec.model, experiment, scheme, spec.columns, config)
+    prepared = prepare_run(
+        spec.model, experiment, scheme, spec.columns, config, data
+    )
     directory = config.output_dir / prepared.run_id
     reused = directory.exists()
     if not reused:

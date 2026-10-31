@@ -81,7 +81,7 @@ def _ensure_runs(
     arms = resolve_arms(config, data.columns_vector, _column_changes(training))
     arm_runs = []
     for spec in arms:
-        item = ensure_run(spec, config.experiment, config.scheme, training)
+        item = ensure_run(spec, config.experiment, config.scheme, training, data)
         LOGGER.info(
             "braço %s run_id %s modelo %s purpose %s reaproveitado %s predições %s",
             spec.arm, item.run.run_id, spec.model, item.run.meta["purpose"],

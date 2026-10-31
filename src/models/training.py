@@ -461,10 +461,12 @@ def _model_inputs(
 
 def prepare_run(
     model: str, experiment: str, scheme: str, columns: list[str] | None,
-    config: TrainingConfig,
+    config: TrainingConfig, data: TrainingData | None = None,
 ) -> PreparedRun:
     """Valida a experiência, lê o corpus congelado e calcula o run_id sem treinar.
 
+    ``data`` reaproveita entradas já lidas por ``load_inputs(config)`` com a mesma
+    configuração; sem ele, o corpus é lido e conferido aqui.
     Levanta ValueError para esquema, modelo, experimento ou colunas inválidos.
     """
     if scheme != "grouped":
@@ -476,7 +478,8 @@ def prepare_run(
     if model not in MODELS:
         raise ValueError(f"modelo não suportado: {model}")
     classes = target_for_experiment(experiment, config)
-    data = load_inputs(config)
+    if data is None:
+        data = load_inputs(config)
     selected = resolve_columns(columns, data.columns_vector)
     purpose = purpose_for(model, selected == data.columns_vector)
     table = data.fold_set.table.set_index(c.KEY_COLUMN)
