@@ -36,6 +36,13 @@ the single source for these rules. Amend it only via
   - Keep specs, constitution, and `TODO.md` consistent with the code on
     `master`; these files are local and unversioned (see the constitution).
   - Never edit code; never commit.
+- tcc-writer (project subagent in `.omp/agents/tcc-writer.md`, Sonnet;
+  skill `.omp/skills/tcc-writing/SKILL.md`)
+  - Edit only the prose of the monograph chapters
+    (`docs/paper/Capitulos/*.tex`) to the academic style of the skill:
+    formal, impersonal, third person, tense by situation.
+  - Never change numbers, citations, references, `\revisar` markers or
+    technical meaning; never commit.
 
 ## Build, Lint, Test
 - Install dependencies:
@@ -70,6 +77,7 @@ the single source for these rules. Amend it only via
   - `python scripts/make_folds.py`
   - `python scripts/freeze_corpus.py`
   - `python scripts/describe_prevalence.py`
+- Descrever cobertura NVD e proteções ELF (pré-registro v3): `python scripts/describe_nvd_coverage.py`
 - Treinar modelos e baselines (spec 010):
   - `python scripts/train.py --model all --experiment principal --scheme grouped`
   - `python scripts/train.py --model extra_trees --columns-file <arquivo> --override hyperparameters.n_estimators=500`

@@ -89,8 +89,6 @@ uv run python scripts/generate_labels.py \
   --cves dataset/processed/cve_cache_v3.json \
   --output dataset/processed/labels_v3.csv
 
-# Antes das próximas etapas, aponte labels em configs/dataset.yaml para labels_v3.csv.
-
 # 4. Tabela de treino, validação, folds agrupados e congelamento
 uv run python scripts/build_dataset.py
 uv run python scripts/validate_dataset.py
@@ -146,6 +144,17 @@ hashes.
 componente conectado; `freeze_corpus.py` grava `corpus.freeze.json`, e o treino
 recusa folds ou tabela que divirjam dele. `describe_prevalence.py` descreve a
 prevalência dos detectores no corpus congelado.
+
+**Cobertura NVD (rodada v3).** Com `configs/dataset.yaml` apontando para
+`labels_v3.csv` (padrão atual), execute
+`uv run python scripts/describe_nvd_coverage.py`. A análise descritiva
+pré-registrada em `docs/preregistro_cobertura_nvd.md` compara
+`indeterminado` com motivo `nao_encontrado` a
+`sem_cve_conhecida`, excluindo falhas de extração e firmware de terceiros
+pela regra da 008. As cinco proporções ELF são agregadas por
+`firmware_id`: aliases de arquivos devem ter valores iguais, e apenas um
+registro por ID é mantido. Grava CSV, `report.md` e `.meta.json` em
+`reports/cobertura_nvd_<timestamp>/`, sem alterar rótulos ou avaliação.
 
 **Treino.** `train.py` grava cada braço em `models/runs/<run_id>/` e recusa
 sobrescrita sem `--force`. `--columns-file` treina um subconjunto de colunas
