@@ -17,12 +17,20 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.parse import quote as url_quote
 
 import pandas as pd
 
-from src.labeling.cve_labels import severity_bucket
+from src.labeling.cve_labels import (
+    CVE_CACHE_SCHEMA_VERSION,
+    EVIDENCE_CVE_FOUND,
+    EVIDENCE_NOT_FOUND,
+    EVIDENCE_PRODUCT_NO_CVE,
+    EVIDENCE_STATES,
+    NVD_VENDOR_NAMES,
+    severity_bucket,
+)
 from src.run_metadata import code_commit, file_sha256
 
 LOGGER = logging.getLogger(__name__)
@@ -36,10 +44,9 @@ DEFAULT_DELAY_WITH_KEY = 1
 # every single one, since a full JSON rewrite grows with the cache size.
 SAVE_INTERVAL = 10
 
-CACHE_SCHEMA_VERSION = 3
 _CACHE_SCHEMA_FIELD = "schema_version"
 _FETCHED_AT_FIELD = "fetched_at"
-_DEFAULT_CACHE_PATH = "dataset/processed/cve_cache_v2.json"
+_DEFAULT_CACHE_PATH = "dataset/processed/cve_cache_v3.json"
 _EXIT_MISSING_PAIRS = 2
 _EXIT_FETCH_FAILURE = 1
 _CPE_FIELD_COUNT = 13
@@ -120,6 +127,53 @@ def normalize_model(model: str) -> str:
     return model.upper()
 
 
+def search_variants(vendor: str, model: str) -> list[str]:
+    """Enumera M0, H(M0), M1, H(M1); fabricante atual antes do NVD."""
+    primary = normalize_model(model)
+    original = model.replace("_", "-")
+    bases = [primary]
+    if "-" not in original and _MODEL_HYPHEN_RE.match(original):
+        bases.append(original.upper())
+    models: list[str] = []
+    for base in bases:
+        hyphens = [index for index, char in enumerate(base) if char == "-"]
+        for mask in range(1 << len(hyphens)):
+            chars = list(base)
+            for bit, index in enumerate(hyphens):
+                if mask & (1 << bit):
+                    chars[index] = " "
+            models.append("".join(chars))
+    nvd_vendor = NVD_VENDOR_NAMES.get(vendor, normalize_vendor(vendor))
+    return list(dict.fromkeys(
+        f"{brand} {name}"
+        for name in models
+        for brand in (normalize_vendor(vendor), nvd_vendor)
+    ))
+
+
+class NvdResponseError(ValueError):
+    """Representa resposta malformada ou paginação incompleta da NVD."""
+
+
+def _validated_page(
+    data: object, field: str, start: int, endpoint: str
+) -> tuple[int, list[dict[str, Any]]]:
+    """Exige total e lista coerentes para não transformar falha em zero."""
+    if not isinstance(data, dict):
+        raise NvdResponseError(f"{endpoint}: resposta inválida em startIndex={start}")
+    total = data.get(_NVD_TOTAL_RESULTS_FIELD)
+    batch = data.get(field)
+    if (
+        not isinstance(total, int) or isinstance(total, bool) or total < 0
+        or not isinstance(batch, list)
+        or any(not isinstance(item, dict) for item in batch)
+        or start + len(batch) > total
+        or (start < total and not batch)
+    ):
+        raise NvdResponseError(f"{endpoint}: resposta inválida em startIndex={start}")
+    return total, batch
+
+
 # ---------------------------------------------------------------------------
 # CVSS extraction
 # ---------------------------------------------------------------------------
@@ -157,6 +211,15 @@ def _build_headers() -> dict[str, str]:
     return headers
 
 
+def _decode_nvd_response(body: bytes, endpoint: str, query: str) -> dict[str, Any]:
+    """Converte resposta NVD em JSON ou sinaliza falha do par com contexto."""
+    try:
+        result: dict[str, Any] = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise NvdResponseError(f"{endpoint} {query}: resposta JSON inválida") from exc
+    return result
+
+
 def _fetch_page(
     query_params: str,
     start_index: int,
@@ -170,8 +233,7 @@ def _fetch_page(
     req = urllib.request.Request(url, headers=headers)
 
     with urllib.request.urlopen(req, timeout=_NVD_REQUEST_TIMEOUT_SECONDS) as resp:
-        result: dict[str, Any] = json.loads(resp.read().decode())
-        return result
+        return _decode_nvd_response(resp.read(), "CVE", query_params)
 
 
 def _fetch_cpe_page(
@@ -187,8 +249,7 @@ def _fetch_cpe_page(
     with urllib.request.urlopen(
         request, timeout=_NVD_REQUEST_TIMEOUT_SECONDS
     ) as response:
-        result: dict[str, Any] = json.loads(response.read().decode())
-        return result
+        return _decode_nvd_response(response.read(), "CPE", keyword)
 
 
 def _canonical_cpe_token(value: str) -> str:
@@ -226,65 +287,182 @@ def _matching_cpe_name(
 
 
 def resolve_cpe_name(
-    vendor: str, model: str, headers: dict[str, str], delay: float
+    vendor: str,
+    model: str,
+    headers: dict[str, str],
+    delay: float,
+    keyword: str | None = None,
+    queries: list[dict[str, Any]] | None = None,
+    request_cache: dict[tuple[str, str], Any] | None = None,
 ) -> tuple[str | None, list[str]]:
-    """Percorre o dicionário, prioriza software e expõe ambiguidades."""
-    nvd_vendor = normalize_vendor(vendor)
-    nvd_model = normalize_model(model)
-    keyword = f"{nvd_vendor} {nvd_model}"
-    expected_vendor = _canonical_cpe_token(nvd_vendor)
-    expected_model = _canonical_cpe_token(nvd_model)
+    """Consulta o dicionário por variante e escolhe CPE único de software/hardware."""
+    keyword = keyword or f"{normalize_vendor(vendor)} {normalize_model(model)}"
+    cache_key = ("cpe", keyword)
+    if request_cache is not None and cache_key in request_cache:
+        products, total, fetched_at = request_cache[cache_key]
+    else:
+        products, total = _fetch_cpe_products(keyword, headers, delay)
+        fetched_at = datetime.now(timezone.utc).isoformat(timespec=_TIMESTAMP_PRECISION)
+        if request_cache is not None:
+            request_cache[cache_key] = (products, total, fetched_at)
+    expected_vendor = _canonical_cpe_token(normalize_vendor(vendor))
+    expected_model = _canonical_cpe_token(normalize_model(model))
     accepted: dict[tuple[str, str, str], str] = {}
-    start_index = 0
-    while True:
-        data = _fetch_cpe_page(keyword, start_index, headers)
-        products = data.get("products", [])
-        for product in products:
-            match = _matching_cpe_name(product, expected_vendor, expected_model)
-            if match is not None:
-                key, name = match
-                accepted[key] = name
-        start_index += len(products)
-        if not products or start_index >= data.get(_NVD_TOTAL_RESULTS_FIELD, 0):
-            break
-        time.sleep(delay)
+    for product in products:
+        match = _matching_cpe_name(product, expected_vendor, expected_model)
+        if match is not None:
+            key, name = match
+            accepted[key] = name
+    if queries is not None:
+        queries.append(_query_record(keyword, "cpe", total, len(accepted), fetched_at))
     part = (
         _CPE_SOFTWARE_PART
         if any(key[0] == _CPE_SOFTWARE_PART for key in accepted)
         else _CPE_HARDWARE_PART
     )
     names = sorted(name for key, name in accepted.items() if key[0] == part)
-    if len(names) == 1:
-        return names[0], []
-    return None, names
+    return (names[0] if len(names) == 1 else None), sorted(accepted.values())
+
+
+def _fetch_cpe_products(
+    keyword: str, headers: dict[str, str], delay: float
+) -> tuple[list[dict[str, Any]], int]:
+    """Busca páginas CPE exigindo totalResults estável e contagem completa."""
+    products: list[dict[str, Any]] = []
+    expected_total: int | None = None
+    while True:
+        page = _fetch_cpe_page(keyword, len(products), headers)
+        total, batch = _validated_page(page, "products", len(products), "CPE")
+        if expected_total is None:
+            expected_total = total
+        if total != expected_total:
+            raise NvdResponseError(f"CPE {keyword}: totalResults mudou na paginação")
+        products.extend(batch)
+        if len(products) == expected_total:
+            return products, expected_total
+        time.sleep(delay)
+
+
+def _query_record(
+    variant: str, endpoint: str, total: int,
+    candidates: int | None = None, fetched_at: str | None = None,
+) -> dict[str, Any]:
+    """Registra consulta completa com data UTC e candidatos CPE, quando pertinente."""
+    record: dict[str, Any] = {
+        "variant": variant, "endpoint": endpoint, "total": total,
+        "fetched_at": fetched_at or datetime.now(timezone.utc).isoformat(
+            timespec=_TIMESTAMP_PRECISION
+        ),
+    }
+    if candidates is not None:
+        record["cpe_candidates_total"] = candidates
+    return record
 
 
 def _fetch_all_pages(
     query_params: str, headers: dict[str, str], delay: float
-) -> list[dict[str, Any]]:
-    """Busca páginas CVE completas e preserva dados brutos auditáveis."""
+) -> tuple[list[dict[str, Any]], int]:
+    """Busca páginas CVE exigindo totalResults estável e contagem completa."""
     start_index = 0
     cves: list[dict[str, Any]] = []
+    expected_total: int | None = None
     while True:
         data = _fetch_page(query_params, start_index, headers)
-        total_results = data.get(_NVD_TOTAL_RESULTS_FIELD, 0)
-        vulnerabilities = data.get("vulnerabilities", [])
+        total, vulnerabilities = _validated_page(
+            data, "vulnerabilities", start_index, "CVE"
+        )
+        if expected_total is None:
+            expected_total = total
+        if total != expected_total:
+            raise NvdResponseError(
+                f"CVE {query_params}: totalResults mudou na paginação"
+            )
         for item in vulnerabilities:
-            cve = item.get("cve", {})
+            cve = item.get("cve")
+            if (
+                not isinstance(cve, dict)
+                or not isinstance(cve.get("id"), str)
+                or not cve["id"].strip()
+            ):
+                raise NvdResponseError(
+                    f"CVE {query_params}: vulnerabilidade sem cve.id válido"
+                )
             score, severity = extract_cvss(cve)
             cves.append(
                 {
-                    "id": cve.get("id", ""),
+                    "id": cve["id"],
                     _CVE_MAX_SCORE_FIELD: score,
                     "severity": severity_bucket(severity),
                     "configurations": cve.get("configurations", []),
                 }
             )
         start_index += len(vulnerabilities)
-        if start_index >= total_results or not vulnerabilities:
-            break
+        if start_index == expected_total:
+            return cves, expected_total
         time.sleep(delay)
+
+
+def _query_cves(
+    variant: str,
+    endpoint: str,
+    headers: dict[str, str],
+    delay: float,
+    queries: list[dict[str, Any]],
+    request_cache: dict[tuple[str, str], Any],
+) -> list[dict[str, Any]]:
+    """Consulta uma string por endpoint uma só vez e registra o total por variante."""
+    key = (endpoint, variant)
+    if key not in request_cache:
+        time.sleep(delay)
+        parameter = (
+            "virtualMatchString" if endpoint == "virtualMatchString"
+            else _KEYWORD_SEARCH_PARAM
+        )
+        cves, total = _fetch_all_pages(
+            f"{parameter}={url_quote(variant)}", headers, delay
+        )
+        fetched_at = datetime.now(timezone.utc).isoformat(timespec=_TIMESTAMP_PRECISION)
+        request_cache[key] = (cves, total, fetched_at)
+    cves, total, fetched_at = cast(
+        tuple[list[dict[str, Any]], int, str], request_cache[key]
+    )
+    queries.append(_query_record(variant, endpoint, total, fetched_at=fetched_at))
     return cves
+
+
+def _resolve_variants(
+    vendor: str,
+    model: str,
+    variants: list[str],
+    headers: dict[str, str],
+    delay: float,
+    queries: list[dict[str, Any]],
+    request_cache: dict[tuple[str, str], Any],
+) -> tuple[str | None, list[str], bool]:
+    """Resolve CPE apenas quando a união de candidatos da parte escolhida é única."""
+    candidates: set[str] = set()
+    ambiguous = False
+    for index, variant in enumerate(variants):
+        if index and ("cpe", variant) not in request_cache:
+            time.sleep(delay)
+        local_name, names = resolve_cpe_name(
+            vendor, model, headers, delay, variant, queries, request_cache
+        )
+        ambiguous |= bool(names) and local_name is None
+        candidates.update(names)
+    part = (
+        _CPE_SOFTWARE_PART
+        if any(name.startswith("cpe:2.3:o:") for name in candidates)
+        else _CPE_HARDWARE_PART
+    )
+    preferred = sorted(
+        name for name in candidates if name.startswith(f"cpe:2.3:{part}:")
+    )
+    return (
+        preferred[0] if len(preferred) == 1 and not ambiguous else None,
+        preferred,
+        bool(candidates),
+    )
 
 
 def fetch_cves_for_pair(
@@ -292,23 +470,37 @@ def fetch_cves_for_pair(
     model: str,
     headers: dict[str, str],
     delay: float,
+    request_cache: dict[tuple[str, str], Any] | None = None,
 ) -> dict[str, Any]:
-    """Busca CVEs por CPE oficial ou por texto e mantém evidência por CVE."""
-    cpe_name, candidates = resolve_cpe_name(vendor, model, headers, delay)
-    if cpe_name is not None:
-        query_params = f"virtualMatchString={url_quote(cpe_name)}"
-        source = "cpe"
-    else:
-        keyword = f"{normalize_vendor(vendor)} {normalize_model(model)}"
-        query_params = f"{_KEYWORD_SEARCH_PARAM}={url_quote(keyword)}"
-        source = "keyword"
-    if delay > 0:
-        time.sleep(delay)
-    cves = _fetch_all_pages(query_params, headers, delay)
+    """Consulta CPE por variante e faz união keyword se CPE não trouxer CVE."""
+    shared = request_cache if request_cache is not None else {}
+    variants = search_variants(vendor, model)
+    queries: list[dict[str, Any]] = []
+    cpe_name, candidates, found_product = _resolve_variants(
+        vendor, model, variants, headers, delay, queries, shared
+    )
+    cves = (
+        _query_cves(cpe_name, "virtualMatchString", headers, delay, queries, shared)
+        if cpe_name else []
+    )
+    source = "cpe" if cves else "keyword"
+    if not cves:
+        by_id: dict[str, dict[str, Any]] = {}
+        for variant in variants:
+            for cve in _query_cves(
+                variant, "keywordSearch", headers, delay, queries, shared
+            ):
+                by_id[cve["id"]] = cve
+        cves = list(by_id.values())
     return {
-        _CACHE_SCHEMA_FIELD: CACHE_SCHEMA_VERSION,
+        _CACHE_SCHEMA_FIELD: CVE_CACHE_SCHEMA_VERSION,
         _FETCHED_AT_FIELD: datetime.now(timezone.utc).isoformat(
             timespec=_TIMESTAMP_PRECISION
+        ),
+        "queries": queries,
+        "evidence_state": (
+            EVIDENCE_CVE_FOUND if cves else
+            EVIDENCE_PRODUCT_NO_CVE if found_product else EVIDENCE_NOT_FOUND
         ),
         "cpe_candidates": candidates,
         "source": source,
@@ -426,13 +618,48 @@ def _load_pairs(path: Path) -> list[tuple[str, str]]:
 
 
 def _show_dry_run(pairs: list[tuple[str, str]]) -> None:
-    """Lista os pares e suas formas NVD sem acessar rede nem cache."""
+    """Lista variantes sem rede e estima requisições sem paginação no pior caso."""
+    unique: set[tuple[str, str]] = set()
     for vendor, model in pairs:
-        nv = normalize_vendor(vendor)
-        nm = normalize_model(model)
-        suffix = f" -> {nv} {nm}" if (nv != vendor or nm != model) else ""
-        print(f"  {vendor}/{model}{suffix}")
+        variants = search_variants(vendor, model)
+        print(f"  {vendor}/{model}: {', '.join(variants)}")
+        unique.update(("cpe", variant) for variant in variants)
+        unique.update(("keywordSearch", variant) for variant in variants)
+    print(
+        "Requisições estimadas (limite superior sem paginação): "
+        f"{len(unique) + len(pairs)} "
+        f"({len(unique)} CPE/keyword + até {len(pairs)} virtualMatchString)"
+    )
     LOGGER.info("Dry run — no requests made")
+
+
+def _validate_cached_pair(key: str, entry: object) -> dict[str, Any]:
+    """Rejeita schema antigo ou evidência incompleta antes de reaproveitar par."""
+    if not isinstance(entry, dict):
+        raise ValueError(
+            f"Cache CVE em schema antigo para {key}: "
+            "schema_version=None; rode com --force"
+        )
+    version = entry.get(_CACHE_SCHEMA_FIELD)
+    if version != CVE_CACHE_SCHEMA_VERSION:
+        raise ValueError(
+            f"Cache CVE em schema antigo para {key}: "
+            f"schema_version={version}; rode com --force"
+        )
+    if not isinstance(entry.get(_CVE_ITEMS_FIELD), list):
+        raise ValueError(f"Cache CVE inválido para {key}: cves não é uma lista")
+    fetched_at = entry.get(_FETCHED_AT_FIELD)
+    if not isinstance(fetched_at, str) or not fetched_at.strip():
+        raise ValueError(
+            f"Cache CVE inválido para {key}: fetched_at ausente; rode com --force"
+        )
+    if not isinstance(entry.get("queries"), list) or entry.get(
+        "evidence_state"
+    ) not in EVIDENCE_STATES:
+        raise ValueError(f"Cache CVE inválido para {key}: evidência v4 ausente")
+    if not isinstance(entry.get("cpe_candidates"), list):
+        raise ValueError(f"Cache CVE inválido para {key}: cpe_candidates ausentes")
+    return entry
 
 
 def _fetch_one_pair(
@@ -445,31 +672,19 @@ def _fetch_one_pair(
     delay: float,
     force: bool,
     stats: dict[str, int],
+    request_cache: dict[tuple[str, str], Any],
 ) -> None:
     """Reaproveita entrada válida ou consulta a NVD e registra a falha."""
     key = f"{vendor}/{model}"
     if key in cache and not force:
-        entry = cache[key]
-        version = entry.get(_CACHE_SCHEMA_FIELD) if isinstance(entry, dict) else None
-        if version != CACHE_SCHEMA_VERSION:
-            raise ValueError(
-                f"Cache CVE em schema antigo para {key}: "
-                f"schema_version={version}; rode com --force"
-            )
-        if not isinstance(entry.get(_CVE_ITEMS_FIELD), list):
-            raise ValueError(f"Cache CVE inválido para {key}: cves não é uma lista")
-        fetched_at = entry.get(_FETCHED_AT_FIELD)
-        if not isinstance(fetched_at, str) or not fetched_at.strip():
-            raise ValueError(
-                f"Cache CVE inválido para {key}: fetched_at ausente; rode com --force"
-            )
+        entry = _validate_cached_pair(key, cache[key])
         LOGGER.info("[SKIP] %d/%d %s (cached)", index, total, key)
         stats[_STATS_CACHED] += 1
         stats[_STATS_TOTAL_CVES] += len(entry[_CVE_ITEMS_FIELD])
         return
     try:
         LOGGER.info("[FETCH] %d/%d %s", index, total, key)
-        result = fetch_cves_for_pair(vendor, model, headers, delay)
+        result = fetch_cves_for_pair(vendor, model, headers, delay, request_cache)
         cache[key] = result
         stats[_STATS_FETCHED] += 1
         stats[_STATS_TOTAL_CVES] += len(result[_CVE_ITEMS_FIELD])
@@ -481,7 +696,9 @@ def _fetch_one_pair(
                 default=_NO_CVSS_SCORE,
             ),
         )
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as exc:
+    except (
+        urllib.error.URLError, urllib.error.HTTPError, TimeoutError, NvdResponseError
+    ) as exc:
         LOGGER.error("[FAIL] %s: %s", key, exc)
         stats[_STATS_FAILED] += 1
         if force:
@@ -501,6 +718,7 @@ def _fetch_all_pairs(
     cache = load_cache(output)
     LOGGER.info("[CACHE] Loaded %d existing entries", len(cache))
     headers = _build_headers()
+    request_cache: dict[tuple[str, str], Any] = {}
     try:
         for index, (vendor, model) in enumerate(pairs, 1):
             fetched_before = stats[_STATS_FETCHED]
@@ -514,6 +732,7 @@ def _fetch_all_pairs(
                 delay,
                 force,
                 stats,
+                request_cache,
             )
             if stats[_STATS_FETCHED] > fetched_before and _should_save(
                 stats[_STATS_FETCHED]

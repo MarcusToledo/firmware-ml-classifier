@@ -86,7 +86,10 @@ uv run python scripts/fetch_cves.py --features dataset/processed/features_v2.par
 # 3. Rótulos a partir do cache
 uv run python scripts/generate_labels.py \
   --features dataset/processed/features_v2.parquet \
-  --cves dataset/processed/cve_cache_v2.json
+  --cves dataset/processed/cve_cache_v3.json \
+  --output dataset/processed/labels_v3.csv
+
+# Antes das próximas etapas, aponte labels em configs/dataset.yaml para labels_v3.csv.
 
 # 4. Tabela de treino, validação, folds agrupados e congelamento
 uv run python scripts/build_dataset.py
@@ -119,11 +122,18 @@ achados estruturados (`SecurityFinding`) em JSONL, ligados às features por
 
 **Cache de CVEs.** Sem `NVD_API_KEY` o intervalo entre requisições é de 6 s
 (1 s com a chave). Pares já em cache são pulados (`--force` refaz); `--dry-run`
-lista os pares sem rede. Grava `cve_cache_v2.json` e `cve_cache_v2.meta.json`.
+lista as variantes por par e estima o teto de requisições sem acessar a rede.
+Grava `cve_cache_v3.json` (schema 4) e `cve_cache_v3.meta.json`. Por par,
+o cache preserva candidatos CPE filtrados, CVEs e consultas (`variant`,
+`endpoint`, `total`, `fetched_at` em UTC). `evidence_state` distingue
+`cve_encontrada`, `produto_encontrado_sem_cve` e `nao_encontrado`. Falha
+de consulta não equivale a total zero: o par consta em `pairs_failed`.
 
-**Rótulos.** Grava `labels_v2.csv`, `labels_v2_aliases.jsonl` (CVEs aplicáveis e
-indeterminadas por alias) e `labels_v2.meta.json`. `--critical-cvss` muda o
-limiar (padrão 9.0); `--dry-run` mostra a distribuição sem salvar.
+**Rótulos.** Com `--output dataset/processed/labels_v3.csv`, grava
+`labels_v3.csv`, `labels_v3_aliases.jsonl` e `labels_v3.meta.json`.
+`nao_encontrado` gera `indeterminado` quando pode mudar a classe; o motivo
+fica em `evidence_reason` e o estado de cada alias no JSONL. `--critical-cvss`
+muda o limiar (padrão 9.0); `--dry-run` mostra a distribuição sem salvar.
 
 **Tabela de treino.** `build_dataset.py` lê `configs/dataset.yaml`, junta
 features e `security_level` por `firmware_id`, exclui falhas de extração,

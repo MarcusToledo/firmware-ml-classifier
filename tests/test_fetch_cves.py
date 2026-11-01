@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sys
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 from urllib.error import URLError
@@ -11,6 +12,8 @@ import pandas as pd
 import pytest
 
 from scripts.fetch_cves import (
+    NvdResponseError,
+    _fetch_all_pages,
     _parse_args,
     _should_save,
     extract_cvss,
@@ -20,6 +23,7 @@ from scripts.fetch_cves import (
     normalize_model,
     normalize_vendor,
     resolve_cpe_name,
+    search_variants,
 )
 
 # ---------------------------------------------------------------------------
@@ -55,10 +59,11 @@ def test_normalize_model_with_hyphen() -> None:
     assert normalize_model("dsr-1000ac") == "DSR-1000AC"
 
 
-def test_normalize_model_missing_hyphen() -> None:
-    """Models like 'dir300' should get a hyphen inserted."""
+def test_normalize_model_produces_m0_without_discarding_m1() -> None:
+    """Mantém M0 legado como primeiro, mas também consulta M1 sem hífen."""
     assert normalize_model("dir300") == "DIR-300"
-    assert normalize_model("dir605l") == "DIR-605L"
+    assert search_variants("dlink", "dir300")[0] == "d-link DIR-300"
+    assert "d-link DIR300" in search_variants("dlink", "dir300")
 
 
 def test_normalize_model_underscore_suffix() -> None:
@@ -87,9 +92,136 @@ def test_normalize_model_never_sends_underscore() -> None:
         assert "_" not in normalize_model(model)
 
 
-def test_normalize_model_plain() -> None:
-    """Models without hyphens or underscores just uppercase."""
-    assert normalize_model("awgr54") == "AWGR-54"
+def test_variant_order_preserves_model_outer_vendor_inner() -> None:
+    """Enumera H por hífen individual antes de trocar fabricante."""
+    assert search_variants("asus", "rt-n12-d1") == [
+        "asus RT-N12-D1", "ASUS RT-N12-D1",
+        "asus RT N12-D1", "ASUS RT N12-D1",
+        "asus RT-N12 D1", "ASUS RT-N12 D1",
+        "asus RT N12 D1", "ASUS RT N12 D1",
+    ]
+    assert search_variants("netgear", "wndr4300")[:4] == [
+        "netgear WNDR-4300", "NETGEAR WNDR-4300",
+        "netgear WNDR 4300", "NETGEAR WNDR 4300",
+    ]
+
+
+def test_underscore_model_never_emits_underscore_variant() -> None:
+    """M1 só remove o hífen inserido, não restaura underscores."""
+    variants = search_variants("netgear", "wnr1000_v2")
+    assert all("_" not in variant for variant in variants)
+    assert "netgear WNR1000-V2" in variants
+    assert "netgear WNR1000 V2" in variants
+
+
+@pytest.mark.parametrize(
+    ("vendor", "model", "expected"),
+    [
+        ("netgear", "wndr4300", "netgear WNDR4300"),
+        ("netgear", "ex6150", "netgear EX6150"),
+        ("netgear", "xr500", "netgear XR500"),
+        ("tplink", "archer-c50", "tp-link ARCHER C50"),
+        ("asus", "rt-n12-d1", "asus RT-N12 D1"),
+    ],
+)
+def test_keyword_finds_natural_variant(
+    vendor: str, model: str, expected: str
+) -> None:
+    """Encontra a CVE apenas na forma natural e registra cada consulta."""
+    def page(query: str, start: int, headers: dict[str, str]) -> dict:
+        """Simula uma NVD que reconhece somente a variante natural."""
+        cves = [{"cve": {"id": "CVE-1", "configurations": []}}] if (
+            expected.replace(" ", "%20") in query
+        ) else []
+        return {"totalResults": len(cves), "vulnerabilities": cves}
+
+    with (
+        patch("scripts.fetch_cves._fetch_cpe_page", return_value={
+            "totalResults": 0, "products": []
+        }),
+        patch("scripts.fetch_cves._fetch_page", side_effect=page),
+    ):
+        entry = fetch_cves_for_pair(vendor, model, {}, 0)
+    assert expected in search_variants(vendor, model)
+    assert [cve["id"] for cve in entry["cves"]] == ["CVE-1"]
+    assert entry["evidence_state"] == "cve_encontrada"
+    keyword_queries = [q for q in entry["queries"] if q["endpoint"] == "keywordSearch"]
+    assert next(q["total"] for q in keyword_queries if q["variant"] == expected) == 1
+    assert all(q["total"] == 0 for q in keyword_queries if q["variant"] != expected)
+
+
+def test_keyword_union_deduplicates_and_empty_evidence_is_explicit() -> None:
+    """Une IDs repetidos e distingue busca sem produto de falha."""
+    def page(query: str, start: int, headers: dict[str, str]) -> dict:
+        """Retorna a mesma CVE em variantes diferentes."""
+        return {"totalResults": 1, "vulnerabilities": [
+            {"cve": {"id": "CVE-1", "configurations": []}}
+        ]}
+
+    with (
+        patch("scripts.fetch_cves._fetch_cpe_page", return_value={
+            "totalResults": 0, "products": []
+        }),
+        patch("scripts.fetch_cves._fetch_page", side_effect=page),
+    ):
+        entry = fetch_cves_for_pair("netgear", "wndr4300", {}, 0)
+    assert len(entry["cves"]) == 1
+    keyword_queries = [q for q in entry["queries"] if q["endpoint"] == "keywordSearch"]
+    assert len(keyword_queries) == len(search_variants("netgear", "wndr4300"))
+
+
+def test_empty_keyword_without_cpe_is_not_found() -> None:
+    """Ausência total é indeterminada, não evidência negativa."""
+    with (
+        patch("scripts.fetch_cves._fetch_cpe_page", return_value={
+            "totalResults": 0, "products": []
+        }),
+        patch("scripts.fetch_cves._fetch_page", return_value={
+            "totalResults": 0, "vulnerabilities": []
+        }),
+    ):
+        entry = fetch_cves_for_pair("netgear", "wndr4300", {}, 0)
+    assert entry["evidence_state"] == "nao_encontrado"
+    assert entry["cves"] == []
+    assert all(record["total"] == 0 for record in entry["queries"])
+
+
+def test_cpe_product_without_cve_is_negative_evidence() -> None:
+    """Produto único sem CVE por CPE nem keyword é negativo válido."""
+    product = {"cpe": {"cpeName": "cpe:2.3:o:netgear:wndr4300:1:*:*:*:*:*:*:*"}}
+    with (
+        patch("scripts.fetch_cves._fetch_cpe_page", return_value={
+            "totalResults": 1, "products": [product]
+        }),
+        patch("scripts.fetch_cves._fetch_page", return_value={
+            "totalResults": 0, "vulnerabilities": []
+        }),
+    ):
+        entry = fetch_cves_for_pair("netgear", "wndr4300", {}, 0)
+    assert entry["evidence_state"] == "produto_encontrado_sem_cve"
+    assert entry["cves"] == []
+    assert entry["queries"][0]["cpe_candidates_total"] == 1
+    assert entry["cpe_candidates"] == [
+        "cpe:2.3:o:netgear:wndr4300:*:*:*:*:*:*:*:*"
+    ]
+
+
+def test_repeated_query_within_run_reuses_endpoint_result() -> None:
+    """Consulta idêntica não aciona novamente o mesmo endpoint."""
+    shared: dict[tuple[str, str], object] = {}
+    with (
+        patch("scripts.fetch_cves._fetch_cpe_page", return_value={
+            "totalResults": 0, "products": []
+        }) as cpe_page,
+        patch("scripts.fetch_cves._fetch_page", return_value={
+            "totalResults": 0, "vulnerabilities": []
+        }) as cve_page,
+    ):
+        first = fetch_cves_for_pair("netgear", "wndr4300", {}, 0, shared)
+        second = fetch_cves_for_pair("netgear", "wndr4300", {}, 0, shared)
+    assert cpe_page.call_count == len(search_variants("netgear", "wndr4300"))
+    assert cve_page.call_count == len(search_variants("netgear", "wndr4300"))
+    assert first["queries"][0]["fetched_at"] == second["queries"][0]["fetched_at"]
 
 
 # ---------------------------------------------------------------------------
@@ -259,7 +391,7 @@ def test_fetch_keyword_retains_cve_and_configurations() -> None:
         entry = fetch_cves_for_pair("dlink", "dir300", headers={}, delay=0)
 
     assert entry["source"] == "keyword"
-    assert entry["schema_version"] == 3
+    assert entry["schema_version"] == 4
     assert datetime.fromisoformat(entry["fetched_at"]).utcoffset().total_seconds() == 0
     assert entry["cpe_candidates"] == []
     assert entry["cves"][0]["id"] == "CVE-2020-1111"
@@ -273,37 +405,234 @@ def test_resolve_cpe_selects_matching_firmware_and_wildcards_version() -> None:
         {"cpe": {"cpeName": "cpe:2.3:o:dlink:dir-300_firmware:1.2:*:*:*:*:*:*:*"}},
     ]
     with patch(
-        "scripts.fetch_cves._fetch_cpe_page", return_value={"products": products}
+        "scripts.fetch_cves._fetch_cpe_page",
+        return_value={"totalResults": 2, "products": products}
     ):
         name = resolve_cpe_name("dlink", "dir300", headers={}, delay=0)
-    assert name == ("cpe:2.3:o:dlink:dir-300_firmware:*:*:*:*:*:*:*:*", [])
+    expected = "cpe:2.3:o:dlink:dir-300_firmware:*:*:*:*:*:*:*:*"
+    assert name == (expected, [expected])
 
 
 def test_resolve_cpe_generalizes_specific_update_and_edition() -> None:
     specific = "cpe:2.3:o:dlink:dir-300_firmware:1.2:rev1:home:*:*:*:*:*"
     with patch(
         "scripts.fetch_cves._fetch_cpe_page",
-        return_value={"products": [{"cpe": {"cpeName": specific}}]},
+        return_value={"totalResults": 1, "products": [{"cpe": {"cpeName": specific}}]},
     ):
         name = resolve_cpe_name("dlink", "dir300", headers={}, delay=0)
-    assert name == ("cpe:2.3:o:dlink:dir-300_firmware:*:*:*:*:*:*:*:*", [])
+    expected = "cpe:2.3:o:dlink:dir-300_firmware:*:*:*:*:*:*:*:*"
+    assert name == (expected, [expected])
 
 
-def test_fetch_prefers_resolved_cpe_query() -> None:
+def test_cpe_zero_cves_falls_back_to_all_keywords() -> None:
+    """CPE encontrado sem CVE exige busca keyword antes de evidência negativa."""
+    product = {"cpe": {"cpeName": "cpe:2.3:o:dlink:dir-300:1:*:*:*:*:*:*:*"}}
+
+    def page(query: str, start: int, headers: dict[str, str]) -> dict:
+        """Simula CPE sem CVE e texto com resposta."""
+        found = query.startswith("keywordSearch=")
+        return {"totalResults": int(found), "vulnerabilities": (
+            [{"cve": {"id": "CVE-TEXT"}}] if found else []
+        )}
+
     with (
-        patch(
-            "scripts.fetch_cves.resolve_cpe_name",
-            return_value=("cpe:2.3:o:dlink:dir-300_firmware:*:*:*:*:*:*:*:*", []),
-        ),
-        patch(
-            "scripts.fetch_cves._fetch_page",
-            return_value={"totalResults": 0, "vulnerabilities": []},
-        ) as fetch_page,
+        patch("scripts.fetch_cves._fetch_cpe_page", return_value={
+            "totalResults": 1, "products": [product]
+        }),
+        patch("scripts.fetch_cves._fetch_page", side_effect=page) as fetch_page,
     ):
         entry = fetch_cves_for_pair("dlink", "dir300", headers={}, delay=0)
+    assert entry["source"] == "keyword"
+    assert entry["evidence_state"] == "cve_encontrada"
+    assert [cve["id"] for cve in entry["cves"]] == ["CVE-TEXT"]
+    assert any(
+        "virtualMatchString=" in call.args[0] for call in fetch_page.call_args_list
+    )
+    keyword_queries = [q for q in entry["queries"] if q["endpoint"] == "keywordSearch"]
+    assert len(keyword_queries) == len(search_variants("dlink", "dir300"))
+
+
+def test_ambiguous_first_variant_disables_later_unique_cpe() -> None:
+    """Ambiguidade em M0 prevalece sobre CPE único de variante posterior."""
+    def product(vendor: str, name: str) -> dict:
+        """Cria CPE com modelo canônico idêntico e grafia distinta."""
+        return {"cpe": {
+            "cpeName": f"cpe:2.3:o:{vendor}:{name}:1:*:*:*:*:*:*:*"
+        }}
+
+    def cpe_page(keyword: str, start: int, headers: dict[str, str]) -> dict:
+        """Devolve M0 ambígua e variante posterior única."""
+        products = (
+            [product("dlink", "dir-878_firmware"), product("d-link", "dir-878")]
+            if keyword == "d-link DIR-878"
+            else [product("dlink", "dir_878_firmware")]
+        )
+        return {"totalResults": len(products), "products": products}
+
+    with (
+        patch("scripts.fetch_cves._fetch_cpe_page", side_effect=cpe_page),
+        patch("scripts.fetch_cves._fetch_page", return_value={
+            "totalResults": 1,
+            "vulnerabilities": [{"cve": {"id": "CVE-KEYWORD"}}],
+        }) as fetch_page,
+    ):
+        entry = fetch_cves_for_pair("dlink", "dir-878", {}, 0)
+    assert entry["source"] == "keyword"
+    assert [cve["id"] for cve in entry["cves"]] == ["CVE-KEYWORD"]
+    assert len(entry["cpe_candidates"]) == 3
+    assert all(
+        "virtualMatchString=" not in call.args[0]
+        for call in fetch_page.call_args_list
+    )
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        {"vulnerabilities": []},
+        {"totalResults": 0},
+        {"totalResults": 2, "vulnerabilities": [{"cve": {"id": "CVE-ONE"}}]},
+    ],
+)
+def test_malformed_cve_response_counts_as_failed_pair(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, response: dict
+) -> None:
+    """Resposta CVE ausente ou truncada nunca vira zero ou união parcial."""
+    def page(query: str, start: int, headers: dict[str, str]) -> dict:
+        """Interrompe a paginação após a primeira página parcial."""
+        if start:
+            return {"totalResults": 2, "vulnerabilities": []}
+        return response
+
+    with (
+        patch("scripts.fetch_cves._fetch_cpe_page", return_value={
+            "totalResults": 0, "products": []
+        }),
+        patch("scripts.fetch_cves._fetch_page", side_effect=page),
+        pytest.raises(SystemExit, match="1"),
+    ):
+        _invoke(
+            tmp_path, monkeypatch,
+            [{"meta_brand": "netgear", "meta_model": "wndr4300"}],
+        )
+    assert "netgear/wndr4300" not in json.loads((tmp_path / "cache.json").read_text())
+    metadata = json.loads((tmp_path / "cache.meta.json").read_text())
+    assert metadata["pairs_failed"] == 1
+
+
+@pytest.mark.parametrize("endpoint", ["cpe", "cve"])
+def test_pagination_rejects_total_changed_after_first_page(endpoint: str) -> None:
+    """Total menor na página seguinte não autoriza aceitar resultado parcial."""
+    first_item = (
+        {"cpe": {"cpeName": "cpe:2.3:o:netgear:wndr4300:1:*:*:*:*:*:*:*"}}
+        if endpoint == "cpe" else {"cve": {"id": "CVE-ONE"}}
+    )
+    field = "products" if endpoint == "cpe" else "vulnerabilities"
+    pages = [
+        {"totalResults": 2, field: [first_item]},
+        {"totalResults": 1, field: []},
+    ]
+    target = (
+        "scripts.fetch_cves._fetch_cpe_page"
+        if endpoint == "cpe" else "scripts.fetch_cves._fetch_page"
+    )
+    with patch(target, side_effect=pages), pytest.raises(NvdResponseError):
+        if endpoint == "cpe":
+            resolve_cpe_name("netgear", "wndr4300", {}, 0)
+        else:
+            _fetch_all_pages("keywordSearch=netgear", {}, 0)
+
+
+@pytest.mark.parametrize(
+    "item", [{}, {"cve": None}, {"cve": {}}, {"cve": {"id": " "}}],
+)
+def test_cve_without_valid_id_is_rejected(item: dict) -> None:
+    """Vulnerabilidade sem objeto e identificador não entra no cache."""
+    with (
+        patch("scripts.fetch_cves._fetch_page", return_value={
+            "totalResults": 1, "vulnerabilities": [item]
+        }),
+        pytest.raises(NvdResponseError),
+    ):
+        _fetch_all_pages("keywordSearch=netgear", {}, 0)
+
+
+@pytest.mark.parametrize("endpoint", ["cpe", "cve"])
+@pytest.mark.parametrize("invalid_body", [b"{", b"\xff"])
+def test_malformed_http_json_fails_only_its_pair(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    endpoint: str, invalid_body: bytes,
+) -> None:
+    """JSON inválido ou bytes ilegíveis não abortam os outros pares."""
+    if endpoint == "cve":
+        monkeypatch.setattr(
+            "scripts.fetch_cves._fetch_cpe_page",
+            lambda *args: {"totalResults": 0, "products": []},
+        )
+    else:
+        monkeypatch.setattr(
+            "scripts.fetch_cves._fetch_page",
+            lambda *args: {"totalResults": 0, "vulnerabilities": []},
+        )
+
+    def response(request: object, timeout: int) -> BytesIO:
+        """Devolve corpo inválido só nas consultas WNDR."""
+        field = "vulnerabilities" if endpoint == "cve" else "products"
+        valid_body = json.dumps({"totalResults": 0, field: []}).encode()
+        return BytesIO(invalid_body if "WNDR" in request.full_url else valid_body)
+
+    with patch("scripts.fetch_cves.urllib.request.urlopen", side_effect=response):
+        with pytest.raises(SystemExit, match="1"):
+            _invoke(
+                tmp_path, monkeypatch,
+                [
+                    {"meta_brand": "netgear", "meta_model": "wndr4300"},
+                    {"meta_brand": "netgear", "meta_model": "xr500"},
+                ],
+            )
+    cache = json.loads((tmp_path / "cache.json").read_text())
+    assert list(cache) == ["netgear/xr500"]
+    metadata = json.loads((tmp_path / "cache.meta.json").read_text())
+    assert (metadata["pairs_failed"], metadata["pairs_fetched"]) == (1, 1)
+
+
+@pytest.mark.parametrize("response", [{"products": []}, {"totalResults": 0}])
+def test_malformed_cpe_response_counts_as_failed_pair(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, response: dict
+) -> None:
+    """Dicionário CPE inválido não converte par em negativo."""
+    with (
+        patch("scripts.fetch_cves._fetch_cpe_page", return_value=response),
+        pytest.raises(SystemExit, match="1"),
+    ):
+        _invoke(
+            tmp_path, monkeypatch,
+            [{"meta_brand": "netgear", "meta_model": "wndr4300"}],
+        )
+    assert json.loads((tmp_path / "cache.json").read_text()) == {}
+    metadata = json.loads((tmp_path / "cache.meta.json").read_text())
+    assert metadata["pairs_failed"] == 1
+
+
+def test_cpe_with_cve_skips_keyword_variants() -> None:
+    """CPE único com CVE usa somente virtualMatchString."""
+    product = {"cpe": {"cpeName": "cpe:2.3:o:dlink:dir-300:1:*:*:*:*:*:*:*"}}
+    with (
+        patch("scripts.fetch_cves._fetch_cpe_page", return_value={
+            "totalResults": 1, "products": [product]
+        }),
+        patch("scripts.fetch_cves._fetch_page", return_value={
+            "totalResults": 1, "vulnerabilities": [
+                {"cve": {"id": "CVE-CPE", "configurations": []}}
+            ],
+        }) as fetch_page,
+    ):
+        entry = fetch_cves_for_pair("dlink", "dir300", {}, 0)
     assert entry["source"] == "cpe"
-    assert entry["cves"] == []
+    assert [cve["id"] for cve in entry["cves"]] == ["CVE-CPE"]
+    assert len(fetch_page.call_args_list) == 1
     assert "virtualMatchString=" in fetch_page.call_args.args[0]
+    assert all(q["endpoint"] != "keywordSearch" for q in entry["queries"])
 
 
 def test_cvss_uses_highest_score_in_preferred_version() -> None:
@@ -352,6 +681,7 @@ def test_cpe_pagination_preference_and_ambiguity() -> None:
         name, candidates = resolve_cpe_name("dlink", "dir300", {}, 0)
     assert name is None
     assert candidates == [
+        "cpe:2.3:h:dlink:dir-300:*:*:*:*:*:*:*:*",
         "cpe:2.3:o:dlink:dir-300_firmware:*:*:*:*:*:*:*:*",
         "cpe:2.3:o:dlink:dir300:*:*:*:*:*:*:*:*",
     ]
@@ -362,7 +692,7 @@ def test_cpe_pagination_preference_and_ambiguity() -> None:
     ):
         assert resolve_cpe_name("dlink", "dir300", {}, 0) == (
             "cpe:2.3:h:dlink:dir-300:*:*:*:*:*:*:*:*",
-            [],
+            ["cpe:2.3:h:dlink:dir-300:*:*:*:*:*:*:*:*"],
         )
     with (
         patch("scripts.fetch_cves.resolve_cpe_name", return_value=(None, candidates)),
@@ -373,7 +703,9 @@ def test_cpe_pagination_preference_and_ambiguity() -> None:
     ):
         entry = fetch_cves_for_pair("dlink", "dir300", {}, 0)
     assert entry["source"] == "keyword"
-    assert entry["cpe_candidates"] == candidates
+    assert entry["cpe_candidates"] == [
+        candidate for candidate in candidates if candidate.startswith("cpe:2.3:o:")
+    ]
     assert "keywordSearch=" in fetch_page.call_args.args[0]
 
 
@@ -395,7 +727,10 @@ def test_cpe_finds_unique_software_on_second_page() -> None:
     ) as fetch:
         assert resolve_cpe_name("dlink", "dir-300", {}, 0) == (
             "cpe:2.3:o:dlink:dir-300_firmware:*:*:*:*:*:*:*:*",
-            [],
+            [
+                "cpe:2.3:h:dlink:dir-300:*:*:*:*:*:*:*:*",
+                "cpe:2.3:o:dlink:dir-300_firmware:*:*:*:*:*:*:*:*",
+            ],
         )
     assert [call.args[1] for call in fetch.call_args_list] == [0, 1]
 
@@ -457,7 +792,7 @@ def test_schema_and_metadata_on_success(
             tmp_path, monkeypatch, [{"meta_brand": "dlink", "meta_model": "dir300"}]
         )
     entry = json.loads(output.read_text())["dlink/dir300"]
-    assert entry["schema_version"] == 3
+    assert entry["schema_version"] == 4
     assert datetime.fromisoformat(entry["fetched_at"]).utcoffset().total_seconds() == 0
     metadata = json.loads(output.with_name("cache.meta.json").read_text())
     assert metadata["features_path"] == str(features)
@@ -492,7 +827,7 @@ def test_missing_fetched_at_rejected_without_force(
 ) -> None:
     """Recusa reutilizar cache sem data de consulta válida."""
     output = tmp_path / "cache.json"
-    entry: dict[str, object] = {"schema_version": 3, "cves": []}
+    entry: dict[str, object] = {"schema_version": 4, "cves": []}
     if fetched_at is not None:
         entry["fetched_at"] = fetched_at
     output.write_text(json.dumps({"dlink/dir300": entry}))
@@ -509,7 +844,7 @@ def test_missing_fetched_at_force_refetches(
     output = tmp_path / "cache.json"
     output.write_text(json.dumps({"dlink/dir300": {"schema_version": 3, "cves": []}}))
     fresh_entry = {
-        "schema_version": 3,
+        "schema_version": 4,
         "cves": [],
         "fetched_at": "2026-09-27T00:00:00+00:00",
     }
@@ -552,11 +887,37 @@ def test_network_failure_persists_without_stale_entry(
     )
 
 
+def test_later_keyword_failure_does_not_commit_partial_union(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Erro na segunda variante não transforma a união parcial em resultado."""
+    cve = {"id": "CVE-FIRST", "configurations": []}
+    with (
+        patch("scripts.fetch_cves._fetch_cpe_page", return_value={
+            "totalResults": 0, "products": []
+        }),
+        patch("scripts.fetch_cves._fetch_page", side_effect=[
+            {"totalResults": 1, "vulnerabilities": [{"cve": cve}]},
+            URLError("falha na variante seguinte"),
+        ]),
+    ):
+        with pytest.raises(SystemExit, match="1"):
+            _invoke(
+                tmp_path, monkeypatch,
+                [{"meta_brand": "netgear", "meta_model": "wndr4300"}],
+            )
+    assert "netgear/wndr4300" not in json.loads(
+        (tmp_path / "cache.json").read_text()
+    )
+    metadata = json.loads((tmp_path / "cache.meta.json").read_text())
+    assert metadata["pairs_failed"] == 1
+
+
 def test_default_output_path(monkeypatch: pytest.MonkeyPatch) -> None:
     """Expõe o caminho canônico no padrão e na ajuda."""
 
     monkeypatch.setattr(sys, "argv", ["fetch_cves.py", "--features", "x"])
-    assert _parse_args().output == "dataset/processed/cve_cache_v2.json"
+    assert _parse_args().output == "dataset/processed/cve_cache_v3.json"
 
 
 def test_dry_run_never_writes_metadata(
@@ -581,14 +942,15 @@ def test_unexpected_failure_preserves_cache_and_run_metadata(
         {"meta_brand": "asus", "meta_model": "r1"},
         {"meta_brand": "dlink", "meta_model": "dir300"},
     ]
+
+    def resolve(vendor: str, model: str, *args: object) -> tuple[None, list[str]]:
+        """Falha no segundo par após a gravação do primeiro."""
+        if vendor == "dlink":
+            raise ValueError("resposta inválida")
+        return None, []
+
     with (
-        patch(
-            "scripts.fetch_cves.resolve_cpe_name",
-            side_effect=[
-                (None, []),
-                ValueError("resposta inválida"),
-            ],
-        ),
+        patch("scripts.fetch_cves.resolve_cpe_name", side_effect=resolve),
         patch(
             "scripts.fetch_cves._fetch_page",
             return_value={"totalResults": 0, "vulnerabilities": []},
