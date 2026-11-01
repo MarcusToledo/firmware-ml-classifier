@@ -379,7 +379,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--cves", type=Path, required=True)
     parser.add_argument("--critical-cvss", type=float, default=9.0)
     parser.add_argument(
-        "--output", type=Path, default=Path("dataset/processed/labels_v2.csv")
+        "--output", type=Path, default=Path("dataset/processed/labels_v3.csv")
     )
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()

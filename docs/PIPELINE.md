@@ -138,12 +138,13 @@ firmware de novo.
 ### 3. Rotulagem por CVE
 
 O rótulo de treino depende apenas de CVEs avaliadas para os metadados da
-imagem. O treino faz merge com `labels_v2.csv` por `firmware_id` e usa
-dele somente `security_level`. `vendor`, `model`, `version`,
-`version_source`, `cve_total` e `cvss_max` ficam fora do vetor, assim como
-todas as colunas `meta_*` do parquet. Essa separação evita vazamento:
-`version_source` nulo tende a coincidir com `indeterminado` e antecipa o
-rótulo.
+imagem. O treino faz merge pelo `firmware_id` com o arquivo de rótulos indicado
+em `configs/dataset.yaml` e usa dele somente `security_level`. Para consumir
+`labels_v3.csv`, ajuste esse caminho na configuração antes de montar a tabela.
+`vendor`, `model`, `version`, `version_source`, `cve_total` e `cvss_max` ficam
+fora do vetor, assim como todas as colunas `meta_*` do parquet. Essa separação
+evita vazamento: `version_source` nulo tende a coincidir com `indeterminado`
+e antecipa o rótulo.
 
 `scripts/build_dataset.py` (`src/dataset/training_table.py`) faz essa junção e
 grava `training_table.parquet` só com features de conteúdo; as regras de
@@ -155,10 +156,12 @@ exclusão, o one-hot e os metadados estão no `README.md`.
   modelo, `filename` quando vem do fallback pelo nome do arquivo, ou nulo
   quando não há versão. O diretório tem prioridade. Os dois campos ficam
   fora do vetor de features.
-- `scripts/fetch_cves.py` procura um CPE oficial correspondente ao par
-  fabricante/modelo; se não o encontra, consulta a NVD por texto. O cache
-  guarda cada CVE com ID, CVSS, critério CPE, limites de versão e a
-  configuração lógica original.
+- `scripts/fetch_cves.py` consulta CPE oficial com as variantes de busca
+  M0/H/M1 do fabricante/modelo e, quando não encontra produto, faz a busca
+  textual de CVEs. O cache `cve_cache_v3.json` (`schema_version: 4`)
+  registra as consultas, os candidatos CPE e o estado da evidência
+  (`cve_encontrada`, `produto_encontrado_sem_cve` ou `nao_encontrado`). Cada CVE
+  inclui ID, CVSS, critério CPE, limites de versão e configuração lógica.
 - `src/labeling/version_match.py` compara segmentos numéricos e respeita
   limites inclusivos e exclusivos.
 - `src/labeling/cve_labels.py` avalia todas as CVEs e devolve duas listas:
@@ -166,7 +169,8 @@ exclusão, o one-hot e os metadados estão no `README.md`.
   com ou sem versão: sem faixa de produto e versão não há como decidir a
   aplicabilidade. Sem versão parseável, uma CVE cujas configurações citam
   apenas outros produtos é descartada; as demais ficam indeterminadas. Uma
-  entrada vazia continua sendo evidência de `sem_cve_conhecida`.
+  lista vazia de CVEs não basta para `sem_cve_conhecida` quando o estado é
+  `nao_encontrado`: ausência de resultado não é evidência negativa.
 - A versão CPE exata e os limites `versionStart*`/`versionEnd*` são
   normalizados pela mesma convenção da extração: remove-se `v`/`V`
   inicial; ASUS troca `_` por `.`; Netgear remove o pacote após `_`, mas
@@ -184,28 +188,31 @@ exclusão, o one-hot e os metadados estão no `README.md`.
   sufixo na mesma base (ex.: `1.2` contra `1.2rc1`) devolve `None`. Base
   numérica distinta também devolve `False`.
 - `scripts/generate_labels.py` grava `version_source` logo após `version`
-  no `labels_v2.csv`. O script reinfere versão e origem a partir de
-  `meta_path` e falha se divergirem de `meta_version` ou
-  `meta_version_source`; tabela sem a coluna `meta_version_source` também
-  é recusada. Portanto, qualquer mudança nas regras de extração de
-  versão exige reextrair as features antes de regerar os rótulos. O cache
-  precisa de `schema_version: 3` e `fetched_at` em cada entrada.
+  no CSV. O script reinfere versão e origem a partir de `meta_path` e falha
+  se divergirem de `meta_version` ou `meta_version_source`; tabela sem
+  `meta_version_source` também é recusada. Mudanças nas regras de extração
+  exigem reextrair as features antes de regerar rótulos. A entrada exige
+  `schema_version: 4`, `fetched_at`, `queries`, `cpe_candidates` e
+  `evidence_state` válidos em cada par; cache antigo não é aceito.
 - O mesmo script une por ID as aplicáveis (`A`) e as indeterminadas (`U`)
-  de todos os aliases do mesmo `firmware_id`. Calcula `inf = label(A)` e
-  `sup = label(A ∪ U)`: usa `inf` quando os dois limites coincidem e
-  `indeterminado` quando divergem. `cve_total` e `cvss_max` sempre
-  descrevem apenas `A`, portanto são limites inferiores. Par
-  fabricante/modelo ausente no cache gera erro. O arquivo `labels_v2.csv`
-  mantém o estado `indeterminado`, que `src/dataset/training_table.py`
-  exclui do conjunto de treino. `label_strategy` (`alias_unico` ou
-  `agregacao_conservadora`) e `alias_count` registram a agregação.
-- Artefatos (padrão `dataset/processed/labels_v2.csv`): a tabela;
-  `labels_v2_aliases.jsonl`, uma linha por `firmware_id` com os aliases,
-  as CVEs aplicáveis e indeterminadas de cada um e `versions_differ`; e
-  `labels_v2.meta.json`, com limiar, caminhos e SHA256 das entradas,
-  `code_commit` (sufixo `-dirty` com tree modificada) e `generated_at`.
-  O log conta `firmware_id` com mais de um alias, com mais de um modelo e
-  com versões diferentes. `--dry-run` não grava nenhum dos três.
+  de todos os aliases de um `firmware_id`. Calcula `inf = label(A)` e
+  `sup = label(A ∪ U)`: usa `inf` quando coincidem e `indeterminado`
+  quando divergem. Se algum alias tem `evidence_state: nao_encontrado`,
+  o limite superior fica aberto; apenas uma CVE crítica já aplicável
+  fixa a classe. `cve_total` e `cvss_max` sempre descrevem apenas `A`,
+  portanto são limites inferiores. Par fabricante/modelo ausente no cache
+  gera erro. `label_strategy` (`alias_unico` ou
+  `agregacao_conservadora`), `alias_count` e `evidence_reason` tornam
+  a decisão auditável; `indeterminado` fica fora do conjunto de treino.
+- Para a rodada v3, informe explicitamente `--cves
+  dataset/processed/cve_cache_v3.json --output
+  dataset/processed/labels_v3.csv`: o padrão de `--output` no script ainda é
+  `labels_v2.csv`. Artefatos resultantes: `labels_v3.csv`,
+  `labels_v3_aliases.jsonl` (aliases, CVEs e `evidence_state` por alias)
+  e `labels_v3.meta.json` (limiar, caminhos e SHA256 das entradas,
+  `code_commit` e `generated_at`). O log conta `firmware_id` com mais de
+  um alias, mais de um modelo e versões diferentes. `--dry-run` não grava
+  nenhum dos três.
 
 ### 4. Classificação e baseline
 
@@ -259,10 +266,10 @@ determinístico. Eles nunca alteram o rótulo de treino.
 
 | Classe | Definição |
 |---|---|
-| `sem_cve_conhecida` | Os limites inferior e superior não contêm CVE. Isso inclui uma entrada vazia no cache mesmo sem versão. Não prova ausência de vulnerabilidade. |
+| `sem_cve_conhecida` | Os limites inferior e superior não contêm CVE e nenhum alias tem evidência `nao_encontrado`. Não prova ausência de vulnerabilidade. |
 | `cve_conhecida` | Ao menos uma CVE abaixo do limiar crítico (CVSS < 9.0 por padrão). |
 | `cve_critica` | CVE com CVSS >= 9.0 (`CveLabelThresholds.critical_cvss`, ajustável via `--critical-cvss`). |
-| `indeterminado` | Incerteza de versão ou condição CPE faz os limites inferior e superior produzirem classes diferentes. Estado de qualidade, fora das classes de treino. |
+| `indeterminado` | Incerteza de versão, condição CPE ou evidência de produto (`nao_encontrado`) faz os limites inferior e superior produzirem classes diferentes. Estado de qualidade, fora das classes de treino. |
 
 ## Estado real do dataset (`labels_v2.csv` de 2026-09-23)
 
@@ -365,8 +372,8 @@ sem versão (`version_source` nulo).
   tem colunas `doc2vec_*`. Com `--override doc2vec.enabled=true` voltam
   as `vector_size` colunas, zeradas enquanto `models/doc2vec.model` não
   existir (rodar `train-doc2vec`).
-- 43 pares `tp_link/*` no cache foram buscados antes da correção do
-  alias de vendor, precisam de `fetch_cves.py --force`.
+- No cache histórico v2, 43 pares `tp_link/*` foram buscados antes da
+  correção do alias de vendor; esse diagnóstico não descreve o cache v3.
 - Detector `hardcoded_passwords`: 98,6% dos achados são token avulso
   (ex. `"System halted"` contado por conter `"system"`). Ajuste em
   outra branch.

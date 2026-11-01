@@ -789,9 +789,9 @@ def test_cli_default_output_writes_table_and_auxiliaries(
     monkeypatch.chdir(tmp_path)
     _invoke(monkeypatch, "--features", str(features), "--cves", str(cache_path))
     output_dir = tmp_path / "dataset/processed"
-    assert (output_dir / "labels_v2.csv").exists()
-    assert (output_dir / "labels_v2_aliases.jsonl").exists()
-    meta = json.loads((output_dir / "labels_v2.meta.json").read_text("utf-8"))
+    assert (output_dir / "labels_v3.csv").exists()
+    assert (output_dir / "labels_v3_aliases.jsonl").exists()
+    meta = json.loads((output_dir / "labels_v3.meta.json").read_text("utf-8"))
     assert list(meta) == [
         "critical_cvss",
         "features_path",

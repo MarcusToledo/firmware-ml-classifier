@@ -44,11 +44,12 @@ participam do baseline nem do vetor do classificador. `meta_brand` e
 `meta_model` são metadados de consulta, não features. A guarda em
 `tests/test_pipeline_extraction.py` verifica essa separação.
 
-O cache de `scripts/fetch_cves.py` é consultado por fabricante/modelo; a
-aplicabilidade à versão do firmware é avaliada depois, na rotulagem por
-`src/labeling/cve_labels.py` e `scripts/generate_labels.py`. Quando as CVEs
-indeterminadas podem mudar a classe, o rótulo é `indeterminado`. Uma entrada
-ausente no cache indica consulta incompleta, por isso `generate_labels.py`
+O cache v3 (`schema_version: 4`) de `scripts/fetch_cves.py` é consultado por
+fabricante/modelo; a aplicabilidade à versão é avaliada depois por
+`src/labeling/cve_labels.py` e `scripts/generate_labels.py`. Produto encontrado
+no dicionário CPE sem CVE fornece `sem_cve_conhecida`; sem produto nem CVE
+aplicável ao produto, `nao_encontrado` deixa o rótulo `indeterminado` quando
+a incerteza pode mudar a classe. Uma entrada ausente no cache ou cache antigo
 interrompe a execução em vez de atribuir `sem_cve_conhecida`.
 
 ## Execução
@@ -56,14 +57,14 @@ interrompe a execução em vez de atribuir `sem_cve_conhecida`.
 ```bash
 uv run python scripts/generate_labels.py \
   --features dataset/processed/features_v2.parquet \
-  --cves dataset/processed/cve_cache_v2.json \
-  --output dataset/processed/labels_v2.csv
+  --cves dataset/processed/cve_cache_v3.json \
+  --output dataset/processed/labels_v3.csv
 ```
 
 Para consultar apenas a distribuição sem salvar, adicione `--dry-run`.
-O caminho de features corresponde ao `configs/dataset.yaml`; o cache CVE
-usa o caminho padrão de `scripts/fetch_cves.py` e a saída corresponde ao
-padrão de `scripts/generate_labels.py`.
+O caminho de features corresponde ao `configs/dataset.yaml`; o cache é
+o arquivo padrão de `scripts/fetch_cves.py`. A saída padrão de
+`generate_labels.py` é `labels_v3.csv` (alterável por `--output`).
 
 Para calcular o baseline em código:
 
