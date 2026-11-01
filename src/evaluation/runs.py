@@ -149,11 +149,9 @@ def _test_groups(folds: pd.DataFrame) -> pd.DataFrame:
 def _vendors(provenance: pd.DataFrame, exclude_alias_vendor: str) -> pd.DataFrame:
     """Retorna o fabricante único e a presença do alias excluído por ID.
 
-    Levanta ValueError para ID com mais de um fabricante ou fabricante ausente.
+    Levanta ValueError para ID com mais de um fabricante.
     """
     aliases = provenance[[c.KEY_COLUMN, "vendor"]]
-    if exclude_alias_vendor not in set(aliases["vendor"]):
-        raise ValueError(f"fabricante {exclude_alias_vendor} ausente da proveniência")
     counts = aliases.groupby(c.KEY_COLUMN)["vendor"].nunique()
     multiple = sorted(counts.index[counts > 1])
     if multiple:
@@ -167,8 +165,18 @@ def _vendors(provenance: pd.DataFrame, exclude_alias_vendor: str) -> pd.DataFram
 def oof_frame(data: TrainingData, exclude_alias_vendor: str) -> pd.DataFrame:
     """Retorna componente, tamanho do componente e fabricante de cada ID de teste.
 
-    Levanta ValueError para ID de teste sem fabricante ou fabricante ambíguo.
+    Levanta ValueError para ID de teste sem fabricante ou fabricante ambíguo,
+    ou para fabricante configurado ausente do corpus e das exclusões.
     """
+    valid_vendors = (
+        set(data.fold_set.provenance["vendor"])
+        | set(data.freeze["exclusions"]["excluded_by_vendor_reason"])
+    )
+    if exclude_alias_vendor not in valid_vendors:
+        raise ValueError(
+            f"fabricante {exclude_alias_vendor} ausente da proveniência e das "
+            "exclusões do congelamento"
+        )
     frame = _test_groups(data.fold_set.folds)
     frame["n_group"] = frame.groupby("group")[c.KEY_COLUMN].transform("size")
     vendors = _vendors(data.fold_set.provenance, exclude_alias_vendor)

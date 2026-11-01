@@ -5,6 +5,8 @@ Nenhuma função deste módulo treina modelo ou cria folds.
 
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 import pandas as pd
 
@@ -16,6 +18,12 @@ from src.evaluation.runs import EvaluatedRun, aligned_predictions
 
 ANALYSIS_TYPE = "secundario"
 UNDEFINED_KINDS = ("precision", "recall")
+LOGGER = logging.getLogger(__name__)
+SCENARIO_METRICS = (
+    "n_firmware_id", "n_components", "macro_f1_b2", "macro_f1_b2_ci_low",
+    "macro_f1_b2_ci_high", "macro_f1_b1", "macro_f1_b1_ci_low",
+    "macro_f1_b1_ci_high", "delta", "delta_ci_low", "delta_ci_high",
+)
 
 
 def _class_rows(
@@ -86,7 +94,20 @@ def scenario_table(
 ) -> pd.DataFrame:
     """Compara B2 e B1 em cada cenário com as mesmas reamostragens do âncora."""
     rows = []
+    absent = not oof["has_excluded_alias"].any()
+    reason = (
+        f"{config.exclude_alias_vendor} com 0 firmware_id no corpus congelado"
+        if absent else ""
+    )
     for scenario, weights in scenario_weights(oof, config.exclude_alias_vendor).items():
+        if scenario == f"sem_alias_{config.exclude_alias_vendor}" and absent:
+            LOGGER.warning("Cenário %s não aplicável: %s", scenario, reason)
+            rows.append({
+                "scenario": scenario, "analysis_type": ANALYSIS_TYPE,
+                **dict.fromkeys(SCENARIO_METRICS),
+                "status": "não aplicável", "reason": reason,
+            })
+            continue
         result = compare_runs(b2, b1, oof, resampling, weights, config.ci)
         kept = weights > 0
         rows.append({
@@ -98,5 +119,6 @@ def scenario_table(
             "macro_f1_b1_ci_low": result.ci_b[0],
             "macro_f1_b1_ci_high": result.ci_b[1], "delta": result.delta,
             "delta_ci_low": result.ci_delta[0], "delta_ci_high": result.ci_delta[1],
+            "status": "aplicável", "reason": "",
         })
     return pd.DataFrame(rows)

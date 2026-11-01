@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -14,8 +15,8 @@ from src.evaluation.config import EvaluationConfig
 from src.evaluation.metrics import CLASSES
 from src.evaluation.runs import ArmRun, ensure_run, oof_frame
 from src.evaluation.sensitivity import scenario_table, scenario_weights, vendor_table
-from src.models.training import load_inputs
-from tests.eval_fixtures import evaluation_configs
+from src.models.training import load_inputs, load_training_config
+from tests.eval_fixtures import evaluation_configs, evaluation_corpus
 
 ARMS = (("B2", "extra_trees"), ("B0", "majoritario"), ("B1", "identidade"))
 
@@ -87,3 +88,11 @@ def test_all_vendors_scenario_reproduces_anchor(evaluated: Evaluated) -> None:
     assert first["scenario"] == "todos_fabricantes"
     for column in ("delta", "delta_ci_low", "delta_ci_high"):
         assert first[column] == anchor[column]
+
+
+def test_unknown_vendor_raises_value_error(tmp_path: Path) -> None:
+    """Recusa fabricante sem IDs na proveniência e nas exclusões congeladas."""
+    _, training_yaml = evaluation_corpus(tmp_path)
+    data = load_inputs(load_training_config(training_yaml, {}))
+    with pytest.raises(ValueError, match="fabricante inexistente ausente"):
+        oof_frame(data, "inexistente")

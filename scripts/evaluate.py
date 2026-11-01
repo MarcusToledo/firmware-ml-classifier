@@ -130,15 +130,16 @@ def _bundle(
         by_arm["B2"], training.output_dir, data.fold_set.table, CLASSES,
         config.n_repeats, config.permutation_seed, config.ci,
     )
+    scenarios = scenario_table(oof, by_arm["B2"], by_arm["B1"], resampling, config)
     return ReportBundle(
         metrics, per_class, confusion,
         comparison_table(arm_runs, oof, resampling, config),
         ablation_table(arm_runs, oof, resampling, config),
         exclusion_table(data.freeze), importance,
         vendor_table(oof, by_arm["B2"], by_arm["B1"], CLASSES),
-        scenario_table(oof, by_arm["B2"], by_arm["B1"], resampling, config),
+        scenarios,
         arm_runs,
-        report_meta(config, training, data, arm_runs, results, resampling),
+        report_meta(config, training, data, arm_runs, results, resampling, scenarios),
         _command(),
     )
 

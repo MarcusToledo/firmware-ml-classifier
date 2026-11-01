@@ -177,7 +177,7 @@ def _versions() -> dict[str, str]:
 def report_meta(
     config: EvaluationConfig, training: TrainingConfig, data: TrainingData,
     arm_runs: list[ArmRun], results: dict[str, dict[int, RunMetrics]],
-    resampling: Resampling,
+    resampling: Resampling, sensitivity_comparison: pd.DataFrame,
 ) -> dict[str, Any]:
     """Monta o manifesto do relatório, sem created_at nem reaproveitamento."""
     runs = {item.run.run_id: {
@@ -207,6 +207,10 @@ def report_meta(
         "resampling": {
             "n_resamples": config.n_resamples, "seed": config.bootstrap_seed,
             "ci": config.ci, "n_groups": len(resampling.groups),
+        },
+        "sensitivity_scenarios": {
+            row.scenario: {"status": row.status, "reason": row.reason}
+            for row in sensitivity_comparison.itertuples(index=False)
         },
     }
 
@@ -320,8 +324,9 @@ def _missing_classes(by_vendor: pd.DataFrame) -> list[str]:
 
 def _section_secondary(bundle: ReportBundle) -> list[str]:
     """Retorna os cenários secundários com a ressalva pré-registrada."""
-    columns = ["scenario", "n_firmware_id", "n_components", "macro_f1_b2",
-               "macro_f1_b1", "delta", "delta_ci_low", "delta_ci_high"]
+    columns = ["scenario", "status", "reason", "n_firmware_id",
+               "n_components", "macro_f1_b2", "macro_f1_b1", "delta",
+               "delta_ci_low", "delta_ci_high"]
     return [
         "## Análises secundárias pré-registradas (FR-019)", "", SECONDARY_NOTE, "",
         *_md_table(bundle.sensitivity_comparison, columns),
@@ -384,7 +389,8 @@ def delta_rows(bundle: ReportBundle) -> pd.DataFrame:
             f"B2 − B1 ({s})" for s in bundle.sensitivity_comparison["scenario"]
         ]),
     ]
-    return pd.concat([part[["label", *columns]] for part in parts], ignore_index=True)
+    return pd.concat([part[["label", *columns]] for part in parts], ignore_index=True
+                     ).dropna(subset=["delta"])
 
 
 def _tables(bundle: ReportBundle) -> dict[str, pd.DataFrame]:
