@@ -22,3 +22,8 @@ freeze:
     aprovação da proposta (15/10), a rodada de dados (16/10), a partição
     agrupada (T03), a correção R1 e a seleção T13-A, todas anteriores a
     qualquer treino de modelo.
+    Rodada v3 (decisão do pesquisador em 31/10/2026): re-rotulagem por
+    defeito da busca CVE da etapa 003 (hífen inserido no texto do modelo),
+    descoberto depois da avaliação v2 (reports/20261031T141648Z, invalidada);
+    as regras de busca e rotulagem do Portão A foram registradas antes de
+    qualquer métrica da rodada v3.
