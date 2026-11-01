@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sys
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 from urllib.error import URLError
@@ -11,6 +12,8 @@ import pandas as pd
 import pytest
 
 from scripts.fetch_cves import (
+    NvdResponseError,
+    _fetch_all_pages,
     _parse_args,
     _should_save,
     extract_cvss,
@@ -515,6 +518,82 @@ def test_malformed_cve_response_counts_as_failed_pair(
     assert "netgear/wndr4300" not in json.loads((tmp_path / "cache.json").read_text())
     metadata = json.loads((tmp_path / "cache.meta.json").read_text())
     assert metadata["pairs_failed"] == 1
+
+
+@pytest.mark.parametrize("endpoint", ["cpe", "cve"])
+def test_pagination_rejects_total_changed_after_first_page(endpoint: str) -> None:
+    """Total menor na página seguinte não autoriza aceitar resultado parcial."""
+    first_item = (
+        {"cpe": {"cpeName": "cpe:2.3:o:netgear:wndr4300:1:*:*:*:*:*:*:*"}}
+        if endpoint == "cpe" else {"cve": {"id": "CVE-ONE"}}
+    )
+    field = "products" if endpoint == "cpe" else "vulnerabilities"
+    pages = [
+        {"totalResults": 2, field: [first_item]},
+        {"totalResults": 1, field: []},
+    ]
+    target = (
+        "scripts.fetch_cves._fetch_cpe_page"
+        if endpoint == "cpe" else "scripts.fetch_cves._fetch_page"
+    )
+    with patch(target, side_effect=pages), pytest.raises(NvdResponseError):
+        if endpoint == "cpe":
+            resolve_cpe_name("netgear", "wndr4300", {}, 0)
+        else:
+            _fetch_all_pages("keywordSearch=netgear", {}, 0)
+
+
+@pytest.mark.parametrize(
+    "item", [{}, {"cve": None}, {"cve": {}}, {"cve": {"id": " "}}],
+)
+def test_cve_without_valid_id_is_rejected(item: dict) -> None:
+    """Vulnerabilidade sem objeto e identificador não entra no cache."""
+    with (
+        patch("scripts.fetch_cves._fetch_page", return_value={
+            "totalResults": 1, "vulnerabilities": [item]
+        }),
+        pytest.raises(NvdResponseError),
+    ):
+        _fetch_all_pages("keywordSearch=netgear", {}, 0)
+
+
+@pytest.mark.parametrize("endpoint", ["cpe", "cve"])
+@pytest.mark.parametrize("invalid_body", [b"{", b"\xff"])
+def test_malformed_http_json_fails_only_its_pair(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    endpoint: str, invalid_body: bytes,
+) -> None:
+    """JSON inválido ou bytes ilegíveis não abortam os outros pares."""
+    if endpoint == "cve":
+        monkeypatch.setattr(
+            "scripts.fetch_cves._fetch_cpe_page",
+            lambda *args: {"totalResults": 0, "products": []},
+        )
+    else:
+        monkeypatch.setattr(
+            "scripts.fetch_cves._fetch_page",
+            lambda *args: {"totalResults": 0, "vulnerabilities": []},
+        )
+
+    def response(request: object, timeout: int) -> BytesIO:
+        """Devolve corpo inválido só nas consultas WNDR."""
+        field = "vulnerabilities" if endpoint == "cve" else "products"
+        valid_body = json.dumps({"totalResults": 0, field: []}).encode()
+        return BytesIO(invalid_body if "WNDR" in request.full_url else valid_body)
+
+    with patch("scripts.fetch_cves.urllib.request.urlopen", side_effect=response):
+        with pytest.raises(SystemExit, match="1"):
+            _invoke(
+                tmp_path, monkeypatch,
+                [
+                    {"meta_brand": "netgear", "meta_model": "wndr4300"},
+                    {"meta_brand": "netgear", "meta_model": "xr500"},
+                ],
+            )
+    cache = json.loads((tmp_path / "cache.json").read_text())
+    assert list(cache) == ["netgear/xr500"]
+    metadata = json.loads((tmp_path / "cache.meta.json").read_text())
+    assert (metadata["pairs_failed"], metadata["pairs_fetched"]) == (1, 1)
 
 
 @pytest.mark.parametrize("response", [{"products": []}, {"totalResults": 0}])

@@ -17,7 +17,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.parse import quote as url_quote
 
 import pandas as pd
@@ -211,6 +211,15 @@ def _build_headers() -> dict[str, str]:
     return headers
 
 
+def _decode_nvd_response(body: bytes, endpoint: str, query: str) -> dict[str, Any]:
+    """Converte resposta NVD em JSON ou sinaliza falha do par com contexto."""
+    try:
+        result: dict[str, Any] = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise NvdResponseError(f"{endpoint} {query}: resposta JSON inválida") from exc
+    return result
+
+
 def _fetch_page(
     query_params: str,
     start_index: int,
@@ -224,8 +233,7 @@ def _fetch_page(
     req = urllib.request.Request(url, headers=headers)
 
     with urllib.request.urlopen(req, timeout=_NVD_REQUEST_TIMEOUT_SECONDS) as resp:
-        result: dict[str, Any] = json.loads(resp.read().decode())
-        return result
+        return _decode_nvd_response(resp.read(), "CVE", query_params)
 
 
 def _fetch_cpe_page(
@@ -241,8 +249,7 @@ def _fetch_cpe_page(
     with urllib.request.urlopen(
         request, timeout=_NVD_REQUEST_TIMEOUT_SECONDS
     ) as response:
-        result: dict[str, Any] = json.loads(response.read().decode())
-        return result
+        return _decode_nvd_response(response.read(), "CPE", keyword)
 
 
 def _canonical_cpe_token(value: str) -> str:
@@ -320,15 +327,19 @@ def resolve_cpe_name(
 def _fetch_cpe_products(
     keyword: str, headers: dict[str, str], delay: float
 ) -> tuple[list[dict[str, Any]], int]:
-    """Busca todas as páginas de produtos CPE e devolve o total reportado."""
+    """Busca páginas CPE exigindo totalResults estável e contagem completa."""
     products: list[dict[str, Any]] = []
-    total = 0
+    expected_total: int | None = None
     while True:
         page = _fetch_cpe_page(keyword, len(products), headers)
         total, batch = _validated_page(page, "products", len(products), "CPE")
+        if expected_total is None:
+            expected_total = total
+        if total != expected_total:
+            raise NvdResponseError(f"CPE {keyword}: totalResults mudou na paginação")
         products.extend(batch)
-        if len(products) >= total:
-            return products, total
+        if len(products) == expected_total:
+            return products, expected_total
         time.sleep(delay)
 
 
@@ -351,29 +362,43 @@ def _query_record(
 def _fetch_all_pages(
     query_params: str, headers: dict[str, str], delay: float
 ) -> tuple[list[dict[str, Any]], int]:
-    """Busca páginas CVE completas e retorna o total informado pela NVD."""
+    """Busca páginas CVE exigindo totalResults estável e contagem completa."""
     start_index = 0
     cves: list[dict[str, Any]] = []
-    total_results = 0
+    expected_total: int | None = None
     while True:
         data = _fetch_page(query_params, start_index, headers)
-        total_results, vulnerabilities = _validated_page(
+        total, vulnerabilities = _validated_page(
             data, "vulnerabilities", start_index, "CVE"
         )
+        if expected_total is None:
+            expected_total = total
+        if total != expected_total:
+            raise NvdResponseError(
+                f"CVE {query_params}: totalResults mudou na paginação"
+            )
         for item in vulnerabilities:
-            cve = item.get("cve", {})
+            cve = item.get("cve")
+            if (
+                not isinstance(cve, dict)
+                or not isinstance(cve.get("id"), str)
+                or not cve["id"].strip()
+            ):
+                raise NvdResponseError(
+                    f"CVE {query_params}: vulnerabilidade sem cve.id válido"
+                )
             score, severity = extract_cvss(cve)
             cves.append(
                 {
-                    "id": cve.get("id", ""),
+                    "id": cve["id"],
                     _CVE_MAX_SCORE_FIELD: score,
                     "severity": severity_bucket(severity),
                     "configurations": cve.get("configurations", []),
                 }
             )
         start_index += len(vulnerabilities)
-        if start_index >= total_results:
-            return cves, total_results
+        if start_index == expected_total:
+            return cves, expected_total
         time.sleep(delay)
 
 
@@ -398,7 +423,9 @@ def _query_cves(
         )
         fetched_at = datetime.now(timezone.utc).isoformat(timespec=_TIMESTAMP_PRECISION)
         request_cache[key] = (cves, total, fetched_at)
-    cves, total, fetched_at = request_cache[key]
+    cves, total, fetched_at = cast(
+        tuple[list[dict[str, Any]], int, str], request_cache[key]
+    )
     queries.append(_query_record(variant, endpoint, total, fetched_at=fetched_at))
     return cves
 
@@ -608,7 +635,12 @@ def _show_dry_run(pairs: list[tuple[str, str]]) -> None:
 
 def _validate_cached_pair(key: str, entry: object) -> dict[str, Any]:
     """Rejeita schema antigo ou evidência incompleta antes de reaproveitar par."""
-    version = entry.get(_CACHE_SCHEMA_FIELD) if isinstance(entry, dict) else None
+    if not isinstance(entry, dict):
+        raise ValueError(
+            f"Cache CVE em schema antigo para {key}: "
+            "schema_version=None; rode com --force"
+        )
+    version = entry.get(_CACHE_SCHEMA_FIELD)
     if version != CVE_CACHE_SCHEMA_VERSION:
         raise ValueError(
             f"Cache CVE em schema antigo para {key}: "
