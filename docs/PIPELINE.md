@@ -139,8 +139,8 @@ firmware de novo.
 
 O rótulo de treino depende apenas de CVEs avaliadas para os metadados da
 imagem. O treino faz merge pelo `firmware_id` com o arquivo de rótulos indicado
-em `configs/dataset.yaml` e usa dele somente `security_level`. Para consumir
-`labels_v3.csv`, ajuste esse caminho na configuração antes de montar a tabela.
+em `configs/dataset.yaml` (`labels_v3.csv` desde a rodada v3) e usa dele
+somente `security_level`.
 `vendor`, `model`, `version`, `version_source`, `cve_total` e `cvss_max` ficam
 fora do vetor, assim como todas as colunas `meta_*` do parquet. Essa separação
 evita vazamento: `version_source` nulo tende a coincidir com `indeterminado`
@@ -204,10 +204,9 @@ exclusão, o one-hot e os metadados estão no `README.md`.
   gera erro. `label_strategy` (`alias_unico` ou
   `agregacao_conservadora`), `alias_count` e `evidence_reason` tornam
   a decisão auditável; `indeterminado` fica fora do conjunto de treino.
-- Para a rodada v3, informe explicitamente `--cves
-  dataset/processed/cve_cache_v3.json --output
-  dataset/processed/labels_v3.csv`: o padrão de `--output` no script ainda é
-  `labels_v2.csv`. Artefatos resultantes: `labels_v3.csv`,
+- Na rodada v3, `--cves dataset/processed/cve_cache_v3.json` e `--output
+  dataset/processed/labels_v3.csv` são os padrões do script. Artefatos
+  resultantes: `labels_v3.csv`,
   `labels_v3_aliases.jsonl` (aliases, CVEs e `evidence_state` por alias)
   e `labels_v3.meta.json` (limiar, caminhos e SHA256 das entradas,
   `code_commit` e `generated_at`). O log conta `firmware_id` com mais de
@@ -216,7 +215,7 @@ exclusão, o one-hot e os metadados estão no `README.md`.
 
 ### Análise descritiva pré-registrada: cobertura NVD
 
-Com `labels_v3.csv` em `configs/dataset.yaml`, execute
+Com `labels_v3.csv` em `configs/dataset.yaml` (padrão desde a rodada v3), execute
 `python scripts/describe_nvd_coverage.py` (opções: `--config` e
 `--reports-dir`). A análise definida em
 `dataset/interim/rodada_v3_fase3_4/PREREGISTRO_COBERTURA_NVD.md`
