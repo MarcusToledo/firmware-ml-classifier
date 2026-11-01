@@ -94,9 +94,10 @@ uv run python scripts/validate_dataset.py
 uv run python scripts/make_folds.py
 uv run python scripts/freeze_corpus.py
 
-# 5. Treino dos cinco braços e métricas OOF por run_id
+# 5. Treino dos cinco braços, métricas OOF por run_id e avaliação final
 uv run python scripts/train.py --model all --experiment principal --scheme grouped
 uv run python scripts/compute_metrics.py --run-id <run_id> [--run-id ...]
+uv run python scripts/evaluate.py
 ```
 
 Do cache de CVEs em diante, os artefatos registram proveniência (hashes,
@@ -140,6 +141,17 @@ prevalência dos detectores no corpus congelado.
 sobrescrita sem `--force`. `--columns-file` treina um subconjunto de colunas
 (ablações). `compute_metrics.py` grava `metrics.csv`, `metrics_per_class.csv` e
 `confusion.csv` em `reports/<timestamp>/`.
+
+**Avaliação final.** `evaluate.py` lê `configs/evaluation.yaml`, reaproveita
+cada braço da 010 pelo `run_id` (ou o treina, se ausente), incluindo as
+ablações B2−D, B2−H e B2′ em Extra Trees, e recusa execução incompleta ou cujo
+`run.meta.json` não reproduz o `run_id`. Calcula Δ = macro-F1(B2) −
+macro-F1(B1) e as comparações com B0, com IC 95% por bootstrap pareado por
+componente conectado (2000 reamostragens, sorteadas uma vez e reusadas em
+todas as comparações), a importância por permutação do Extra Trees por fold, as
+análises secundárias pré-registradas e as exclusões por fabricante. Grava CSV,
+PNG e `report.md` em `reports/<timestamp>/`, idênticos byte a byte entre
+gerações; só `created_at` muda em `report.meta.json`.
 
 **Doc2Vec.** O código de Doc2Vec (`scripts/train_doc2vec.py`,
 `scripts/inspect_tokens.py`) existe, mas é trabalho futuro: fica fora do vetor

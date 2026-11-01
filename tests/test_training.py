@@ -17,6 +17,8 @@ from src.models.training import (
     fixed_probabilities,
     load_inputs,
     load_training_config,
+    prepare_run,
+    run_id_from_meta,
     train_run,
     write_run,
 )
@@ -208,3 +210,29 @@ def test_absent_training_class_has_zero_probability() -> None:
         c.TARGET_CLASSES[:2], np.array([[0.2, 0.8]]), c.TARGET_CLASSES
     )
     np.testing.assert_array_equal(values, [[0.2, 0.8, 0.0]])
+
+
+def test_prepare_run_matches_trained_run_id_without_writing(tmp_path: Path) -> None:
+    """Calcula o run_id da execução antes do treino e sem criar diretório."""
+    config = config_for(tmp_path, corpus(tmp_path))
+    prepared = prepare_run("extra_trees", "principal", "grouped", None, config)
+    assert not config.output_dir.exists()
+    path = train_run("extra_trees", "principal", "grouped", None, config)
+    assert prepared.run_id == path.name
+
+
+@pytest.mark.parametrize("model", ["extra_trees", "score_firmware"])
+def test_run_id_from_meta_reproduces_and_tracks_parameters(
+    tmp_path: Path, model: str
+) -> None:
+    """Reproduz o run_id gravado e muda quando um hiperparâmetro registrado muda."""
+    config = config_for(tmp_path, corpus(tmp_path))
+    path = train_run(model, "principal", "grouped", None, config)
+    meta = json.loads((path / "run.meta.json").read_text(encoding="utf-8"))
+    assert run_id_from_meta(meta) == meta["run_id"]
+    if model == "extra_trees":
+        meta["hyperparameters"]["n_estimators"] = 21
+        assert run_id_from_meta(meta) != meta["run_id"]
+    del meta["seeds"]
+    with pytest.raises(ValueError, match="incompleto"):
+        run_id_from_meta(meta)

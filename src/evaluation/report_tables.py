@@ -23,7 +23,7 @@ def _ordered_runs(runs: list[EvaluatedRun]) -> list[EvaluatedRun]:
     return sorted(runs, key=lambda run: (MODELS.index(run.meta["model"]), run.run_id))
 
 
-def _report_rows(
+def metric_rows(
     runs: list[EvaluatedRun], results: dict[str, dict[int, RunMetrics]]
 ) -> tuple[list[dict], list[dict], list[dict]]:
     """Agrupa linhas de resumo, classe e confusão em ordem fixa."""
@@ -91,7 +91,7 @@ def write_metrics_report(
     created_at = datetime.now(timezone.utc)
     destination = output_root / created_at.strftime("%Y%m%dT%H%M%SZ")
     destination.mkdir(parents=True, exist_ok=False)
-    summaries, classes, confusions = _report_rows(runs, results)
+    summaries, classes, confusions = metric_rows(runs, results)
     for name, rows, columns in (
         ("metrics.csv", summaries, ("run_id", "model", "experiment", "scheme",
                                    "purpose", "repeat", "macro_f1", "balanced_accuracy",

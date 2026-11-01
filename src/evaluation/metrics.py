@@ -50,7 +50,7 @@ def _missing_in_folds(frame: pd.DataFrame, classes: tuple[str, ...]) -> list[dic
     return missing_folds
 
 
-def _repeat_metrics(frame: pd.DataFrame, classes: tuple[str, ...]) -> RunMetrics:
+def frame_metrics(frame: pd.DataFrame, classes: tuple[str, ...]) -> RunMetrics:
     """Computa indicadores com classes fixas e divisão por zero igual a zero."""
     labels = list(classes)
     precision, recall, f1, support = precision_recall_fscore_support(
@@ -83,5 +83,5 @@ def metrics_by_repeat(
 ) -> dict[int, RunMetrics]:
     """Agrupa todos os folds OOF por repetição antes de calcular as métricas."""
     _validate_predictions(predictions, classes)
-    return {int(repeat): _repeat_metrics(frame, classes)
+    return {int(repeat): frame_metrics(frame, classes)
             for repeat, frame in predictions.groupby("repeat", sort=True)}

@@ -1,0 +1,25 @@
+# 011/FR-001, FR-003, FR-005, FR-007, FR-010, FR-019. Caminhos relativos ao diretório de execução.
+training_config: configs/training.yaml
+output_dir: reports
+experiment: principal
+scheme: grouped
+matrix:
+  - {arm: B2, label: "B2 (Extra Trees)", model: extra_trees}
+  - {arm: RF, label: "Random Forest", model: random_forest}
+  - {arm: B0, label: "B0 (majoritário)", model: majoritario}
+  - {arm: B1, label: "B1 (identidade)", model: identidade}
+  - {arm: BR, label: "BR (score_firmware)", model: score_firmware}
+# Ablações sempre em extra_trees, comparadas com B2 (FR-005, FR-007).
+ablations:
+  - arm: B2_menos_D
+    label: "B2−D"
+    remove: [count_urls, has_telnetd, has_outdated_libssl, has_outdated_busybox, has_outdated_dropbear]
+  - arm: B2_menos_H
+    label: "B2−H"
+    remove: [unpacked_n_files, unpacked_n_elf, unpacked_n_elf_exec, unpacked_n_elf_lib, unpacked_n_elf_static, unpacked_prop_nx, unpacked_prop_pie, unpacked_prop_relro_full, unpacked_prop_relro_partial, unpacked_prop_canary]
+  - arm: B2_linha
+    label: "B2′"
+    remove: [count_urls, count_non_public_ips, count_public_ips]
+bootstrap: {n_resamples: 2000, seed: 0, ci: 0.95}
+permutation: {n_repeats: 10, seed: 0}
+sensitivity: {exclude_alias_vendor: tp_link}
