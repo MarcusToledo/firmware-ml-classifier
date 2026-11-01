@@ -217,11 +217,12 @@ exclusão, o one-hot e os metadados estão no `README.md`.
 
 Com `labels_v3.csv` em `configs/dataset.yaml` (padrão desde a rodada v3), execute
 `python scripts/describe_nvd_coverage.py` (opções: `--config` e
-`--reports-dir`). A análise definida em
-`dataset/interim/rodada_v3_fase3_4/PREREGISTRO_COBERTURA_NVD.md`
+`--reports-dir`). A análise definida no pré-registro versionado
+`docs/preregistro_cobertura_nvd.md`
 compara por `firmware_id` o grupo A (`indeterminado`, motivo
 `nao_encontrado`) ao B (`sem_cve_conhecida`). Reutiliza as exclusões da
-008 de `falha_extracao` e `terceiros`, sem excluir A por ser indeterminado.
+008 de `falha_extracao` e `terceiros`, sem excluir A por ser indeterminado;
+estados transitórios ou desconhecidos de extração interrompem a execução.
 `features_v2.parquet` possui uma linha por arquivo/alias: a mesma
 `collapse_aliases` da tabela de treino exige igualdade das cinco
 proporções ELF entre aliases e retém uma linha por ID. A saída em

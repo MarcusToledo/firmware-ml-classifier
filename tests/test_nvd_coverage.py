@@ -10,7 +10,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from src.dataset.nvd_coverage import describe_coverage
+from src.dataset.nvd_coverage import PREREGISTRATION, describe_coverage
 from src.run_metadata import file_sha256
 from tests.dataset_fixtures import feature_row, write_config, write_inputs
 
@@ -113,6 +113,24 @@ def test_rejects_divergent_alias_features(tmp_path: Path) -> None:
         describe_coverage(features, labels)
 
 
+@pytest.mark.parametrize(
+    ("column", "value"),
+    [
+        ("meta_binwalk_status", "timeout"),
+        ("meta_unpack_status", "limite_tempo"),
+        ("meta_binwalk_status", "estado_desconhecido"),
+    ],
+)
+def test_rejects_transient_or_unknown_extraction_status(
+    tmp_path: Path, column: str, value: str
+) -> None:
+    """Interrompe em estados transitórios ou desconhecidos antes da exclusão."""
+    features, labels, *_ = _inputs(tmp_path)
+    features.loc[features["firmware_id"].eq("id-00"), column] = value
+    with pytest.raises(ValueError, match="Falha transitória|estado desconhecido"):
+        describe_coverage(features, labels)
+
+
 def test_writes_report_and_input_hashes(tmp_path: Path) -> None:
     """Persiste tabela, relatório e proveniência dos arquivos de entrada."""
     _, _, features_path, labels_path, config_path = _inputs(tmp_path)
@@ -139,6 +157,8 @@ def test_writes_report_and_input_hashes(tmp_path: Path) -> None:
     assert meta["inputs"]["preregistro"]["sha256"] == (
         "8b4693da40d1ab2d23c6887e38bce6b872c2572a8cabbf9407a75f8b82f0a138"
     )
+    assert PREREGISTRATION == Path("docs/preregistro_cobertura_nvd.md").resolve()
+    assert meta["inputs"]["preregistro"]["path"] == str(PREREGISTRATION)
     assert "| nao_encontrado |" in (directory / "report.md").read_text()
     table = pd.read_csv(directory / "cobertura_nvd.csv")
     assert len(table) == 25

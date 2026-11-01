@@ -14,12 +14,14 @@ from typing import Any
 import pandas as pd
 
 from src.dataset import contract as c
-from src.dataset.training_table import apply_exclusions, collapse_aliases
+from src.dataset.training_table import (
+    apply_exclusions,
+    check_transient_failures,
+    collapse_aliases,
+)
 from src.run_metadata import REPO_ROOT, code_commit, file_sha256
 
-PREREGISTRATION = (
-    REPO_ROOT / "dataset/interim/rodada_v3_fase3_4/PREREGISTRO_COBERTURA_NVD.md"
-)
+PREREGISTRATION = REPO_ROOT / "docs/preregistro_cobertura_nvd.md"
 PREREGISTRATION_SHA256 = (
     "8b4693da40d1ab2d23c6887e38bce6b872c2572a8cabbf9407a75f8b82f0a138"
 )
@@ -111,6 +113,7 @@ def describe_coverage(features: pd.DataFrame, labels: pd.DataFrame) -> pd.DataFr
     exclusão de indeterminados da 008 não vale para o grupo A.
     """
     _check_columns(features, labels)
+    check_transient_failures(features)
     excluded = apply_exclusions(features, labels)
     blocked = {key for key, reasons in excluded.items() if set(reasons) & {
         c.REASON_EXTRACTION_FAILURE, c.REASON_THIRD_PARTY

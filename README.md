@@ -148,7 +148,8 @@ prevalência dos detectores no corpus congelado.
 **Cobertura NVD (rodada v3).** Com `configs/dataset.yaml` apontando para
 `labels_v3.csv` (padrão atual), execute
 `uv run python scripts/describe_nvd_coverage.py`. A análise descritiva
-pré-registrada compara `indeterminado` com motivo `nao_encontrado` a
+pré-registrada em `docs/preregistro_cobertura_nvd.md` compara
+`indeterminado` com motivo `nao_encontrado` a
 `sem_cve_conhecida`, excluindo falhas de extração e firmware de terceiros
 pela regra da 008. As cinco proporções ELF são agregadas por
 `firmware_id`: aliases de arquivos devem ter valores iguais, e apenas um
