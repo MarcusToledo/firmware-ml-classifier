@@ -214,6 +214,25 @@ exclusão, o one-hot e os metadados estão no `README.md`.
   um alias, mais de um modelo e versões diferentes. `--dry-run` não grava
   nenhum dos três.
 
+### Análise descritiva pré-registrada: cobertura NVD
+
+Com `labels_v3.csv` em `configs/dataset.yaml`, execute
+`python scripts/describe_nvd_coverage.py` (opções: `--config` e
+`--reports-dir`). A análise definida em
+`dataset/interim/rodada_v3_fase3_4/PREREGISTRO_COBERTURA_NVD.md`
+compara por `firmware_id` o grupo A (`indeterminado`, motivo
+`nao_encontrado`) ao B (`sem_cve_conhecida`). Reutiliza as exclusões da
+008 de `falha_extracao` e `terceiros`, sem excluir A por ser indeterminado.
+`features_v2.parquet` possui uma linha por arquivo/alias: a mesma
+`collapse_aliases` da tabela de treino exige igualdade das cinco
+proporções ELF entre aliases e retém uma linha por ID. A saída em
+`reports/cobertura_nvd_<timestamp>/` contém `cobertura_nvd.csv`,
+`report.md` e `cobertura_nvd.meta.json` com hashes das entradas,
+configuração e pré-registro. Por grupo, total e fabricante, registra n,
+ausentes, mediana, Q1, Q3 e média dos presentes; fabricante com n<5
+recebe `n insuficiente`. É descrição do corpus, não teste de hipótese
+nem inferência causal; não altera rótulos ou protocolo da 011.
+
 ### 4. Classificação e baseline
 
 O classificador nunca vê CVE; o baseline nunca é tratado como verdade.

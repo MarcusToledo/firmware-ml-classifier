@@ -147,6 +147,16 @@ componente conectado; `freeze_corpus.py` grava `corpus.freeze.json`, e o treino
 recusa folds ou tabela que divirjam dele. `describe_prevalence.py` descreve a
 prevalência dos detectores no corpus congelado.
 
+**Cobertura NVD (rodada v3).** Após gerar `labels_v3.csv` e apontar
+`configs/dataset.yaml` para ele, execute
+`uv run python scripts/describe_nvd_coverage.py`. A análise descritiva
+pré-registrada compara `indeterminado` com motivo `nao_encontrado` a
+`sem_cve_conhecida`, excluindo falhas de extração e firmware de terceiros
+pela regra da 008. As cinco proporções ELF são agregadas por
+`firmware_id`: aliases de arquivos devem ter valores iguais, e apenas um
+registro por ID é mantido. Grava CSV, `report.md` e `.meta.json` em
+`reports/cobertura_nvd_<timestamp>/`, sem alterar rótulos ou avaliação.
+
 **Treino.** `train.py` grava cada braço em `models/runs/<run_id>/` e recusa
 sobrescrita sem `--force`. `--columns-file` treina um subconjunto de colunas
 (ablações). `compute_metrics.py` grava `metrics.csv`, `metrics_per_class.csv` e
