@@ -8,6 +8,8 @@ import sys
 import time
 from pathlib import Path
 
+import pandas as pd
+
 from src.run_metadata import file_sha256
 from tests.eval_fixtures import N_IDS, evaluation_corpus, evaluation_yaml
 
@@ -73,4 +75,58 @@ def test_unknown_ablation_column_fails_without_report(tmp_path: Path) -> None:
     process = _evaluate(config, "--override", f"ablations={ablation}")
     assert process.returncode == 1
     assert "inexistente" in process.stderr
+    assert not (tmp_path / "reports").exists()
+
+
+def test_excluded_vendor_without_corpus_reports_not_applicable(
+    tmp_path: Path,
+) -> None:
+    """Registra a exclusão válida sem estimar o cenário sem alias."""
+    processed, training_yaml = evaluation_corpus(tmp_path, exclude_tp_link=True)
+    freeze = json.loads(
+        (processed / "corpus.freeze.json").read_text(encoding="utf-8")
+    )
+    assert freeze["exclusions"]["excluded_by_vendor_reason"]["tp_link"][
+        "indeterminado"
+    ] > 0
+    config = evaluation_yaml(tmp_path, training_yaml)
+    process = _evaluate(config)
+    assert process.returncode == 0, process.stderr
+    reason = "tp_link com 0 firmware_id no corpus congelado"
+    assert "WARNING" in process.stderr and reason in process.stderr
+    report = Path(process.stdout.strip())
+    scenarios = pd.read_csv(report / "sensitivity_comparison.csv")
+    excluded = scenarios.set_index("scenario").loc["sem_alias_tp_link"]
+    assert excluded["status"] == "não aplicável"
+    assert excluded["reason"] == reason
+    numeric = [
+        "n_firmware_id", "n_components", "macro_f1_b2", "macro_f1_b2_ci_low",
+        "macro_f1_b2_ci_high", "macro_f1_b1", "macro_f1_b1_ci_low",
+        "macro_f1_b1_ci_high", "delta", "delta_ci_low", "delta_ci_high",
+    ]
+    assert excluded[numeric].isna().all()
+    for name in ("todos_fabricantes", "peso_componente"):
+        assert pd.notna(scenarios.set_index("scenario").loc[name, "delta"])
+    text = (report / "report.md").read_text(encoding="utf-8")
+    scenario_line = next(
+        line for line in text.splitlines() if line.startswith("| sem_alias_tp_link |")
+    )
+    cells = [cell.strip() for cell in scenario_line.strip("|").split("|")]
+    assert cells[:3] == ["sem_alias_tp_link", "não aplicável", reason]
+    assert all(not cell for cell in cells[3:])
+    manifest = _manifest(report)
+    assert manifest["sensitivity_scenarios"]["sem_alias_tp_link"] == {
+        "status": "não aplicável", "reason": reason,
+    }
+
+
+def test_unknown_vendor_fails_without_report(tmp_path: Path) -> None:
+    """Recusa fabricante sem proveniência nem exclusões no congelamento."""
+    _, training_yaml = evaluation_corpus(tmp_path)
+    config = evaluation_yaml(tmp_path, training_yaml)
+    process = _evaluate(
+        config, "--override", "sensitivity.exclude_alias_vendor=inexistente"
+    )
+    assert process.returncode == 1
+    assert "fabricante inexistente ausente" in process.stderr
     assert not (tmp_path / "reports").exists()

@@ -47,9 +47,16 @@ def _rows() -> tuple[list[dict[str, Any]], dict[str, str]]:
     return rows, levels
 
 
-def evaluation_corpus(tmp_path: Path) -> tuple[Path, Path]:
+def evaluation_corpus(
+    tmp_path: Path, *, exclude_tp_link: bool = False
+) -> tuple[Path, Path]:
     """Constrói o corpus e grava training.yaml rápido; retorna (processed, yaml)."""
     rows, levels = _rows()
+    if exclude_tp_link:
+        levels.update({
+            row[c.KEY_COLUMN]: c.REASON_INDETERMINATE
+            for row in rows if row["meta_brand"] == "tp_link"
+        })
     processed = build_frozen_corpus(tmp_path, rows, levels)
     raw = yaml.safe_load(Path("configs/training.yaml").read_text(encoding="utf-8"))
     raw.update(

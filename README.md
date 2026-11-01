@@ -163,6 +163,13 @@ análises secundárias pré-registradas e as exclusões por fabricante. Grava CS
 PNG e `report.md` em `reports/<timestamp>/`, idênticos byte a byte entre
 gerações; só `created_at` muda em `report.meta.json`.
 
+Se o fabricante configurado para `sem_alias_<fabricante>` consta das
+exclusões do congelamento, mas não da proveniência do corpus, o cenário é
+registrado como `não aplicável`, sem estimativas, com motivo no CSV, em
+`report.md` e em `report.meta.json`. Os cenários `todos_fabricantes` e
+`peso_componente` continuam calculados. Fabricante ausente tanto da
+proveniência quanto das exclusões interrompe a avaliação.
+
 **Doc2Vec.** O código de Doc2Vec (`scripts/train_doc2vec.py`,
 `scripts/inspect_tokens.py`) existe, mas é trabalho futuro: fica fora do vetor
 reportado e desligado por padrão na extração (`doc2vec.enabled=false`).

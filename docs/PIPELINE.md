@@ -225,6 +225,16 @@ O classificador nunca vê CVE; o baseline nunca é tratado como verdade.
   `cvss_max`, `cve_count_*`, `cve_total`, `brand`, `model`, `version` do vetor de
   features
 
+Na avaliação final (`scripts/evaluate.py`), o cenário secundário
+`sem_alias_<fabricante>` só recebe estimativas quando há IDs desse fabricante
+na proveniência do corpus congelado. Se ele consta apenas das exclusões em
+`corpus.freeze.json`, o cenário aparece como `não aplicável`, sem valores
+numéricos, com o motivo `"<fabricante> com 0 firmware_id no corpus congelado"`
+em `sensitivity_comparison.csv`, na tabela de `report.md` e em
+`report.meta.json`; a execução emite um WARNING. `todos_fabricantes` e
+`peso_componente` permanecem calculados. Fabricante ausente da proveniência
+e das exclusões gera erro para evitar grafias incorretas.
+
 ## Mecanismo: firmware reaproveitado sob vários modelos
 
 Fabricantes reaproveitam o mesmo binário sob nomes comerciais diferentes
