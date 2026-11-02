@@ -36,13 +36,27 @@ the single source for these rules. Amend it only via
   - Keep specs, constitution, and `TODO.md` consistent with the code on
     `master`; these files are local and unversioned (see the constitution).
   - Never edit code; never commit.
-- tcc-writer (project subagent in `.omp/agents/tcc-writer.md`, Sonnet;
-  skill `.omp/skills/tcc-writing/SKILL.md`)
+- tcc-writer (project subagent in `.omp/agents/tcc-writer.md`, Claude Sonnet 5.5 high;
+  skills `.omp/skills/tcc-monografia/` for structure and argument,
+  `.omp/skills/tcc-writing/` for register, `humanizer` as final pass)
   - Edit only the prose of the monograph chapters
-    (`docs/paper/Capitulos/*.tex`) to the academic style of the skill:
-    formal, impersonal, third person, tense by situation.
+    (`docs/paper/Capitulos/*.tex`) to the academic style of the skills:
+    formal, impersonal, third person, tense by situation; structural moves
+    only when the task asks, otherwise reported as findings.
   - Never change numbers, citations, references, `\revisar` markers or
     technical meaning; never commit.
+- academic-expert (project subagent in `.omp/agents/academic-expert.md`,
+  GPT-6 Astra medium)
+  - Act as advisor and content reviewer of the changes sent after every
+    `tcc-writer` edit (never the whole monograph): academic value, factual
+    accuracy against code, artifacts and primary sources, reference
+    completeness and plagiarism check.
+  - May edit only `docs/paper/referencias.bib` and `\cite`/`\revisar`
+    markers in the chapters; prose changes go back to `tcc-writer`.
+  - Never invent references, pages or DOIs; never commit.
+- Monograph edit loop: `tcc-writer` edits → `academic-expert` reviews →
+  `tcc-writer` applies the review (repeat while there are `bloqueante` or
+  `importante` findings) → orchestrator commits `docs/paper`.
 
 ## Build, Lint, Test
 - Install dependencies:
